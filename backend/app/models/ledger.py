@@ -63,6 +63,10 @@ class Transaction(PKUuid, TimestampMixin, Base):
     ir_document_number: Mapped[str | None] = mapped_column(Text)
     ir_year: Mapped[int | None] = mapped_column(SmallInteger)
 
+    # origem: lote de importacao de extrato
+    import_id: Mapped[UUID | None] = uuid_fk("statement_imports.id")
+    import_fingerprint: Mapped[str | None] = mapped_column(Text)
+
     applied_rule_id: Mapped[UUID | None] = uuid_fk("categorization_rules.id")
     auto_confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))
     reviewed_by: Mapped[UUID | None] = uuid_fk("members.id")

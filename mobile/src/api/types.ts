@@ -185,3 +185,43 @@ export interface TaxAssessment {
   simplificado: TaxModelResult;
   aviso?: string;
 }
+
+export interface ImportPreviewRow {
+  index: number;
+  booked_on: string;
+  amount: string;
+  direction: 'ENTRADA' | 'SAIDA';
+  description: string;
+  document: string | null;
+  duplicate: boolean;
+  duplicate_reason: string | null;
+  suggested_category_id: string | null;
+  suggested_category_name: string | null;
+  confidence: string | null;
+  selected: boolean;
+}
+
+export interface StatementImport {
+  id: string;
+  account_id: string;
+  filename: string;
+  file_format: 'OFX' | 'CSV' | 'PDF';
+  status: 'CRIADO' | 'CONFIRMADO' | 'DESCARTADO' | 'ERRO';
+  period_start: string | null;
+  period_end: string | null;
+  rows_detected: number;
+  rows_duplicated: number;
+  rows_imported: number;
+  warnings: string[];
+  preview: ImportPreviewRow[];
+  created_at: string;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  type: string;
+  owner_member_id: string;
+  current_balance: string;
+  is_shared: boolean;
+}

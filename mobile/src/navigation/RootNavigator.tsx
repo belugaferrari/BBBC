@@ -8,6 +8,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { DashboardScreen } from '@/screens/DashboardScreen';
 import { ExpensesScreen } from '@/screens/ExpensesScreen';
 import { ForecastScreen } from '@/screens/ForecastScreen';
+import { ImportScreen } from '@/screens/ImportScreen';
 import { InvestmentsScreen } from '@/screens/InvestmentsScreen';
 import { TaxScreen } from '@/screens/TaxScreen';
 import { colors, typography } from '@/theme';
@@ -60,6 +61,14 @@ export function RootNavigator(): React.ReactElement {
           name="Gastos"
           component={ExpensesScreen}
           options={{ tabBarIcon: ({ focused }) => <TabIcon label="≡" focused={focused} /> }}
+        />
+        <Tab.Screen
+          name="Importar"
+          component={ImportScreen}
+          options={{
+            title: 'Importar extrato',
+            tabBarIcon: ({ focused }) => <TabIcon label="↥" focused={focused} />,
+          }}
         />
         <Tab.Screen
           name="Previsoes"

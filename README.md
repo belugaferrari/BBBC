@@ -12,6 +12,7 @@ consolidação de investimentos e apuração de Imposto de Renda.
 | API | FastAPI (Python 3.11+), SQLAlchemy 2.0 |
 | Banco | PostgreSQL 15+ (`ltree`, `pg_trgm`, `unaccent`) |
 | Open Finance | Contrato único com implementações Pluggy e Belvo; modo manual por padrão |
+| Importação | Extrato do banco em OFX, CSV ou PDF, com conferência antes de gravar |
 
 Paleta do app: preto, branco e vermelho. O vermelho é reservado para o que pede
 atenção (saída de dinheiro, teto estourado, imposto a pagar) — usar vermelho em
@@ -36,23 +37,27 @@ cd ../mobile && npm install && npm start   # ajuste extra.apiBaseUrl no app.json
 ```
 
 Documentação interativa da API em `http://localhost:8000/docs`.
-Para testar no celular pelo Expo Go, veja [`docs/rodando-no-celular.md`](docs/rodando-no-celular.md).
+
+**Primeira vez?** [`docs/testando-o-sistema.md`](docs/testando-o-sistema.md) leva
+do zero até ver o IR calculado, com extratos de exemplo — no celular ou só pelo
+navegador.
 
 ## Testes
 
 ```bash
 cd backend
-python -m pytest -q                        # 35 testes de regra de negócio, sem banco
+python -m pytest -q                        # 73 testes de regra de negócio, sem banco
 
 createdb bbbc_test
 BBBC_TEST_DATABASE_URL=postgresql+psycopg://bbbc:bbbc@localhost/bbbc_test \
-  python -m pytest -q                      # 52 testes, com a integração
+  python -m pytest -q                      # 103 testes, com a integração
 ```
 
-A suíte rápida cobre o motor de IR, o simulador de metas, a categorização e a
-geometria do Sankey. A de integração sobe a API de verdade contra um Postgres e
-verifica, além do fluxo feliz, que o token de uma família não alcança nada de
-outra e que reprocessar o mesmo extrato não duplica lançamento.
+A suíte rápida cobre o motor de IR, o simulador de metas, a categorização, a
+geometria do Sankey e a leitura dos três formatos de extrato. A de integração
+sobe a API de verdade contra um Postgres e verifica, além do fluxo feliz, que o
+token de uma família não alcança nada de outra e que reimportar o mesmo extrato
+— inclusive em outro formato — não duplica lançamento.
 
 ## Estrutura
 
@@ -65,16 +70,21 @@ backend/
       tax.py          motor de IR (tabela progressiva, deduções, carnê-leão)
       projection.py   metas, tetos e projeção de fluxo de caixa
       categorization.py  motor de regras + aprendizado de fornecedores
+      import_service.py  importação de extrato: prever, conferir, gravar
+      importers/      leitores de OFX, CSV e PDF
       investments.py  consolidação, TWR e comparativo CDI/IPCA
       sankey.py       montagem do gráfico em cascata
     models/         mapeamento ORM
     integrations/   Open Finance (contrato + Pluggy + Belvo + manual)
   db/migrations/    DDL versionada em SQL puro
+  db/samples/       o mesmo extrato fictício em OFX, CSV e PDF
 mobile/
   src/screens/      uma tela por módulo do sistema
   src/components/   Sankey em SVG e blocos visuais
 docs/
+  testando-o-sistema.md   passo a passo do zero até o IR calculado
   arquitetura.md          decisões de projeto e por quê
+  importando-extratos.md  formatos aceitos e como a deduplicação funciona
   seguranca.md            o que está protegido e o que falta antes de dado real
   rodando-no-celular.md   como testar no seu aparelho pelo Expo Go
   perguntas-abertas.md    o que ainda precisa ser definido

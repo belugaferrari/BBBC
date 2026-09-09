@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from './client';
 import type {
+  Account,
   BenchmarkEvolution,
   Category,
   DashboardData,
@@ -22,7 +23,16 @@ export const queryKeys = {
   portfolio: ['portfolio'] as const,
   evolution: (benchmark: string) => ['evolution', benchmark] as const,
   tax: (year: number) => ['tax', year] as const,
+  accounts: ['accounts'] as const,
+  imports: ['imports'] as const,
 };
+
+export function useAccounts() {
+  return useQuery({
+    queryKey: queryKeys.accounts,
+    queryFn: () => api.get<Account[]>('/accounts'),
+  });
+}
 
 export function useDashboard(month: string, scope: Scope) {
   return useQuery({

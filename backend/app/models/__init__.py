@@ -2,6 +2,7 @@
 
 from app.models.base import Base
 from app.models.family import Account, BankConnection, Family, Institution, Member
+from app.models.imports import StatementImport
 from app.models.investments import (
     Asset,
     BenchmarkSeries,
@@ -24,7 +25,8 @@ __all__ = [
     "Account", "Alert", "Asset", "BankConnection", "Base", "BenchmarkSeries", "BudgetCap",
     "CategorizationRule", "Category", "Family", "Goal", "GoalContribution", "IRAssessment",
     "IRIncomeStatement", "Institution", "InvestmentTransaction", "Member", "Merchant",
-    "Position", "PositionSnapshot", "RecurringTransaction", "SyncLog", "Tag", "TaxBracket",
+    "Position", "PositionSnapshot", "RecurringTransaction", "StatementImport", "SyncLog",
+    "Tag", "TaxBracket",
     "TaxParameter", "TaxYear", "Transaction", "TransactionSplit", "TransactionTag",
     "WebhookEvent",
 ]
