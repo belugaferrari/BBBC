@@ -1,6 +1,6 @@
 /** Entrada do app. Só Felipe e Clarissa tem credenciais. */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,23 +11,33 @@ import {
   View,
 } from 'react-native';
 
-import { login } from '@/api/client';
+import { getServerUrl, login, setServerUrl } from '@/api/client';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.ReactElement {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [server, setServer] = useState('');
+  const [showServer, setShowServer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getServerUrl().then(setServer);
+  }, []);
 
   async function submit(): Promise<void> {
     setBusy(true);
     setError(null);
     try {
+      // grava o endereco antes de tentar: se estiver errado, o erro ja aponta
+      // para o servidor que o usuario acabou de informar
+      await setServerUrl(server);
       await login(email.trim().toLowerCase(), password);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nao foi possivel entrar');
+      setShowServer(true);
     } finally {
       setBusy(false);
     }
@@ -50,6 +60,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
         placeholder="E-mail"
         placeholderTextColor={colors.textFaint}
         autoCapitalize="none"
+        autoCorrect={false}
         keyboardType="email-address"
         style={styles.input}
       />
@@ -61,6 +72,29 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
         secureTextEntry
         style={styles.input}
       />
+
+      {showServer ? (
+        <>
+          <TextInput
+            value={server}
+            onChangeText={setServer}
+            placeholder="192.168.0.10:8000"
+            placeholderTextColor={colors.textFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            style={styles.input}
+          />
+          <Text style={styles.serverHint}>
+            Endereço do servidor na sua rede. O app completa `http://` e `/api/v1`.
+          </Text>
+        </>
+      ) : (
+        <Pressable onPress={() => setShowServer(true)} hitSlop={8}>
+          <Text style={styles.serverToggle}>Configurar servidor</Text>
+        </Pressable>
+      )}
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <Pressable style={styles.button} onPress={submit} disabled={busy}>
@@ -94,6 +128,17 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
     color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  serverToggle: {
+    ...typography.caption,
+    color: colors.textFaint,
+    textAlign: 'center',
+    paddingVertical: spacing.sm,
+  },
+  serverHint: {
+    ...typography.caption,
+    color: colors.textFaint,
     marginBottom: spacing.sm,
   },
   error: { ...typography.caption, color: colors.red, marginBottom: spacing.sm },

@@ -1,40 +1,30 @@
 /**
- * Cliente HTTP. Guarda o token no SecureStore (Keychain/Keystore) - nunca em
- * AsyncStorage, porque o app abre dados financeiros da familia inteira.
+ * Cliente HTTP.
+ *
+ * Token e endereco do servidor ficam no SecureStore (Keychain/Keystore) - nunca
+ * em AsyncStorage, porque o app abre dados financeiros da familia inteira.
+ *
+ * O endereco da API e resolvido em tres niveis, nesta ordem:
+ *   1. o que o usuario digitou na tela de login (vale para APK instalado);
+ *   2. o IP da maquina de desenvolvimento, derivado do host do Expo;
+ *   3. `extra.apiBaseUrl` do app.json.
+ *
+ * O nivel 1 existe porque um app instalado nao tem servidor do Expo de onde
+ * derivar nada - sem ele, o APK apontaria para `localhost`, que no celular e o
+ * proprio aparelho.
  */
 
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 
+import { isLocalHostUrl, normalizeServerUrl, withLanHost } from './serverUrl';
 import type { AuthToken } from './types';
 
 const TOKEN_KEY = 'bbbc.access_token';
-
-/**
- * No celular, `localhost` e o proprio aparelho - nao a sua maquina. Em
- * desenvolvimento derivamos o IP da rede a partir do host do servidor do Expo
- * (o mesmo que aparece no QR code), para o app funcionar sem editar arquivo.
- * Em producao vale exatamente o que estiver em `extra.apiBaseUrl`.
- */
-function resolveBaseUrl(): string {
-  const configured = Constants.expoConfig?.extra?.apiBaseUrl as string | undefined;
-  const fallback = 'http://localhost:8000/api/v1';
-  const base = configured ?? fallback;
-
-  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(base);
-  if (!__DEV__ || !isLocal) return base;
-
-  // hostUri vem como '192.168.0.10:8081'
-  const hostUri = Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
-  const lanHost = hostUri?.split(':')[0];
-  if (!lanHost || lanHost === 'localhost') return base;
-
-  return base.replace(/^(https?:\/\/)[^:/]+/, `$1${lanHost}`);
-}
-
-export const API_BASE_URL: string = resolveBaseUrl();
+const SERVER_KEY = 'bbbc.server_url';
 
 let cachedToken: string | null = null;
+let cachedServer: string | null = null;
 
 export async function getToken(): Promise<string | null> {
   if (cachedToken) return cachedToken;
@@ -46,6 +36,30 @@ export async function setToken(token: string | null): Promise<void> {
   cachedToken = token;
   if (token) await SecureStore.setItemAsync(TOKEN_KEY, token);
   else await SecureStore.deleteItemAsync(TOKEN_KEY);
+}
+
+/** Endereco padrao: em desenvolvimento, o IP da maquina que serve o Expo. */
+export function defaultServerUrl(): string {
+  const configured = Constants.expoConfig?.extra?.apiBaseUrl as string | undefined;
+  const base = configured ?? 'http://localhost:8000/api/v1';
+
+  if (!__DEV__ || !isLocalHostUrl(base)) return base;
+
+  // hostUri vem como '192.168.0.10:8081'
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
+  return withLanHost(base, hostUri);
+}
+
+export async function getServerUrl(): Promise<string> {
+  if (cachedServer) return cachedServer;
+  cachedServer = (await SecureStore.getItemAsync(SERVER_KEY)) ?? defaultServerUrl();
+  return cachedServer;
+}
+
+export async function setServerUrl(url: string | null): Promise<void> {
+  cachedServer = url ? normalizeServerUrl(url, defaultServerUrl()) : null;
+  if (cachedServer) await SecureStore.setItemAsync(SERVER_KEY, cachedServer);
+  else await SecureStore.deleteItemAsync(SERVER_KEY);
 }
 
 export class ApiError extends Error {
@@ -62,20 +76,28 @@ async function request<T>(
   init: RequestInit = {},
   query?: Record<string, string | number | boolean | undefined>,
 ): Promise<T> {
-  const url = new URL(`${API_BASE_URL}${path}`);
+  const base = await getServerUrl();
+  const url = new URL(`${base}${path}`);
   Object.entries(query ?? {}).forEach(([key, value]) => {
     if (value !== undefined) url.searchParams.set(key, String(value));
   });
 
   const token = await getToken();
-  const response = await fetch(url.toString(), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch {
+    // erro de rede nao tem status; a causa quase sempre e o endereco do servidor
+    throw new ApiError(0, `Nao consegui falar com o servidor em ${base}.`);
+  }
 
   if (response.status === 401) {
     await setToken(null);
