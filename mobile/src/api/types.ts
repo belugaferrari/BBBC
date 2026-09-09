@@ -225,3 +225,80 @@ export interface Account {
   current_balance: string;
   is_shared: boolean;
 }
+
+export interface Member {
+  id: string;
+  name: string;
+  role: 'TITULAR' | 'CONJUGE' | 'DEPENDENTE' | 'CONTADOR';
+  is_ir_dependent: boolean;
+  can_login: boolean;
+}
+
+export interface CategorySlice {
+  path: string;
+  name: string;
+  icon: string | null;
+  total: string;
+  transactions: number;
+  share: string;
+}
+
+export interface MemberSlice {
+  member_id: string;
+  name: string;
+  total: string;
+  transactions: number;
+  share: string;
+}
+
+export interface SpendByCategory {
+  start: string;
+  end: string;
+  depth: number;
+  total: string;
+  categories: CategorySlice[];
+  by_member: MemberSlice[];
+}
+
+/** FIXO = recorrente cadastrado, ESPERADO = já lançado, ESTIMADO = média. */
+export type FlowKind = 'FIXO' | 'ESPERADO' | 'ESTIMADO';
+
+export interface MonthProjection {
+  month: string;
+  opening_balance: string;
+  inflow: string;
+  outflow: string;
+  net: string;
+  closing_balance: string;
+  inflow_by_kind: Partial<Record<FlowKind, string>>;
+  outflow_by_kind: Partial<Record<FlowKind, string>>;
+  items: {
+    kind: FlowKind;
+    direction: 'ENTRADA' | 'SAIDA';
+    amount: string;
+    label: string;
+    category_name: string | null;
+  }[];
+}
+
+export interface Forecast {
+  start: string;
+  months: number;
+  scope: Scope;
+  sources: {
+    recurring_rules: number;
+    scheduled_transactions: number;
+    estimated_categories: number;
+    history_months: number;
+  };
+  summary: {
+    months: number;
+    total_inflow: string;
+    total_outflow: string;
+    net: string;
+    closing_balance: string;
+    first_negative_month: string | null;
+    average_monthly_outflow: string;
+  };
+  projection: MonthProjection[];
+}

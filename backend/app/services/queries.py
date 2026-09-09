@@ -217,3 +217,122 @@ def ir_year_rows(db: Session, family_id: UUID, member_id: UUID, year: int) -> di
         "deductions": [dict(r) for r in deductions],
         "dependents": int(dependents or 0),
     }
+
+
+def spend_by_category(
+    db: Session,
+    family_id: UUID,
+    start: date,
+    end: date,
+    member_id: UUID | None,
+    depth: int = 2,
+) -> list[dict]:
+    """Gastos agrupados pelo nivel `depth` da arvore de categorias.
+
+    `depth=1` agrega em Essenciais / Estilo de Vida / Metas / Financeiro;
+    `depth=2` desce para Moradia, Alimentacao, Saude...; e assim por diante.
+    O corte usa `subpath` do ltree, entao continua valendo se a arvore mudar de
+    formato - inclusive quando o Felipe trocar a taxonomia pela dele.
+
+    Lancamentos sem categoria nao somem: aparecem agrupados em 'Sem categoria',
+    que e justamente o que precisa de atencao.
+    """
+    rows = db.execute(
+        text(
+            f"""
+            WITH gastos AS (
+                SELECT t.id,
+                       t.amount,
+                       t.owner_member_id,
+                       CASE WHEN c.id IS NULL THEN NULL
+                            ELSE subpath(c.path, 0, LEAST(:depth, nlevel(c.path)))
+                       END AS grupo_path
+                  FROM transactions t
+                  LEFT JOIN categories c ON c.id = t.category_id
+                 WHERE t.family_id = :family_id
+                   AND t.direction = 'SAIDA'
+                   AND t.status IN ('EFETIVADA', 'CONCILIADA')
+                   AND t.booked_on BETWEEN :start AND :end
+                   {_SCOPE_FILTER}
+            )
+            SELECT COALESCE(g.grupo_path::text, 'sem_categoria') AS path,
+                   COALESCE(cat.name, 'Sem categoria')           AS name,
+                   COALESCE(cat.icon, NULL)                      AS icon,
+                   SUM(g.amount)                                 AS total,
+                   COUNT(*)                                      AS lancamentos
+              FROM gastos g
+              LEFT JOIN categories cat
+                     ON cat.path = g.grupo_path
+                    AND cat.family_id IS NOT DISTINCT FROM :family_id
+             GROUP BY 1, 2, 3
+             ORDER BY 4 DESC
+            """
+        ),
+        {
+            "family_id": family_id,
+            "start": start,
+            "end": end,
+            "member_id": member_id,
+            "depth": depth,
+        },
+    ).mappings().all()
+
+    total = sum((Decimal(r["total"]) for r in rows), ZERO)
+    return [
+        {
+            "path": r["path"],
+            "name": r["name"],
+            "icon": r["icon"],
+            "total": brl(r["total"]),
+            "transactions": int(r["lancamentos"]),
+            "share": (
+                (Decimal(r["total"]) / total).quantize(Decimal("0.0001"))
+                if total
+                else ZERO
+            ),
+        }
+        for r in rows
+    ]
+
+
+def spend_by_member(
+    db: Session, family_id: UUID, start: date, end: date
+) -> list[dict]:
+    """Quanto cada um gastou no periodo - a leitura que so faz sentido depois
+    de o responsavel poder ser informado por lancamento."""
+    rows = db.execute(
+        text(
+            """
+            SELECT m.id, m.full_name, COALESCE(m.nickname, m.full_name) AS apelido,
+                   COALESCE(SUM(t.amount), 0) AS total,
+                   COUNT(t.id)                AS lancamentos
+              FROM members m
+              LEFT JOIN transactions t
+                     ON t.owner_member_id = m.id
+                    AND t.direction = 'SAIDA'
+                    AND t.status IN ('EFETIVADA', 'CONCILIADA')
+                    AND t.booked_on BETWEEN :start AND :end
+             WHERE m.family_id = :family_id
+               AND m.password_hash IS NOT NULL
+             GROUP BY 1, 2, 3
+             ORDER BY 4 DESC
+            """
+        ),
+        {"family_id": family_id, "start": start, "end": end},
+    ).mappings().all()
+
+    total = sum((Decimal(r["total"]) for r in rows), ZERO)
+    return [
+        {
+            "member_id": r["id"],
+            "name": r["apelido"],
+            "total": brl(r["total"]),
+            "transactions": int(r["lancamentos"]),
+            "share": (
+                (Decimal(r["total"]) / total).quantize(Decimal("0.0001"))
+                if total
+                else ZERO
+            ),
+        }
+        for r in rows
+    ]

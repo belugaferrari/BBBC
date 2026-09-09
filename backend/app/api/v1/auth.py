@@ -29,6 +29,27 @@ def login(payload: LoginRequest, db: DbSession) -> Token:
     )
 
 
+@router.get("/members")
+def list_members(current: CurrentMember, db: DbSession) -> list[dict]:
+    """Quem existe na familia. Alimenta o seletor de responsavel pelo gasto e
+    o de quem consumiu a despesa dedutivel."""
+    membros = db.scalars(
+        select(Member)
+        .where(Member.family_id == current.family_id, Member.is_active.is_(True))
+        .order_by(Member.role, Member.full_name)
+    ).all()
+    return [
+        {
+            "id": m.id,
+            "name": m.nickname or m.full_name,
+            "role": m.role,
+            "is_ir_dependent": m.is_ir_dependent,
+            "can_login": m.can_login,
+        }
+        for m in membros
+    ]
+
+
 @router.get("/me")
 def me(current: CurrentMember) -> dict:
     return {

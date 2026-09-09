@@ -6,6 +6,10 @@ import { api } from './client';
 import type {
   Account,
   BenchmarkEvolution,
+  Forecast,
+  Member,
+  Scope as ScopeType,
+  SpendByCategory,
   Category,
   DashboardData,
   Goal,
@@ -25,7 +29,40 @@ export const queryKeys = {
   tax: (year: number) => ['tax', year] as const,
   accounts: ['accounts'] as const,
   imports: ['imports'] as const,
+  members: ['members'] as const,
+  byCategory: (params: object) => ['by-category', params] as const,
+  forecast: (months: number, scope: ScopeType) => ['forecast', months, scope] as const,
 };
+
+export function useMembers() {
+  return useQuery({
+    queryKey: queryKeys.members,
+    queryFn: () => api.get<Member[]>('/auth/members'),
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+/** Gastos somados por categoria. `depth` escolhe o corte da árvore. */
+export function useSpendByCategory(params: {
+  start: string;
+  end: string;
+  scope: Scope;
+  depth: number;
+  member_id?: string;
+}) {
+  return useQuery({
+    queryKey: queryKeys.byCategory(params),
+    queryFn: () => api.get<SpendByCategory>('/transactions/by-category', params),
+  });
+}
+
+/** Evolutivo dos próximos meses. */
+export function useForecast(months: number, scope: Scope) {
+  return useQuery({
+    queryKey: queryKeys.forecast(months, scope),
+    queryFn: () => api.get<Forecast>('/forecast', { months, scope }),
+  });
+}
 
 export function useAccounts() {
   return useQuery({
@@ -63,17 +100,27 @@ export function useTransactions(params: {
   });
 }
 
-/** Recategorizar alimenta o aprendizado de regras no backend. */
+/**
+ * Editar um lançamento. Mudar a categoria alimenta o aprendizado de regras;
+ * mudar o responsável só reatribui o gasto, sem criar regra nenhuma.
+ */
 export function useRecategorize() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; category_id: string; learn_rule?: boolean }) =>
+    mutationFn: (input: {
+      id: string;
+      category_id?: string;
+      owner_member_id?: string;
+      learn_rule?: boolean;
+    }) =>
       api.patch<Transaction>(`/transactions/${input.id}`, {
-        category_id: input.category_id,
+        ...(input.category_id ? { category_id: input.category_id } : {}),
+        ...(input.owner_member_id ? { owner_member_id: input.owner_member_id } : {}),
         learn_rule: input.learn_rule ?? true,
       }),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ['transactions'] });
+      client.invalidateQueries({ queryKey: ['by-category'] });
       client.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });

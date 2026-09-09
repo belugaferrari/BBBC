@@ -9,17 +9,24 @@ import {
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import { useCategories, useRecategorize, useTransactions } from '@/api/queries';
+import {
+  useCategories,
+  useMembers,
+  useRecategorize,
+  useSpendByCategory,
+  useTransactions,
+} from '@/api/queries';
 import type { Category, Scope, Transaction } from '@/api/types';
-import { Card, ScopeToggle, SectionTitle } from '@/components/ui';
+import { Card, ProgressBar, ScopeToggle, SectionTitle } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
-import { dayLabel, money } from '@/theme/format';
+import { dayLabel, money, percent } from '@/theme/format';
 
 function monthRange(): { start: string; end: string } {
   const now = new Date();
@@ -41,6 +48,9 @@ export function ExpensesScreen(): React.ReactElement {
   const [search, setSearch] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
+  const [modo, setModo] = useState<'lista' | 'categorias'>('lista');
+  // 1 agrupa nos grandes blocos, 3 desce até a subcategoria
+  const [nivel, setNivel] = useState(2);
 
   const range = useMemo(monthRange, []);
   const { data: transactions, isLoading } = useTransactions({
@@ -50,7 +60,15 @@ export function ExpensesScreen(): React.ReactElement {
     only_uncategorized: onlyPending || undefined,
   });
   const { data: categories } = useCategories();
+  const { data: members } = useMembers();
+  const segmentado = useSpendByCategory({ ...range, scope, depth: nivel });
   const recategorize = useRecategorize();
+
+  const responsavel = useMemo(() => {
+    const mapa = new Map<string, string>();
+    (members ?? []).forEach((m) => mapa.set(m.id, m.name));
+    return mapa;
+  }, [members]);
 
   const categoryName = useMemo(() => {
     const map = new Map<string, string>();
@@ -76,15 +94,91 @@ export function ExpensesScreen(): React.ReactElement {
         <ScopeToggle value={scope} onChange={setScope} />
       </View>
 
-      <Pressable onPress={() => setOnlyPending((v) => !v)} style={styles.filterChip}>
-        <Text style={[styles.filterText, onlyPending && { color: colors.white }]}>
-          {onlyPending ? '✓ ' : ''}Só sem categoria
-        </Text>
-      </Pressable>
+      <View style={styles.viewSwitch}>
+        {(['lista', 'categorias'] as const).map((opcao) => (
+          <Pressable
+            key={opcao}
+            onPress={() => setModo(opcao)}
+            style={[styles.switchOption, modo === opcao && styles.switchOptionOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: modo === opcao }}
+          >
+            <Text style={[styles.switchText, modo === opcao && { color: colors.white }]}>
+              {opcao === 'lista' ? 'Lançamentos' : 'Por categoria'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
 
-      {isLoading ? (
+      {modo === 'lista' && (
+        <Pressable onPress={() => setOnlyPending((v) => !v)} style={styles.filterChip}>
+          <Text style={[styles.filterText, onlyPending && { color: colors.white }]}>
+            {onlyPending ? '✓ ' : ''}Só sem categoria
+          </Text>
+        </Pressable>
+      )}
+
+      {modo === 'categorias' && (
+        <ScrollView style={styles.segmented} contentContainerStyle={styles.list}>
+          <View style={styles.levels}>
+            {[1, 2, 3].map((n) => (
+              <Pressable
+                key={n}
+                onPress={() => setNivel(n)}
+                style={[styles.level, nivel === n && styles.levelOn]}
+              >
+                <Text style={[styles.levelText, nivel === n && { color: colors.white }]}>
+                  {n === 1 ? 'Blocos' : n === 2 ? 'Grupos' : 'Detalhe'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {segmentado.isLoading ? (
+            <ActivityIndicator color={colors.red} style={{ marginTop: spacing.lg }} />
+          ) : (
+            <>
+              <Card>
+                <SectionTitle>Total do mês</SectionTitle>
+                <Text style={styles.bigTotal}>{money(segmentado.data?.total ?? 0)}</Text>
+                {(segmentado.data?.categories ?? []).map((fatia) => (
+                  <View key={fatia.path} style={styles.slice}>
+                    <View style={styles.sliceHead}>
+                      <Text style={styles.sliceName} numberOfLines={1}>{fatia.name}</Text>
+                      <Text style={styles.sliceValue}>{money(fatia.total)}</Text>
+                    </View>
+                    <ProgressBar ratio={Number(fatia.share)} />
+                    <Text style={styles.sliceHint}>
+                      {percent(fatia.share, 0)} do mês · {fatia.transactions}{' '}
+                      {fatia.transactions === 1 ? 'lançamento' : 'lançamentos'}
+                    </Text>
+                  </View>
+                ))}
+                {(segmentado.data?.categories ?? []).length === 0 && (
+                  <Text style={styles.empty}>Nenhum gasto no período.</Text>
+                )}
+              </Card>
+
+              <Card>
+                <SectionTitle>Quem gastou</SectionTitle>
+                {(segmentado.data?.by_member ?? []).map((pessoa) => (
+                  <View key={pessoa.member_id} style={styles.slice}>
+                    <View style={styles.sliceHead}>
+                      <Text style={styles.sliceName}>{pessoa.name}</Text>
+                      <Text style={styles.sliceValue}>{money(pessoa.total)}</Text>
+                    </View>
+                    <ProgressBar ratio={Number(pessoa.share)} />
+                  </View>
+                ))}
+              </Card>
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      {modo === 'lista' && isLoading ? (
         <ActivityIndicator color={colors.red} style={{ marginTop: spacing.xl }} />
-      ) : (
+      ) : modo === 'lista' ? (
         <FlatList
           data={transactions ?? []}
           keyExtractor={(item) => item.id}
@@ -102,6 +196,9 @@ export function ExpensesScreen(): React.ReactElement {
                   {item.category_id
                     ? categoryName.get(item.category_id) ?? 'Categoria'
                     : 'Sem categoria'}
+                  {responsavel.get(item.owner_member_id)
+                    ? ` · ${responsavel.get(item.owner_member_id)}`
+                    : ''}
                   {item.auto_confidence && Number(item.auto_confidence) < 0.6 ? ' · confirmar' : ''}
                 </Text>
               </View>
@@ -117,7 +214,7 @@ export function ExpensesScreen(): React.ReactElement {
             </Pressable>
           )}
         />
-      )}
+      ) : null}
 
       <Modal visible={editing !== null} animationType="slide" transparent>
         <View style={styles.modalBackdrop}>
@@ -127,8 +224,32 @@ export function ExpensesScreen(): React.ReactElement {
               {editing?.description}
             </Text>
             <Text style={styles.modalHint}>
-              A escolha vira regra: proximos lancamentos deste fornecedor entram ja categorizados.
+              A escolha vira regra: próximos lançamentos deste fornecedor entram já categorizados.
             </Text>
+
+            <SectionTitle>Responsável</SectionTitle>
+            <View style={styles.people}>
+              {(members ?? [])
+                .filter((m) => m.can_login)
+                .map((pessoa) => {
+                  const ativo = editing?.owner_member_id === pessoa.id;
+                  return (
+                    <Pressable
+                      key={pessoa.id}
+                      style={[styles.person, ativo && styles.personOn]}
+                      onPress={() => {
+                        if (!editing) return;
+                        recategorize.mutate({ id: editing.id, owner_member_id: pessoa.id });
+                        setEditing({ ...editing, owner_member_id: pessoa.id });
+                      }}
+                    >
+                      <Text style={[styles.personText, ativo && { color: colors.white }]}>
+                        {pessoa.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+            </View>
             <FlatList
               data={expenseOptions}
               keyExtractor={({ category }) => category.id}
@@ -170,6 +291,55 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     color: colors.text,
   },
+  viewSwitch: {
+    flexDirection: 'row',
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.pill,
+    padding: 3,
+    marginTop: spacing.sm,
+  },
+  switchOption: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+  },
+  switchOptionOn: { backgroundColor: colors.red },
+  switchText: { ...typography.caption, color: colors.textMuted },
+  segmented: { marginTop: spacing.sm },
+  levels: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  level: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  levelOn: { backgroundColor: colors.red },
+  levelText: { ...typography.caption, color: colors.textMuted },
+  bigTotal: {
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  slice: { marginBottom: spacing.md },
+  sliceHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  sliceName: { ...typography.body, color: colors.text, flex: 1 },
+  sliceValue: { ...typography.body, color: colors.text },
+  sliceHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  people: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  person: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  personOn: { backgroundColor: colors.red },
+  personText: { ...typography.caption, color: colors.textMuted },
   filterChip: { alignSelf: 'flex-start', paddingVertical: spacing.sm },
   filterText: { ...typography.caption, color: colors.textMuted },
   list: { paddingBottom: spacing.xl },

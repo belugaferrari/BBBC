@@ -69,7 +69,8 @@ backend/
                     previsões, investimentos, IR, open finance)
     services/       regras de negócio puras e testáveis
       tax.py          motor de IR (tabela progressiva, deduções, carnê-leão)
-      projection.py   metas, tetos e projeção de fluxo de caixa
+      projection.py   metas, tetos e simulação de aportes
+      forecast.py     evolutivo dos próximos meses (fixo, esperado, estimado)
       categorization.py  motor de regras + aprendizado de fornecedores
       import_service.py  importação de extrato: prever, conferir, gravar
       importers/      leitores de OFX, CSV e PDF

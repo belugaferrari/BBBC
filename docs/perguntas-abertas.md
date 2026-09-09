@@ -59,6 +59,8 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 5.1 | **Viagem à Disney**: valor-alvo, data e quanto já está guardado? | Nenhuma meta cadastrada. O simulador aceita meta corrigida pela inflação. |
 | 5.2 | O fundo da meta rende quanto ao ano? | Campo por meta, começa em 0%. |
 | 5.3 | Tetos por categoria: **familiares, individuais ou os dois**? | Os dois são suportados (`member_id` nulo = familiar). Nenhum teto cadastrado. |
+| 5.5 | **A sua árvore de categorias.** Você disse que manda depois. | O catálogo atual é um ponto de partida (90 categorias). Trocar depois é seguro: cada família tem a sua cópia, a árvore aceita qualquer profundidade e mover uma categoria leva a subárvore junto. Só as marcações de IR precisam vir com ela — quais são dedutíveis (saúde, educação, previdência) e quais receitas são isentas. |
+| 5.6 | Quais são os **gastos fixos** de vocês (aluguel, escola, plano, seguros) — valor e dia do mês? | O evolutivo já lê gastos fixos cadastrados, mas ainda não há nenhum. Sem eles, a projeção usa só a média histórica, que é mais grosseira. |
 | 5.4 | Querem **alerta antes de estourar** o teto (o padrão é 80%)? | 80%, configurável por teto; a projeção já avisa se o ritmo do mês estoura. |
 
 ## 6. Produto e operação

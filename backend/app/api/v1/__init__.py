@@ -7,6 +7,7 @@ from app.api.v1 import (
     auth,
     categories,
     dashboard,
+    forecast,
     imports,
     investments,
     openfinance,
@@ -23,6 +24,7 @@ api_router.include_router(transactions.router)
 api_router.include_router(imports.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(planning.router)
+api_router.include_router(forecast.router)
 api_router.include_router(investments.router)
 api_router.include_router(tax.router)
 api_router.include_router(openfinance.router)

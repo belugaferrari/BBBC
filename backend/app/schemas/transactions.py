@@ -61,6 +61,10 @@ class TagOut(ORMModel):
 
 class TransactionCreate(BaseModel):
     account_id: UUID
+    # Quem e o responsavel pelo gasto. Opcional: quando vazio, assume o dono da
+    # conta. Existe porque a conta pode ser conjunta e o gasto ser de um so -
+    # e a visao "so eu" depende disso para fazer sentido.
+    owner_member_id: UUID | None = None
     booked_on: date
     amount: Decimal = Field(gt=0)
     direction: TxDirection
@@ -80,6 +84,7 @@ class TransactionCreate(BaseModel):
 
 class TransactionUpdate(BaseModel):
     category_id: UUID | None = None
+    owner_member_id: UUID | None = None
     description: str | None = None
     notes: str | None = None
     status: TxStatus | None = None
@@ -94,7 +99,7 @@ class TransactionUpdate(BaseModel):
 class TransactionOut(ORMModel):
     id: UUID
     account_id: UUID
-    owner_member_id: UUID
+    owner_member_id: UUID  # responsavel pelo gasto
     category_id: UUID | None
     booked_on: date
     amount: Decimal
