@@ -38,9 +38,10 @@ cd ../mobile && npm install && npm start   # ajuste extra.apiBaseUrl no app.json
 
 Documentação interativa da API em `http://localhost:8000/docs`.
 
-**Primeira vez?** [`docs/testando-o-sistema.md`](docs/testando-o-sistema.md) leva
-do zero até ver o IR calculado, com extratos de exemplo — no celular ou só pelo
-navegador.
+**Primeira vez, sem familiaridade com terminal?**
+[`COMECE-AQUI.md`](COMECE-AQUI.md) sobe tudo com dois cliques.
+**Quer entender cada comando?** [`docs/testando-o-sistema.md`](docs/testando-o-sistema.md)
+leva do zero até ver o IR calculado, com extratos de exemplo.
 
 ## Testes
 

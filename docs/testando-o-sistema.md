@@ -1,5 +1,9 @@
 # Passo a passo para testar o sistema
 
+> **Nunca usou terminal?** Comece por [`COMECE-AQUI.md`](../COMECE-AQUI.md), na
+> raiz do projeto: lá o sistema sobe com dois cliques, sem digitar nada. Este
+> documento aqui é a versão detalhada, que explica cada comando.
+
 Roteiro completo, do zero até ver o Imposto de Renda calculado. Leva uns 30
 minutos na primeira vez. Nada aqui exige contratar serviço nenhum.
 
@@ -21,6 +25,9 @@ E no celular, o app **Expo Go** (App Store / Play Store), com o aparelho na
 ---
 
 ## Passo 1 — Subir a API e o banco
+
+Os comandos abaixo são digitados no **Terminal** (Mac: ⌘+espaço, digite
+"terminal") ou no **PowerShell** (Windows: tecla Windows, digite "powershell").
 
 ```bash
 git clone https://github.com/belugaferrari/BBBC.git

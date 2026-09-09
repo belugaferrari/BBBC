@@ -31,6 +31,41 @@ def migrate() -> None:
             conn.execute(text(path.read_text()))
 
 
+def count_families() -> int:
+    """Quantas familias ja existem. Usado pelo script de instalacao para nao
+    recriar tudo a cada vez que o usuario abre o programa."""
+    with SessionLocal() as db:
+        return int(db.execute(text("SELECT count(*) FROM families")).scalar_one())
+
+
+def status() -> dict:
+    """Resumo do estado do sistema, em linguagem de gente."""
+    with SessionLocal() as db:
+        familias = int(db.execute(text("SELECT count(*) FROM families")).scalar_one())
+        membros = int(
+            db.execute(
+                text("SELECT count(*) FROM members WHERE password_hash IS NOT NULL")
+            ).scalar_one()
+        )
+        contas = int(db.execute(text("SELECT count(*) FROM accounts")).scalar_one())
+        lancamentos = int(
+            db.execute(text("SELECT count(*) FROM transactions")).scalar_one()
+        )
+        emails = [
+            row[0]
+            for row in db.execute(
+                text("SELECT email FROM members WHERE password_hash IS NOT NULL ORDER BY role")
+            )
+        ]
+    return {
+        "familias": familias,
+        "logins": membros,
+        "contas": contas,
+        "lancamentos": lancamentos,
+        "emails": emails,
+    }
+
+
 def seed_family(
     name: str,
     titular: str,
@@ -40,8 +75,15 @@ def seed_family(
     conjuge_email: str | None,
     conjuge_password: str | None,
     dependentes: list[str],
-) -> UUID:
-    """Cria a familia, os membros e clona o catalogo global de categorias."""
+    skip_if_exists: bool = False,
+) -> UUID | None:
+    """Cria a familia, os membros e clona o catalogo global de categorias.
+
+    Com `skip_if_exists`, nao faz nada se ja houver familia cadastrada - e o que
+    permite o script de instalacao ser executado quantas vezes for preciso.
+    """
+    if skip_if_exists and count_families() > 0:
+        return None
     with SessionLocal.begin() as db:
         family_id = db.execute(
             text("INSERT INTO families (name) VALUES (:name) RETURNING id"), {"name": name}
@@ -147,11 +189,28 @@ def main(argv: list[str] | None = None) -> int:
     seed.add_argument("--conjuge-email")
     seed.add_argument("--conjuge-password")
     seed.add_argument("--dependente", action="append", default=[])
+    seed.add_argument(
+        "--skip-if-exists",
+        action="store_true",
+        help="nao faz nada se ja existir familia cadastrada",
+    )
+
+    sub.add_parser("status", help="mostra o que ja existe no sistema")
 
     args = parser.parse_args(argv)
     if args.command == "migrate":
         migrate()
         print("migrations aplicadas")
+        return 0
+
+    if args.command == "status":
+        info = status()
+        print(f"familias:    {info['familias']}")
+        print(f"logins:      {info['logins']}")
+        print(f"contas:      {info['contas']}")
+        print(f"lancamentos: {info['lancamentos']}")
+        for email in info["emails"]:
+            print(f"  - {email}")
         return 0
 
     family_id = seed_family(
@@ -163,8 +222,12 @@ def main(argv: list[str] | None = None) -> int:
         args.conjuge_email,
         args.conjuge_password,
         args.dependente,
+        skip_if_exists=args.skip_if_exists,
     )
-    print(f"familia criada: {family_id}")
+    if family_id is None:
+        print("ja existe familia cadastrada; nada a fazer")
+    else:
+        print(f"familia criada: {family_id}")
     return 0
 
 
