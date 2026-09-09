@@ -66,6 +66,33 @@ def status() -> dict:
     }
 
 
+def read_passwords(stream: object) -> tuple[str, str | None]:
+    """Le as senhas da entrada padrao: primeira linha titular, segunda conjuge.
+
+    Usa splitlines() e nao split("\n") de proposito: o PowerShell termina as
+    linhas com \r\n, e um \r invisivel grudado no fim viraria parte da senha -
+    o usuario cadastraria uma senha e digitaria outra para sempre.
+    """
+    linhas = stream.read().splitlines()
+    titular = linhas[0] if linhas else ""
+    conjuge = linhas[1] if len(linhas) > 1 and linhas[1] else None
+    return titular, conjuge
+
+
+def needs_setup() -> int:
+    """Codigo de saida para os scripts de instalacao decidirem o que fazer.
+
+    0 = precisa cadastrar, 1 = ja existe, 2 = nao consegui falar com o banco.
+    E um numero, e nao texto: analisar a saida de `status` quebraria com
+    qualquer mudanca de mensagem, e um erro de conexao seria lido como
+    "ja existe" - justamente o contrario do que deve acontecer.
+    """
+    try:
+        return 0 if count_families() == 0 else 1
+    except Exception:
+        return 2
+
+
 def seed_family(
     name: str,
     titular: str,
@@ -184,10 +211,19 @@ def main(argv: list[str] | None = None) -> int:
     seed.add_argument("--name", required=True)
     seed.add_argument("--titular", required=True)
     seed.add_argument("--titular-email", required=True)
-    seed.add_argument("--titular-password", required=True)
+    seed.add_argument("--titular-password")
     seed.add_argument("--conjuge")
     seed.add_argument("--conjuge-email")
     seed.add_argument("--conjuge-password")
+    seed.add_argument(
+        "--passwords-from-stdin",
+        action="store_true",
+        help=(
+            "le as senhas de duas linhas na entrada padrao (titular, conjuge). "
+            "Evita que senha com aspas ou acento quebre ao passar pela linha de "
+            "comando do Windows ou do Mac."
+        ),
+    )
     seed.add_argument("--dependente", action="append", default=[])
     seed.add_argument(
         "--skip-if-exists",
@@ -196,12 +232,19 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     sub.add_parser("status", help="mostra o que ja existe no sistema")
+    sub.add_parser(
+        "needs-setup",
+        help="codigo de saida: 0 precisa cadastrar, 1 ja existe, 2 sem banco",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "migrate":
         migrate()
         print("migrations aplicadas")
         return 0
+
+    if args.command == "needs-setup":
+        return needs_setup()
 
     if args.command == "status":
         info = status()
@@ -213,14 +256,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {email}")
         return 0
 
+    titular_password = args.titular_password
+    conjuge_password = args.conjuge_password
+    if args.passwords_from_stdin:
+        titular_password, conjuge_password = read_passwords(sys.stdin)
+    if not titular_password:
+        parser.error("informe --titular-password ou --passwords-from-stdin")
+
     family_id = seed_family(
         args.name,
         args.titular,
         args.titular_email,
-        args.titular_password,
+        titular_password,
         args.conjuge,
         args.conjuge_email,
-        args.conjuge_password,
+        conjuge_password,
         args.dependente,
         skip_if_exists=args.skip_if_exists,
     )

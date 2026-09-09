@@ -54,6 +54,10 @@ Dentro da pasta BBBC-main, clique duas vezes em:
 Abre uma janela preta com texto passando. É normal — é o sistema se montando.
 Na primeira vez demora alguns minutos.
 
+> O Windows pode mostrar uma tela azul dizendo **"O Windows protegeu o
+> computador"**. É o aviso padrão para arquivos baixados da internet. Clique em
+> **Mais informações** → **Executar assim mesmo**. Só aparece na primeira vez.
+
 ### Se você usa **Mac**
 
 O Mac bloqueia arquivos baixados da internet, então tem um passo extra, **uma

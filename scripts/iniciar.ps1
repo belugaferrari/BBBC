@@ -109,8 +109,19 @@ function Perguntar-Senha($rotulo) {
     }
 }
 
-$situacao = docker compose exec -T api python -m app.cli status 2>$null
-if ($situacao -match 'familias:\s+0') {
+# Codigo de saida em vez de ler texto: 0 precisa cadastrar, 1 ja existe,
+# 2 sem banco. Ler a mensagem faria uma falha de conexao parecer "ja existe" -
+# justamente quando o cadastro e necessario.
+docker compose exec -T api python -m app.cli needs-setup *> $null
+$precisaCadastro = $LASTEXITCODE
+
+if ($precisaCadastro -eq 2) {
+    Erro "A API subiu, mas nao esta falando com o banco de dados."
+    Write-Host "  Veja o que aconteceu com: docker compose logs"
+    Fim 1
+}
+
+if ($precisaCadastro -eq 0) {
     Write-Host ""
     Write-Host "  Primeira vez por aqui. Vou criar o seu acesso."
     Write-Host "  (e so apertar Enter para aceitar o que esta entre colchetes)"
@@ -126,10 +137,16 @@ if ($situacao -match 'familias:\s+0') {
     $filha2 = Read-Host "  Nome da filha mais nova  [Filha 2]"
     if ([string]::IsNullOrWhiteSpace($filha2)) { $filha2 = "Filha 2" }
 
-    docker compose exec -T api python -m app.cli seed-family --skip-if-exists `
+    # As senhas vao pela entrada padrao, e nao como argumento: aspas, cifrao e
+    # acento se perdem ou quebram ao atravessar a linha de comando do Windows.
+    $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    $entrada = "$senha`n$senhaConjuge"
+
+    $entrada | docker compose exec -T api python -m app.cli seed-family `
+        --skip-if-exists --passwords-from-stdin `
         --name "Familia BBBC" `
-        --titular "Felipe" --titular-email $emailTitular --titular-password $senha `
-        --conjuge "Clarissa" --conjuge-email $emailConjuge --conjuge-password $senhaConjuge `
+        --titular "Felipe" --titular-email $emailTitular `
+        --conjuge "Clarissa" --conjuge-email $emailConjuge `
         --dependente $filha1 --dependente $filha2 | Out-Null
 
     if ($LASTEXITCODE -ne 0) { Erro "Nao consegui criar o cadastro."; Fim 1 }

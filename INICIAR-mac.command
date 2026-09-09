@@ -78,7 +78,18 @@ ok "API respondendo em http://localhost:8000"
 # ----------------------------------------------------------------- Familia ---
 titulo "4. Conferindo o seu cadastro"
 
-if docker compose exec -T api python -m app.cli status 2>/dev/null | grep -q "familias:    0"; then
+# Codigo de saida em vez de ler texto: uma falha de conexao lida como "ja
+# existe" pularia o cadastro justamente quando ele e necessario.
+docker compose exec -T api python -m app.cli needs-setup >/dev/null 2>&1
+PRECISA_CADASTRO=$?
+
+if [ "$PRECISA_CADASTRO" -eq 2 ]; then
+  erro "A API subiu, mas nao esta falando com o banco de dados."
+  echo "  Veja o que aconteceu com: docker compose logs"
+  fim 1
+fi
+
+if [ "$PRECISA_CADASTRO" -eq 0 ]; then
   echo
   echo "  Primeira vez por aqui. Vou criar o seu acesso."
   echo "  (e so apertar Enter para aceitar o que esta entre colchetes)"
@@ -127,11 +138,15 @@ if docker compose exec -T api python -m app.cli status 2>/dev/null | grep -q "fa
   read -r -p "  Nome da filha mais velha [Filha 1]: " FILHA1
   read -r -p "  Nome da filha mais nova  [Filha 2]: " FILHA2
 
-  if docker compose exec -T api python -m app.cli seed-family --skip-if-exists \
-      --name "Familia BBBC" \
-      --titular "Felipe"   --titular-email "$EMAIL_TITULAR" --titular-password "$SENHA" \
-      --conjuge "Clarissa" --conjuge-email "$EMAIL_CONJUGE" --conjuge-password "$SENHA_CONJUGE" \
-      --dependente "${FILHA1:-Filha 1}" --dependente "${FILHA2:-Filha 2}" >/dev/null; then
+  # As senhas vao pela entrada padrao, e nao como argumento: senha com aspas,
+  # acento ou cifrao quebraria ao passar pela linha de comando.
+  if printf '%s\n%s\n' "$SENHA" "$SENHA_CONJUGE" \
+     | docker compose exec -T api python -m app.cli seed-family \
+        --skip-if-exists --passwords-from-stdin \
+        --name "Familia BBBC" \
+        --titular "Felipe"   --titular-email "$EMAIL_TITULAR" \
+        --conjuge "Clarissa" --conjuge-email "$EMAIL_CONJUGE" \
+        --dependente "${FILHA1:-Filha 1}" --dependente "${FILHA2:-Filha 2}" >/dev/null; then
     ok "Cadastro criado"
   else
     erro "Nao consegui criar o cadastro."
