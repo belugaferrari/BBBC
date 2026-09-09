@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 
-from app.api.deps import CurrentMember, DbSession
+from app.api.deps import CurrentMember, DbSession, owned_member
 from app.models import Account
 from app.models.enums import AccountType
 from app.schemas.common import ORMModel
@@ -55,6 +55,9 @@ def list_accounts(current: CurrentMember, db: DbSession, scope: str = "familia")
 
 @router.post("", response_model=AccountOut, status_code=status.HTTP_201_CREATED)
 def create_account(payload: AccountIn, current: CurrentMember, db: DbSession) -> Account:
+    if payload.owner_member_id:
+        owned_member(db, payload.owner_member_id, current)
+
     account = Account(
         family_id=current.family_id,
         owner_member_id=payload.owner_member_id or current.id,

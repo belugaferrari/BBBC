@@ -6,7 +6,15 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import and_, select
 
-from app.api.deps import CurrentMember, DbSession, scope_member_id
+from app.api.deps import (
+    CurrentMember,
+    DbSession,
+    owned_account,
+    owned_category,
+    owned_member,
+    owned_tag,
+    scope_member_id,
+)
 from app.models import Category, Transaction, TransactionTag
 from app.models.enums import TxStatus
 from app.schemas.transactions import TransactionCreate, TransactionOut, TransactionUpdate
@@ -43,12 +51,11 @@ def list_transactions(
         filters.append(Transaction.description.ilike(f"%{search}%"))
     if category_id:
         # inclui a subarvore da categoria escolhida
-        category = db.get(Category, category_id)
-        if not category:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Categoria nao encontrada")
+        category = owned_category(db, category_id, current)
         subtree = select(Category.id).where(Category.path.op("<@")(category.path))
         filters.append(Transaction.category_id.in_(subtree))
     if tag_id:
+        owned_tag(db, tag_id, current)
         tagged = select(TransactionTag.transaction_id).where(TransactionTag.tag_id == tag_id)
         filters.append(Transaction.id.in_(tagged))
 
@@ -69,9 +76,17 @@ def create_transaction(
 ) -> Transaction:
     """Insercao manual. A categorizacao automatica roda mesmo aqui - o usuario
     so precisa confirmar quando o motor errar."""
+    account = owned_account(db, payload.account_id, current)
+    if payload.category_id:
+        owned_category(db, payload.category_id, current)
+    if payload.ir_deduction_member_id:
+        owned_member(db, payload.ir_deduction_member_id, current)
+    for tag_id in payload.tags:
+        owned_tag(db, tag_id, current)
+
     tx = Transaction(
         family_id=current.family_id,
-        owner_member_id=current.id,
+        owner_member_id=account.owner_member_id,
         ir_year=payload.booked_on.year,
         **payload.model_dump(exclude={"tags"}),
     )
@@ -95,11 +110,15 @@ def update_transaction(
     if not tx or tx.family_id != current.family_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lancamento nao encontrado")
 
+    if payload.ir_deduction_member_id:
+        owned_member(db, payload.ir_deduction_member_id, current)
+
     data = payload.model_dump(exclude_unset=True, exclude={"learn_rule", "category_id"})
     for field, value in data.items():
         setattr(tx, field, value)
 
     if payload.category_id and payload.category_id != tx.category_id:
+        owned_category(db, payload.category_id, current)
         apply_correction(
             db, current.family_id, tx, payload.category_id, current.id, learn=payload.learn_rule
         )

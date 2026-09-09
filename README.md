@@ -36,6 +36,7 @@ cd ../mobile && npm install && npm start   # ajuste extra.apiBaseUrl no app.json
 ```
 
 Documentação interativa da API em `http://localhost:8000/docs`.
+Para testar no celular pelo Expo Go, veja [`docs/rodando-no-celular.md`](docs/rodando-no-celular.md).
 
 ## Testes
 
@@ -45,13 +46,13 @@ python -m pytest -q                        # 35 testes de regra de negócio, sem
 
 createdb bbbc_test
 BBBC_TEST_DATABASE_URL=postgresql+psycopg://bbbc:bbbc@localhost/bbbc_test \
-  python -m pytest -q                      # inclui a integração ponta a ponta
+  python -m pytest -q                      # 52 testes, com a integração
 ```
 
 A suíte rápida cobre o motor de IR, o simulador de metas, a categorização e a
-geometria do Sankey. A de integração sobe a API de verdade contra um Postgres,
-cria a família, lança transações e confere dashboard, IR e o aprendizado de
-regras.
+geometria do Sankey. A de integração sobe a API de verdade contra um Postgres e
+verifica, além do fluxo feliz, que o token de uma família não alcança nada de
+outra e que reprocessar o mesmo extrato não duplica lançamento.
 
 ## Estrutura
 
@@ -73,8 +74,10 @@ mobile/
   src/screens/      uma tela por módulo do sistema
   src/components/   Sankey em SVG e blocos visuais
 docs/
-  arquitetura.md    decisões de projeto e por quê
-  perguntas-abertas.md   o que ainda precisa ser definido
+  arquitetura.md          decisões de projeto e por quê
+  seguranca.md            o que está protegido e o que falta antes de dado real
+  rodando-no-celular.md   como testar no seu aparelho pelo Expo Go
+  perguntas-abertas.md    o que ainda precisa ser definido
 ```
 
 ## Princípios que valem para todo o código

@@ -10,8 +10,29 @@ import type { AuthToken } from './types';
 
 const TOKEN_KEY = 'bbbc.access_token';
 
-export const API_BASE_URL: string =
-  (Constants.expoConfig?.extra?.apiBaseUrl as string) ?? 'http://localhost:8000/api/v1';
+/**
+ * No celular, `localhost` e o proprio aparelho - nao a sua maquina. Em
+ * desenvolvimento derivamos o IP da rede a partir do host do servidor do Expo
+ * (o mesmo que aparece no QR code), para o app funcionar sem editar arquivo.
+ * Em producao vale exatamente o que estiver em `extra.apiBaseUrl`.
+ */
+function resolveBaseUrl(): string {
+  const configured = Constants.expoConfig?.extra?.apiBaseUrl as string | undefined;
+  const fallback = 'http://localhost:8000/api/v1';
+  const base = configured ?? fallback;
+
+  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(base);
+  if (!__DEV__ || !isLocal) return base;
+
+  // hostUri vem como '192.168.0.10:8081'
+  const hostUri = Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
+  const lanHost = hostUri?.split(':')[0];
+  if (!lanHost || lanHost === 'localhost') return base;
+
+  return base.replace(/^(https?:\/\/)[^:/]+/, `$1${lanHost}`);
+}
+
+export const API_BASE_URL: string = resolveBaseUrl();
 
 let cachedToken: string | null = null;
 

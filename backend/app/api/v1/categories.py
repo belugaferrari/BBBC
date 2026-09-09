@@ -3,10 +3,10 @@
 import re
 import unicodedata
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from sqlalchemy import or_, select
 
-from app.api.deps import CurrentMember, DbSession
+from app.api.deps import CurrentMember, DbSession, owned_category
 from app.models import Category, Tag
 from app.schemas.transactions import CategoryCreate, CategoryNode, CategoryOut, TagOut
 
@@ -53,9 +53,7 @@ def category_tree(current: CurrentMember, db: DbSession) -> list[CategoryNode]:
 @router.post("/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
 def create_category(payload: CategoryCreate, current: CurrentMember, db: DbSession) -> CategoryOut:
     if payload.parent_id:
-        parent = db.get(Category, payload.parent_id)
-        if not parent:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Categoria pai nao encontrada")
+        owned_category(db, payload.parent_id, current)
 
     row = Category(
         family_id=current.family_id,

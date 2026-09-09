@@ -59,16 +59,21 @@ async def sync(connection_id: UUID, current: CurrentMember, db: DbSession) -> di
 
     provider = get_provider(connection.provider)
     since, until = default_sync_window(connection)
+    # as contas vem primeiro: as transacoes chegam referenciando o id de conta
+    # do provedor e precisam encontrar a conta local ja criada
+    accounts = await provider.list_accounts(connection.provider_item_id or "")
     transactions = await provider.list_transactions(
         connection.provider_item_id or "", since, until
     )
-    accounts = await provider.list_accounts(connection.provider_item_id or "")
-    log = sync_connection(db, connection, provider, transactions, accounts_synced=len(accounts))
+    log = sync_connection(db, connection, provider, transactions, provider_accounts=accounts)
+    connection.last_error = log.error_message
     return {
         "window": {"since": since, "until": until},
+        "accounts": log.accounts_synced,
         "created": log.transactions_created,
         "updated": log.transactions_updated,
         "status": log.status,
+        "warning": log.error_message,
     }
 
 
@@ -93,7 +98,9 @@ async def webhook(provider_name: str, request: Request, db: DbSession) -> dict:
         received_at=datetime.now(UTC),
     )
     db.add(event)
-    db.flush()
+    # commit antes de recusar: a sessao faz rollback ao levantar a excecao e
+    # perderiamos justamente o registro da tentativa nao autenticada
+    db.commit()
 
     if not signature_ok:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Assinatura invalida")

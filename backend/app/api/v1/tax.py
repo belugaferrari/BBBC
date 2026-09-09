@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from app.api.deps import CurrentMember, DbSession
+from app.api.deps import CurrentMember, DbSession, owned_member
 from app.models.enums import IRDeductionType
 from app.services.tax import (
     DeductibleExpense,
@@ -62,7 +62,9 @@ def assessment(
     year: int, current: CurrentMember, db: DbSession, member_id: UUID | None = None
 ) -> dict:
     """Apuracao do ano com base no que ja esta lancado."""
-    target = member_id or current.id
+    # sem esta guarda, qualquer usuario autenticado leria a apuracao de IR de
+    # outra familia so adivinhando um UUID de membro
+    target = owned_member(db, member_id, current).id if member_id else current.id
     try:
         table = load_tax_table(db, year)
     except TaxYearNotConfigured as exc:
@@ -124,6 +126,9 @@ def simulate_deduction(
         table = load_tax_table(db, year)
     except TaxYearNotConfigured as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+    if payload.member_id:
+        owned_member(db, payload.member_id, current)
 
     base = load_taxpayer_year(db, current.family_id, current.id, year)
     before = assess_year(base, table)

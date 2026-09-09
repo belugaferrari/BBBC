@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import CurrentMember, DbSession
+from app.api.deps import CurrentMember, DbSession, owned_category, owned_member
 from app.models import BudgetCap, Goal
 from app.models.enums import PeriodType
 from app.services.projection import GoalInput, simulate_goal
@@ -49,6 +49,10 @@ class SimulationIn(BaseModel):
 
 @router.post("/budget-caps", status_code=status.HTTP_201_CREATED)
 def create_budget_cap(payload: BudgetCapIn, current: CurrentMember, db: DbSession) -> dict:
+    owned_category(db, payload.category_id, current)
+    if payload.member_id:
+        owned_member(db, payload.member_id, current)
+
     cap = BudgetCap(
         family_id=current.family_id,
         starts_on=payload.starts_on or date.today().replace(day=1),

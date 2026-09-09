@@ -16,7 +16,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.integrations.openfinance.base import OpenFinanceProvider, ProviderTransaction
+from app.integrations.openfinance.base import (
+    OpenFinanceProvider,
+    ProviderAccount,
+    ProviderTransaction,
+)
 from app.models import Account, BankConnection, SyncLog, Transaction
 from app.models.enums import TxSource, TxStatus
 from app.services.categorization import normalize
@@ -43,19 +47,60 @@ def _find_manual_match(
     )
 
 
+def upsert_accounts(
+    db: Session, connection: BankConnection, provider_accounts: list[ProviderAccount]
+) -> int:
+    """Cria ou atualiza as contas trazidas pelo provedor.
+
+    Sem isto a primeira sincronizacao importaria zero: as transacoes chegam
+    referenciando `provider_account_id`, e nao havia nenhuma conta local com
+    esse vinculo. Contas existentes tem apenas o saldo e o limite atualizados -
+    nome e titular ficam como o usuario deixou.
+    """
+    existing = {
+        account.provider_account_id: account
+        for account in db.scalars(
+            select(Account).where(Account.connection_id == connection.id)
+        ).all()
+    }
+
+    touched = 0
+    for item in provider_accounts:
+        account = existing.get(item.provider_account_id)
+        if account is None:
+            account = Account(
+                family_id=connection.family_id,
+                owner_member_id=connection.owner_member_id,
+                institution_id=connection.institution_id,
+                connection_id=connection.id,
+                name=item.name,
+                type=item.type,
+                currency=item.currency,
+                provider_account_id=item.provider_account_id,
+            )
+            db.add(account)
+        account.current_balance = item.balance
+        if item.credit_limit is not None:
+            account.credit_limit = item.credit_limit
+        touched += 1
+
+    db.flush()
+    return touched
+
+
 def sync_connection(
     db: Session,
     connection: BankConnection,
     provider: OpenFinanceProvider,
     transactions: list[ProviderTransaction],
-    accounts_synced: int = 0,
+    provider_accounts: list[ProviderAccount] | None = None,
 ) -> SyncLog:
-    """Aplica no banco o extrato ja obtido do provedor."""
+    """Aplica no banco as contas e o extrato obtidos do provedor."""
     log = SyncLog(
         connection_id=connection.id,
         started_at=datetime.now(UTC),
         status="EXECUTANDO",
-        accounts_synced=accounts_synced,
+        accounts_synced=upsert_accounts(db, connection, provider_accounts or []),
     )
     db.add(log)
 
@@ -67,9 +112,13 @@ def sync_connection(
     }
 
     created = updated = 0
+    skipped: list[str] = []
     for item in transactions:
         account = accounts.get(item.provider_account_id)
         if account is None:
+            # conta que o provedor nao listou nesta chamada: registra e segue,
+            # em vez de descartar a transacao sem deixar rastro
+            skipped.append(item.provider_account_id)
             continue
 
         existing = db.scalar(
@@ -119,6 +168,11 @@ def sync_connection(
     log.transactions_created = created
     log.transactions_updated = updated
     log.status = "SUCESSO"
+    if skipped:
+        log.error_message = (
+            f"{len(skipped)} lancamentos ignorados: conta nao encontrada "
+            f"({', '.join(sorted(set(skipped))[:5])})"
+        )
     log.finished_at = datetime.now(UTC)
     connection.last_synced_at = log.finished_at
     db.flush()

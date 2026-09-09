@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.core.config import settings
 
+settings.assert_production_ready()
+
 app = FastAPI(
     title="BBBC - Gestao Financeira Familiar",
     version="0.1.0",
