@@ -1,0 +1,132 @@
+"""Enumeracoes do dominio. Os nomes espelham os tipos ENUM do PostgreSQL."""
+
+from enum import StrEnum
+
+
+class MemberRole(StrEnum):
+    TITULAR = "TITULAR"
+    CONJUGE = "CONJUGE"
+    DEPENDENTE = "DEPENDENTE"
+    CONTADOR = "CONTADOR"
+
+
+class AccountType(StrEnum):
+    CONTA_CORRENTE = "CONTA_CORRENTE"
+    POUPANCA = "POUPANCA"
+    CARTAO_CREDITO = "CARTAO_CREDITO"
+    INVESTIMENTO = "INVESTIMENTO"
+    DINHEIRO = "DINHEIRO"
+    PJ = "PJ"
+    OUTRO = "OUTRO"
+
+
+class TxDirection(StrEnum):
+    ENTRADA = "ENTRADA"
+    SAIDA = "SAIDA"
+    TRANSFERENCIA = "TRANSFERENCIA"
+
+
+class TxSource(StrEnum):
+    MANUAL = "MANUAL"
+    OPEN_FINANCE = "OPEN_FINANCE"
+    IMPORT_OFX = "IMPORT_OFX"
+    IMPORT_CSV = "IMPORT_CSV"
+    RECORRENTE = "RECORRENTE"
+
+
+class TxStatus(StrEnum):
+    PREVISTA = "PREVISTA"
+    PENDENTE = "PENDENTE"
+    EFETIVADA = "EFETIVADA"
+    CONCILIADA = "CONCILIADA"
+    IGNORADA = "IGNORADA"
+
+
+class CategoryKind(StrEnum):
+    RECEITA = "RECEITA"
+    DESPESA = "DESPESA"
+    TRANSFERENCIA = "TRANSFERENCIA"
+    INVESTIMENTO = "INVESTIMENTO"
+
+
+class IncomeNature(StrEnum):
+    ATIVA_FIXA = "ATIVA_FIXA"
+    ATIVA_VARIAVEL = "ATIVA_VARIAVEL"
+    PASSIVA = "PASSIVA"
+    EVENTUAL = "EVENTUAL"
+
+
+class ExpenseNature(StrEnum):
+    ESSENCIAL = "ESSENCIAL"
+    ESTILO_VIDA = "ESTILO_VIDA"
+    METAS_PROJETOS = "METAS_PROJETOS"
+    FINANCEIRO = "FINANCEIRO"
+
+
+class IRTreatment(StrEnum):
+    """Como o valor entra (ou nao) na apuracao do IR."""
+
+    NAO_APLICAVEL = "NAO_APLICAVEL"
+    TRIBUTAVEL_TABELA = "TRIBUTAVEL_TABELA"
+    TRIBUTAVEL_CARNE_LEAO = "TRIBUTAVEL_CARNE_LEAO"
+    EXCLUSIVA_FONTE = "EXCLUSIVA_FONTE"
+    ISENTO_NAO_TRIBUTAVEL = "ISENTO_NAO_TRIBUTAVEL"
+
+
+class IRDeductionType(StrEnum):
+    NENHUMA = "NENHUMA"
+    SAUDE = "SAUDE"
+    EDUCACAO = "EDUCACAO"
+    PREVIDENCIA_OFICIAL = "PREVIDENCIA_OFICIAL"
+    PREVIDENCIA_PRIVADA_PGBL = "PREVIDENCIA_PRIVADA_PGBL"
+    PENSAO_ALIMENTICIA = "PENSAO_ALIMENTICIA"
+    LIVRO_CAIXA = "LIVRO_CAIXA"
+    DEPENDENTE = "DEPENDENTE"
+
+
+class AssetClass(StrEnum):
+    RENDA_FIXA_POS = "RENDA_FIXA_POS"
+    RENDA_FIXA_PRE = "RENDA_FIXA_PRE"
+    RENDA_FIXA_IPCA = "RENDA_FIXA_IPCA"
+    ACAO = "ACAO"
+    FII = "FII"
+    ETF = "ETF"
+    BDR = "BDR"
+    FUNDO = "FUNDO"
+    CRIPTO = "CRIPTO"
+    PREVIDENCIA = "PREVIDENCIA"
+    EXTERIOR = "EXTERIOR"
+    OUTRO = "OUTRO"
+
+
+class ConnectionStatus(StrEnum):
+    CRIADA = "CRIADA"
+    AGUARDANDO_MFA = "AGUARDANDO_MFA"
+    ATIVA = "ATIVA"
+    ERRO = "ERRO"
+    EXPIRADA = "EXPIRADA"
+    REVOGADA = "REVOGADA"
+
+
+class GoalStatus(StrEnum):
+    ATIVA = "ATIVA"
+    PAUSADA = "PAUSADA"
+    CONCLUIDA = "CONCLUIDA"
+    CANCELADA = "CANCELADA"
+
+
+class AlertSeverity(StrEnum):
+    INFO = "INFO"
+    ATENCAO = "ATENCAO"
+    CRITICO = "CRITICO"
+
+
+class PeriodType(StrEnum):
+    MENSAL = "MENSAL"
+    TRIMESTRAL = "TRIMESTRAL"
+    ANUAL = "ANUAL"
+
+
+class TaxModel(StrEnum):
+    COMPLETO = "COMPLETO"
+    SIMPLIFICADO = "SIMPLIFICADO"

@@ -1,0 +1,172 @@
+"""Utilitarios de linha de comando.
+
+    python -m app.cli migrate
+    python -m app.cli seed-family --name "Familia Ferrari" \
+        --titular "Felipe" --titular-email felipe@exemplo.com \
+        --conjuge "Clarissa" --conjuge-email clarissa@exemplo.com \
+        --dependente "Filha 1" --dependente "Filha 2"
+"""
+
+from __future__ import annotations
+
+import argparse
+import pathlib
+import sys
+from uuid import UUID
+
+from sqlalchemy import text
+
+from app.core.security import hash_password
+from app.db.session import SessionLocal, engine
+
+MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parent.parent / "db" / "migrations"
+
+
+def migrate() -> None:
+    """Aplica as migrations em ordem. Substituir por Alembic quando o schema
+    comecar a evoluir com dados em producao."""
+    with engine.begin() as conn:
+        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+            print(f"aplicando {path.name}")
+            conn.execute(text(path.read_text()))
+
+
+def seed_family(
+    name: str,
+    titular: str,
+    titular_email: str,
+    titular_password: str,
+    conjuge: str | None,
+    conjuge_email: str | None,
+    conjuge_password: str | None,
+    dependentes: list[str],
+) -> UUID:
+    """Cria a familia, os membros e clona o catalogo global de categorias."""
+    with SessionLocal.begin() as db:
+        family_id = db.execute(
+            text("INSERT INTO families (name) VALUES (:name) RETURNING id"), {"name": name}
+        ).scalar_one()
+
+        titular_id = db.execute(
+            text(
+                """
+                INSERT INTO members (family_id, full_name, role, email, password_hash)
+                VALUES (:family_id, :name, 'TITULAR', :email, :pwd)
+                RETURNING id
+                """
+            ),
+            {
+                "family_id": family_id,
+                "name": titular,
+                "email": titular_email.lower(),
+                "pwd": hash_password(titular_password),
+            },
+        ).scalar_one()
+
+        if conjuge and conjuge_email and conjuge_password:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO members (family_id, full_name, role, email, password_hash)
+                    VALUES (:family_id, :name, 'CONJUGE', :email, :pwd)
+                    """
+                ),
+                {
+                    "family_id": family_id,
+                    "name": conjuge,
+                    "email": conjuge_email.lower(),
+                    "pwd": hash_password(conjuge_password),
+                },
+            )
+
+        for dependente in dependentes:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO members
+                        (family_id, full_name, role, is_ir_dependent, ir_dependent_of)
+                    VALUES (:family_id, :name, 'DEPENDENTE', true, :titular)
+                    """
+                ),
+                {"family_id": family_id, "name": dependente, "titular": titular_id},
+            )
+
+        clone_catalog(db, family_id)
+        return family_id
+
+
+def clone_catalog(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
+    """Copia o catalogo global (family_id NULL) para a familia.
+
+    A copia entra com o `path` pronto e o parent_id e amarrado depois, pelo
+    proprio caminho materializado - por isso o trigger aceita path explicito.
+    """
+    inserted = db.execute(
+        text(
+            """
+            INSERT INTO categories (family_id, slug, name, kind, path, income_nature,
+                                    expense_nature, ir_treatment, ir_deduction_type,
+                                    icon, color, is_system, sort_order)
+            SELECT :family_id, slug, name, kind, path, income_nature, expense_nature,
+                   ir_treatment, ir_deduction_type, icon, color, is_system, sort_order
+              FROM categories
+             WHERE family_id IS NULL
+            """
+        ),
+        {"family_id": family_id},
+    ).rowcount
+
+    db.execute(
+        text(
+            """
+            UPDATE categories c
+               SET parent_id = p.id
+              FROM categories p
+             WHERE c.family_id = :family_id
+               AND p.family_id = :family_id
+               AND nlevel(c.path) > 1
+               AND p.path = subpath(c.path, 0, nlevel(c.path) - 1)
+            """
+        ),
+        {"family_id": family_id},
+    )
+    return inserted
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="bbbc")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("migrate", help="aplica as migrations SQL")
+
+    seed = sub.add_parser("seed-family", help="cria a familia e clona o catalogo")
+    seed.add_argument("--name", required=True)
+    seed.add_argument("--titular", required=True)
+    seed.add_argument("--titular-email", required=True)
+    seed.add_argument("--titular-password", required=True)
+    seed.add_argument("--conjuge")
+    seed.add_argument("--conjuge-email")
+    seed.add_argument("--conjuge-password")
+    seed.add_argument("--dependente", action="append", default=[])
+
+    args = parser.parse_args(argv)
+    if args.command == "migrate":
+        migrate()
+        print("migrations aplicadas")
+        return 0
+
+    family_id = seed_family(
+        args.name,
+        args.titular,
+        args.titular_email,
+        args.titular_password,
+        args.conjuge,
+        args.conjuge_email,
+        args.conjuge_password,
+        args.dependente,
+    )
+    print(f"familia criada: {family_id}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
