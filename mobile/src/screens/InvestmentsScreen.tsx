@@ -199,9 +199,9 @@ export function InvestmentsScreen(): React.ReactElement {
               <Pressable
                 key={code}
                 onPress={() => setBenchmark(code)}
-                style={[styles.tab, benchmark === code && styles.tabActive]}
+                style={[styles.benchmarkTab, benchmark === code && styles.benchmarkTabActive]}
               >
-                <Text style={[styles.tabText, benchmark === code && styles.tabTextActive]}>
+                <Text style={[styles.benchmarkTabText, benchmark === code && styles.benchmarkTabTextActive]}>
                   {code}
                 </Text>
               </Pressable>
@@ -312,15 +312,18 @@ const styles = StyleSheet.create({
   empty: { ...typography.caption, color: colors.textFaint, marginTop: spacing.sm },
   subtitle: { ...typography.caption, marginTop: spacing.xs },
   benchmarkTabs: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  tab: {
+  // Nomes proprios: enquanto estes se chamavam tab/tabActive/tabText, eles
+  // sobrescreviam os das abas do topo - mesmo objeto, chave repetida, a ultima
+  // vence. As abas do topo perdiam o flex e a centralizacao em silencio.
+  benchmarkTab: {
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radius.pill,
     backgroundColor: colors.surfaceAlt,
   },
-  tabActive: { backgroundColor: colors.red },
-  tabText: { ...typography.caption, color: colors.textMuted },
-  tabTextActive: { color: colors.white },
+  benchmarkTabActive: { backgroundColor: colors.red },
+  benchmarkTabText: { ...typography.caption, color: colors.textMuted },
+  benchmarkTabTextActive: { color: colors.white },
   tiles: { flexDirection: 'row', gap: spacing.sm },
   benchmarkHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.md },
   allocation: { marginBottom: spacing.md },

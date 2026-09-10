@@ -17,8 +17,11 @@ import { Platform } from 'react-native';
 import { api } from './client';
 
 Notifications.setNotificationHandler({
+  // shouldShowAlert virou shouldShowBanner + shouldShowList: o Android passou a
+  // separar o aviso que aparece na hora do que fica guardado na central.
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),

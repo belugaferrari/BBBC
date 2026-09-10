@@ -28,14 +28,38 @@ fi
 
 cat <<'FIM'
 
+  Como o celular vai se conectar a este computador?
+
+    [1] Pelo Wi-Fi da casa - mais rapido. Comece por esta.
+    [2] Pela internet      - mais lenta, mas atravessa firewall e
+                             roteador que separa os aparelhos.
+
+  Se voce ja tentou a 1 e o celular disse
+  "Failed to download remote update", use a 2.
+
+FIM
+
+# Enter aceita a opcao 1: o caminho normal nao deve exigir escolha.
+read -r -p "  Digite 1 ou 2 e aperte Enter [1]: " MODO
+MODO="${MODO:-1}"
+
+cat <<'FIM'
+
   Vai aparecer um QR code aqui embaixo.
 
   ANDROID: abra o aplicativo Expo Go e escaneie por dentro dele.
   IPHONE:  escaneie com a camera normal do celular.
 
-  O celular precisa estar no MESMO Wi-Fi que este computador.
   Para parar, aperte Ctrl+C nesta janela.
 
 FIM
 
-npm start
+if [ "$MODO" = "2" ]; then
+  echo "  Modo internet: a primeira vez demora mais, esta abrindo o caminho."
+  echo
+  npm run start:tunnel
+else
+  echo "  Modo Wi-Fi: o celular precisa estar no MESMO Wi-Fi que este computador."
+  echo
+  npm start
+fi

@@ -120,6 +120,11 @@ De volta à pasta, clique duas vezes em:
 Ele pede o **Node.js** se você ainda não tiver — o link aparece na tela; baixe
 a versão **LTS**, instale e rode o arquivo de novo.
 
+Ele pergunta **como o celular vai se conectar**:
+
+- **[1] Pelo Wi-Fi da casa** — mais rápido. Comece por esta (é só apertar Enter).
+- **[2] Pela internet** — mais lenta, mas atravessa firewall e roteador.
+
 Aparece um **QR code** na janela:
 
 - **Android:** instale o app **Expo Go** (Play Store), abra e escaneie o QR
@@ -127,8 +132,13 @@ Aparece um **QR code** na janela:
 - **iPhone:** instale o **Expo Go** (App Store) e escaneie o QR com a **câmera
   normal** do celular
 
-O celular precisa estar no **mesmo Wi-Fi** que o computador. Entre com o e-mail
-e a senha que você escolheu na Etapa 3.
+Entre com o e-mail e a senha que você escolheu na Etapa 3.
+
+> **Se o celular disser "Failed to download remote update":** ele não conseguiu
+> alcançar o computador pela rede. Feche a janela, abra o INICIAR-APP de novo e
+> escolha a opção **2**. Isso resolve os três motivos comuns de uma vez —
+> Firewall do Windows bloqueando, roteador que separa os aparelhos, e celular
+> na rede errada.
 
 ---
 
