@@ -17,7 +17,7 @@ import {
   View,
 } from 'react-native';
 
-import { useAccounts } from '@/api/queries';
+import { useAccounts, useStatementChecklist } from '@/api/queries';
 import { confirmImport, uploadStatement } from '@/api/imports';
 import type { ImportPreviewRow, StatementImport } from '@/api/types';
 import { Card, MoneyValue, SectionTitle } from '@/components/ui';
@@ -35,8 +35,14 @@ const ACCEPTED = [
   '*/*',
 ];
 
+function mesAtual(): string {
+  const hoje = new Date();
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
 export function ImportScreen(): React.ReactElement {
   const { data: accounts } = useAccounts();
+  const { data: checklist } = useStatementChecklist(mesAtual());
   const [accountId, setAccountId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('escolha');
   const [batch, setBatch] = useState<StatementImport | null>(null);
@@ -146,6 +152,41 @@ export function ImportScreen(): React.ReactElement {
   if (phase === 'escolha' || !batch) {
     return (
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        {checklist && checklist.expected > 0 ? (
+          <>
+            <SectionTitle>Extratos deste mês</SectionTitle>
+            <Card>
+              <Text style={styles.checklistTitle}>
+                {checklist.received} de {checklist.expected} bancos já mandaram
+              </Text>
+              {checklist.late_list.map((conta) => (
+                <View key={conta.account_id} style={styles.checkline}>
+                  <Text style={styles.checkLate}>●</Text>
+                  <Text style={styles.checkName}>{conta.name}</Text>
+                  <Text style={styles.checkLate}>
+                    {conta.days_late ? `${conta.days_late} dias de atraso` : 'atrasado'}
+                  </Text>
+                </View>
+              ))}
+              {checklist.pending_list.map((conta) => (
+                <View key={conta.account_id} style={styles.checkline}>
+                  <Text style={styles.checkPending}>○</Text>
+                  <Text style={styles.checkName}>{conta.name}</Text>
+                  <Text style={styles.checkPending}>
+                    {conta.expected_day ? `sai dia ${conta.expected_day}` : 'aguardando'}
+                  </Text>
+                </View>
+              ))}
+              {checklist.received_list.map((conta) => (
+                <View key={conta.account_id} style={styles.checkline}>
+                  <Text style={styles.checkDone}>✓</Text>
+                  <Text style={[styles.checkName, styles.checkDoneName]}>{conta.name}</Text>
+                </View>
+              ))}
+            </Card>
+          </>
+        ) : null}
+
         <SectionTitle>Conta de destino</SectionTitle>
         <View style={styles.accounts}>
           {(accounts ?? []).map((account) => {
@@ -273,6 +314,18 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   explain: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  checklistTitle: { ...typography.body, color: colors.text, marginBottom: spacing.sm },
+  checkline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 5,
+  },
+  checkName: { ...typography.caption, color: colors.text, flex: 1 },
+  checkDoneName: { color: colors.textMuted },
+  checkDone: { ...typography.caption, color: colors.textMuted },
+  checkPending: { ...typography.caption, color: colors.textFaint },
+  checkLate: { ...typography.caption, color: colors.red },
   strong: { color: colors.text },
   hint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
   error: { ...typography.caption, color: colors.red, marginBottom: spacing.sm },

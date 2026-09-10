@@ -311,3 +311,65 @@ export interface Forecast {
   };
   projection: MonthProjection[];
 }
+
+export type HoldingKind = 'IMOVEL' | 'TERRENO' | 'VEICULO' | 'PARTICIPACAO' | 'OUTRO';
+
+export interface Holding {
+  id: string;
+  kind: HoldingKind;
+  name: string;
+  description: string | null;
+  acquired_on: string | null;
+  acquisition_value: string | null;
+  current_value: string;
+  /** a Receita declara pelo custo de aquisição, não pelo valor de mercado */
+  ir_declared_value: string | null;
+  unrealized_gain: string | null;
+  company_cnpj: string | null;
+  ownership_percentage: string | null;
+  address: string | null;
+  is_active: boolean;
+}
+
+export interface NetWorth {
+  liquid: string;
+  invested: string;
+  holdings: string;
+  debts: string;
+  total: string;
+  /** quanto do patrimônio não vira dinheiro rápido */
+  illiquid_share: string;
+  by_kind: Record<string, string>;
+  by_owner: Record<string, string>;
+}
+
+export interface CardProgram {
+  id: string;
+  name: string;
+  card_name: string | null;
+  points_per_currency: string;
+  currency_basis: string;
+  balance: string;
+  balance_value_brl: string | null;
+  expires_next_on: string | null;
+  expires_next_points: string | null;
+  days_to_expire: number | null;
+  should_alert: boolean;
+}
+
+export interface CardPrograms {
+  programs: CardProgram[];
+  total_points: string;
+  total_value_brl: string;
+}
+
+export interface StatementChecklist {
+  month: string;
+  expected: number;
+  received: number;
+  missing: number;
+  complete: boolean;
+  received_list: { account_id: string; name: string; received_at: string | null }[];
+  pending_list: { account_id: string; name: string; expected_day: number | null }[];
+  late_list: { account_id: string; name: string; days_late: number | null }[];
+}

@@ -71,6 +71,10 @@ backend/
       tax.py          motor de IR (tabela progressiva, deduções, carnê-leão)
       projection.py   metas, tetos e simulação de aportes
       forecast.py     evolutivo dos próximos meses (fixo, esperado, estimado)
+      patrimonio.py   imóveis, participações e patrimônio consolidado
+      vigilancia.py   extratos que faltam, contas a vencer, pontos a expirar
+      notifier.py     envio por push (Expo) e e-mail (SMTP)
+      points.py       pontos de cartão: quanto rendem e quanto valem
       categorization.py  motor de regras + aprendizado de fornecedores
       import_service.py  importação de extrato: prever, conferir, gravar
       importers/      leitores de OFX, CSV e PDF
@@ -88,6 +92,7 @@ docs/
   arquitetura.md          decisões de projeto e por quê
   importando-extratos.md  formatos aceitos e como a deduplicação funciona
   seguranca.md            o que está protegido e o que falta antes de dado real
+  notificacoes.md         como os avisos chegam, e o que depende de você
   rodando-no-celular.md   como testar no seu aparelho pelo Expo Go
   perguntas-abertas.md    o que ainda precisa ser definido
 ```

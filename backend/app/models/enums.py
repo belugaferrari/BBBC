@@ -131,3 +131,19 @@ class PeriodType(StrEnum):
 class TaxModel(StrEnum):
     COMPLETO = "COMPLETO"
     SIMPLIFICADO = "SIMPLIFICADO"
+
+
+class HoldingKind(StrEnum):
+    """Bem que a familia possui. Imovel e participacao sao a mesma coisa para o
+    sistema: algo com valor de aquisicao e valor de hoje."""
+
+    IMOVEL = "IMOVEL"
+    TERRENO = "TERRENO"
+    VEICULO = "VEICULO"
+    PARTICIPACAO = "PARTICIPACAO"
+    OUTRO = "OUTRO"
+
+
+class NotificationChannel(StrEnum):
+    PUSH = "PUSH"
+    EMAIL = "EMAIL"

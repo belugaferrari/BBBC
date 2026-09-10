@@ -87,7 +87,9 @@ derrubam a taxa de poupança. O aporte já estava sendo contado errado antes dis
 | 6.1 | **iOS, Android ou os dois?** | Expo cobre os dois. |
 | 6.2 | Onde a API vai rodar (VPS, Fly, Render, Cloud Run)? | Só `docker compose`; sem pipeline de deploy. |
 | 6.3 | **Backup do banco** — frequência e retenção? | Não configurado. É o item que eu resolveria primeiro depois do deploy. |
-| 6.4 | Push notification para alertas (teto estourado, fatura, consentimento vencendo)? | Alertas são gravados e aparecem no dashboard; sem push. |
+| 6.4 | ~~Push notification para alertas~~ — **feito**. Falta você agendar a tarefa diária e, se quiser e-mail, configurar o SMTP. | Ver `docs/notificacoes.md`. |
+| 6.6 | **Qual e-mail deve receber os avisos?** E vale a pena um para você e outro para a Clarissa? | Nenhum cadastrado. |
+| 6.7 | **Você tem servidor de e-mail** ou uso o seu Gmail com senha de app? | Não configurado — sem isso, só push e a tela. |
 | 6.5 | Querem **importar histórico** (OFX/CSV do banco, planilha antiga)? | Enums `IMPORT_OFX`/`IMPORT_CSV` existem; o importador não foi escrito. |
 
 ---

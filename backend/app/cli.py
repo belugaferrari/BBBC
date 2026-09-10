@@ -293,6 +293,35 @@ def reset_categories(family_id: UUID | None = None) -> tuple[int, int]:
         return categorias, regras
 
 
+def rodar_avisos() -> dict:
+    """Tarefa diaria: recalcula os avisos e envia a fila.
+
+    E um comando e nao um processo em segundo plano de proposito: um sistema
+    que roda na maquina de casa nao pode contar com estar sempre ligado. Quem
+    decide a frequencia e o agendador do sistema operacional - ver
+    docs/notificacoes.md.
+    """
+    from app.services.vigilancia_repository import (
+        despachar_pendentes,
+        gerar_avisos,
+        gravar_avisos,
+    )
+
+    resultado = {"familias": 0, "avisos_novos": 0}
+    with SessionLocal.begin() as db:
+        familias = [
+            linha[0] for linha in db.execute(text("SELECT id FROM families"))
+        ]
+        for family_id in familias:
+            avisos = gerar_avisos(db, family_id)
+            criados = gravar_avisos(db, family_id, avisos)
+            resultado["familias"] += 1
+            resultado["avisos_novos"] += len(criados)
+
+        resultado["envio"] = despachar_pendentes(db)
+    return resultado
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="bbbc")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -330,6 +359,11 @@ def main(argv: list[str] | None = None) -> int:
     reset.add_argument("--family", help="id da familia (padrao: a primeira)")
 
     sub.add_parser(
+        "run-alerts",
+        help="recalcula os avisos e envia as notificacoes pendentes",
+    )
+
+    sub.add_parser(
         "needs-setup",
         help="codigo de saida: 0 precisa cadastrar, 1 ja existe, 2 sem banco",
     )
@@ -338,6 +372,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "migrate":
         migrate()
         print("migrations aplicadas")
+        return 0
+
+    if args.command == "run-alerts":
+        resultado = rodar_avisos()
+        envio = resultado["envio"]
+        print(
+            f"{resultado['familias']} familia(s), "
+            f"{resultado['avisos_novos']} aviso(s) novo(s)"
+        )
+        print(
+            f"envio: {envio['enviados']} enviados, {envio['falhas']} falhas, "
+            f"{envio['sem_configuracao']} sem configuracao"
+        )
         return 0
 
     if args.command == "needs-setup":
