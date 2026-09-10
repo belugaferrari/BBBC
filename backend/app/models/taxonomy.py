@@ -63,8 +63,12 @@ class Category(PKUuid, TimestampMixin, Base):
     color: Mapped[str | None] = mapped_column(Text)
     icon: Mapped[str | None] = mapped_column(Text)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
-    # 'unicos (com comentarios)': o lancamento so fecha com uma explicacao
+    # 'unicos (com comentarios)': o lancamento so fecha com uma explicacao.
+    # Vale para a subarvore inteira - ver `note_required_for` em queries.py.
     requires_note: Mapped[bool] = mapped_column(Boolean, default=False)
+    # false quando a saida e transferencia patrimonial (amortizacao, aporte):
+    # o dinheiro sai da conta, mas nao e consumo
+    counts_as_expense: Mapped[bool] = mapped_column(Boolean, default=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 

@@ -20,7 +20,7 @@ from app.models import Category, Transaction, TransactionTag
 from app.models.enums import TxStatus
 from app.schemas.transactions import TransactionCreate, TransactionOut, TransactionUpdate
 from app.services.categorization_repository import apply_correction, autocategorize
-from app.services.queries import spend_by_category, spend_by_member
+from app.services.queries import note_required_for, spend_by_category, spend_by_member
 
 router = APIRouter(prefix="/transactions", tags=["gastos"])
 
@@ -112,13 +112,14 @@ def create_transaction(
     so precisa confirmar quando o motor errar."""
     account = owned_account(db, payload.account_id, current)
     if payload.category_id:
-        categoria = owned_category(db, payload.category_id, current)
+        owned_category(db, payload.category_id, current)
         # 'Unicos (com comentarios)': daqui a seis meses ninguem lembra o que
         # foi aquele gasto de R$ 3.400 se ele entrar sem explicacao
-        if categoria.requires_note and not (payload.notes or "").strip():
+        exige = note_required_for(db, payload.category_id)
+        if exige and not (payload.notes or "").strip():
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
-                f"A categoria '{categoria.name}' exige um comentario explicando o gasto.",
+                f"A categoria '{exige}' exige um comentario explicando o gasto.",
             )
     if payload.ir_deduction_member_id:
         owned_member(db, payload.ir_deduction_member_id, current)
@@ -164,11 +165,12 @@ def update_transaction(
         setattr(tx, field, value)
 
     if payload.category_id and payload.category_id != tx.category_id:
-        categoria = owned_category(db, payload.category_id, current)
-        if categoria.requires_note and not (payload.notes or tx.notes or "").strip():
+        owned_category(db, payload.category_id, current)
+        exige = note_required_for(db, payload.category_id)
+        if exige and not (payload.notes or tx.notes or "").strip():
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
-                f"A categoria '{categoria.name}' exige um comentario explicando o gasto.",
+                f"A categoria '{exige}' exige um comentario explicando o gasto.",
             )
         apply_correction(
             db, current.family_id, tx, payload.category_id, current.id, learn=payload.learn_rule

@@ -216,7 +216,7 @@ def test_o_app_sabe_quando_pedir_o_comentario(client, familia):
         ("ENEL DISTRIBUICAO SP", "Luz"),
         ("COMGAS SP", "Gas"),
         ("CONDOMINIO EDIFICIO", "Condominio e manutencao"),
-        ("IPVA 2026 DETRAN", "Anuais"),
+        ("IPVA 2026 DETRAN", "IPVA"),
     ],
 )
 def test_extrato_real_chega_ja_categorizado(client, familia, descricao, categoria_esperada):
@@ -289,3 +289,117 @@ def test_gastos_por_categoria_usa_a_arvore_nova(client, familia):
     nomes = {g["name"] for g in resposta.json()["categories"]}
     assert {"Saude", "Educacao", "Mercado"} & nomes
     assert Decimal(resposta.json()["total"]) > 0
+
+
+# ------------------------------------ patrimonio nao e consumo --------------
+def test_amortizacao_sai_da_conta_mas_nao_e_gasto(client, familia):
+    """Amortizacao e divida virando patrimonio. Contada como gasto, faria o mes
+    parecer pior do que foi - e a taxa de poupanca, menor."""
+    hoje = date.today().replace(day=12)
+    cat = familia["cat"]
+
+    lancar(client, familia, booked_on=hoje.isoformat(), amount="1800.00",
+           direction="SAIDA", description="Amortizacao do financiamento",
+           category_id=cat["despesas.financiamento.amortizacao"])
+    lancar(client, familia, booked_on=hoje.isoformat(), amount="700.00",
+           direction="SAIDA", description="Juros do financiamento",
+           category_id=cat["despesas.financiamento.juros"])
+
+    painel = client.get(
+        "/api/v1/dashboard", params={"month": hoje.replace(day=1).isoformat()},
+        headers=familia["headers"],
+    ).json()["cashflow"]
+
+    # os dois saem da conta
+    assert float(painel["outflow"]) >= 2500.0
+    # mas so os juros sao consumo
+    assert float(painel["patrimonio"]) >= 1800.0
+    assert float(painel["consumo"]) == float(painel["outflow"]) - float(painel["patrimonio"])
+
+
+def test_aporte_em_investimento_tambem_nao_e_gasto(client, familia):
+    """O mesmo erro estava presente antes: aporte era somado como saida."""
+    hoje = date.today().replace(day=12)
+    antes = client.get(
+        "/api/v1/dashboard", params={"month": hoje.replace(day=1).isoformat()},
+        headers=familia["headers"],
+    ).json()["cashflow"]
+
+    lancar(client, familia, booked_on=hoje.isoformat(), amount="5000.00",
+           direction="SAIDA", description="Aporte mensal",
+           category_id=familia["cat"]["investimentos.aporte"])
+
+    depois = client.get(
+        "/api/v1/dashboard", params={"month": hoje.replace(day=1).isoformat()},
+        headers=familia["headers"],
+    ).json()["cashflow"]
+
+    assert float(depois["outflow"]) == float(antes["outflow"]) + 5000.0
+    assert float(depois["consumo"]) == float(antes["consumo"])   # consumo nao mudou
+    assert float(depois["patrimonio"]) == float(antes["patrimonio"]) + 5000.0
+
+
+def test_patrimonio_nao_polui_o_gasto_por_categoria(client, familia):
+    hoje = date.today().replace(day=12)
+    resposta = client.get(
+        "/api/v1/transactions/by-category",
+        params={"start": hoje.replace(day=1).isoformat(),
+                "end": hoje.replace(day=28).isoformat(), "depth": 2},
+        headers=familia["headers"],
+    ).json()
+
+    nomes = {g["name"] for g in resposta["categories"]}
+    assert "Amortizacao" not in nomes
+    assert "Aporte" not in nomes
+    assert "Financiamento" in nomes   # os juros continuam la
+
+
+# --------------------------------- comentario herdado pelos filhos ----------
+def test_filho_de_unicos_herda_a_exigencia_de_comentario(client, familia):
+    """Sem heranca, bastava criar uma subcategoria para escapar da regra."""
+    resposta = lancar(
+        client, familia, booked_on=date.today().isoformat(), amount="2200.00",
+        direction="SAIDA", description="Geladeira nova",
+        category_id=familia["cat"]["despesas.unicos.moveis_eletro"],
+    )
+    assert resposta.status_code == 422
+    assert "Unicos" in resposta.json()["detail"]
+
+
+def test_filho_de_unicos_passa_com_comentario(client, familia):
+    resposta = lancar(
+        client, familia, booked_on=date.today().isoformat(), amount="2200.00",
+        direction="SAIDA", description="Geladeira nova",
+        category_id=familia["cat"]["despesas.unicos.moveis_eletro"],
+        notes="A antiga parou de gelar depois de 11 anos",
+    )
+    assert resposta.status_code == 201
+
+
+def test_categoria_normal_nao_pede_comentario(client, familia):
+    resposta = lancar(
+        client, familia, booked_on=date.today().isoformat(), amount="180.00",
+        direction="SAIDA", description="Compra da semana",
+        category_id=familia["cat"]["despesas.mercado"],
+    )
+    assert resposta.status_code == 201
+
+
+# --------------------------------------- filhos de anuais -------------------
+def test_anuais_agora_distingue_o_que_tem_dentro(client, familia):
+    arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
+    despesas = next(n for n in arvore if n["name"] == "Despesas")
+    anuais = next(f for f in despesas["children"] if f["name"] == "Anuais")
+
+    nomes = {f["name"] for f in anuais["children"]}
+    assert {"IPVA", "IPTU", "Licenciamento", "Seguros"} <= nomes
+
+
+def test_financiamento_separa_juros_de_amortizacao(client, familia):
+    arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
+    despesas = next(n for n in arvore if n["name"] == "Despesas")
+    financiamento = next(f for f in despesas["children"] if f["name"] == "Financiamento")
+
+    por_nome = {f["name"]: f for f in financiamento["children"]}
+    assert por_nome["Juros"]["counts_as_expense"] is True
+    assert por_nome["Amortizacao"]["counts_as_expense"] is False

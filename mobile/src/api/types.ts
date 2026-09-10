@@ -13,7 +13,12 @@ export interface AuthToken {
 export interface Cashflow {
   month: string;
   inflow: string;
+  /** tudo que saiu da conta */
   outflow: string;
+  /** o que foi consumido de verdade */
+  consumo: string;
+  /** amortização e aporte: saiu da conta, mas virou patrimônio */
+  patrimonio: string;
   net: string;
   savings_rate: string;
 }
@@ -91,6 +96,8 @@ export interface Category {
   icon: string | null;
   /** 'Únicos (com comentários)': o lançamento só fecha com uma explicação. */
   requires_note: boolean;
+  /** false em amortização e aporte: sai da conta, mas não é consumo */
+  counts_as_expense: boolean;
   children: Category[];
 }
 

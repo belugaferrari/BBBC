@@ -129,10 +129,14 @@ DEFAULT_MERCHANT_RULES: list[tuple[str, str]] = [
 
     # --- condominio e anuais ----------------------------------------------
     ("condominio", "despesas.condominio_manutencao"),
-    ("ipva", "despesas.anuais"),
-    ("iptu", "despesas.anuais"),
-    ("licenciamento", "despesas.anuais"),
-    ("seguro", "despesas.anuais"),
+    ("ipva", "despesas.anuais.ipva"),
+    ("iptu", "despesas.anuais.iptu"),
+    ("licenciamento", "despesas.anuais.licenciamento"),
+    ("seguro", "despesas.anuais.seguros"),
+    ("anuidade", "despesas.anuais.anuidades"),
+    ("multa", "despesas.unicos.multas"),
+    ("juros financiamento", "despesas.financiamento.juros"),
+    ("amortizacao", "despesas.financiamento.amortizacao"),
 
     # --- faxina ------------------------------------------------------------
     ("faxina", "despesas.faxina"),

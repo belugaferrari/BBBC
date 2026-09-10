@@ -60,8 +60,12 @@ def monthly_cashflow(
             f"""
             SELECT
               COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'ENTRADA'), 0) AS inflow,
-              COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'SAIDA'),   0) AS outflow
+              COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'SAIDA'),   0) AS outflow,
+              COALESCE(SUM(t.amount) FILTER (
+                  WHERE t.direction = 'SAIDA'
+                    AND COALESCE(c.counts_as_expense, true) = false), 0)        AS patrimonio
               FROM transactions t
+              LEFT JOIN categories c ON c.id = t.category_id
              WHERE t.family_id = :family_id
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
                AND t.direction <> 'TRANSFERENCIA'
@@ -73,11 +77,19 @@ def monthly_cashflow(
     ).mappings().one()
 
     inflow, outflow = brl(row["inflow"]), brl(row["outflow"])
-    savings_rate = (inflow - outflow) / inflow if inflow else ZERO
+    # Amortizacao e aporte saem da conta, mas nao sao consumo: sao divida
+    # virando patrimonio e dinheiro mudando de bolso. Somados ao gasto, fariam
+    # o mes parecer pior - e a taxa de poupanca, menor - justamente para quem
+    # esta construindo patrimonio.
+    patrimonio = brl(row["patrimonio"])
+    consumo = brl(outflow - patrimonio)
+    savings_rate = (inflow - consumo) / inflow if inflow else ZERO
     return {
         "month": month.replace(day=1),
         "inflow": inflow,
         "outflow": outflow,
+        "consumo": consumo,
+        "patrimonio": patrimonio,
         "net": brl(inflow - outflow),
         "savings_rate": Decimal(savings_rate).quantize(Decimal("0.0001")),
     }
@@ -253,6 +265,8 @@ def spend_by_category(
                    AND t.direction = 'SAIDA'
                    AND t.status IN ('EFETIVADA', 'CONCILIADA')
                    AND t.booked_on BETWEEN :start AND :end
+                   -- amortizacao e aporte saem da conta, mas nao sao consumo
+                   AND COALESCE(c.counts_as_expense, true)
                    {_SCOPE_FILTER}
             )
             SELECT COALESCE(g.grupo_path::text, 'sem_categoria') AS path,
@@ -336,3 +350,29 @@ def spend_by_member(
         }
         for r in rows
     ]
+
+
+def note_required_for(db: Session, category_id: UUID) -> str | None:
+    """Nome da categoria que exige comentario, olhando a subarvore inteira.
+
+    A exigencia e herdada: marcar 'Unicos' vale para 'Unicos > Viagens' e para
+    qualquer filha criada depois. Sem a heranca, bastaria criar uma subcategoria
+    para escapar da regra - e a exigencia existe justamente para o gasto avulso,
+    que e onde os filhos ficam.
+    """
+    return db.execute(
+        text(
+            """
+            SELECT ancestral.name
+              FROM categories alvo
+              JOIN categories ancestral
+                ON ancestral.family_id IS NOT DISTINCT FROM alvo.family_id
+               AND alvo.path <@ ancestral.path
+             WHERE alvo.id = :category_id
+               AND ancestral.requires_note
+             ORDER BY nlevel(ancestral.path)
+             LIMIT 1
+            """
+        ),
+        {"category_id": category_id},
+    ).scalar_one_or_none()

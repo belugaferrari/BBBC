@@ -25,7 +25,9 @@ def _to_out(row: Category) -> CategoryOut:
         path=str(row.path), depth=row.depth, kind=row.kind,
         income_nature=row.income_nature, expense_nature=row.expense_nature,
         ir_treatment=row.ir_treatment, ir_deduction_type=row.ir_deduction_type,
-        icon=row.icon, color=row.color, requires_note=row.requires_note,
+        icon=row.icon, color=row.color,
+        requires_note=row.requires_note,
+        counts_as_expense=row.counts_as_expense,
     )
 
 

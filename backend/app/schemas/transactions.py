@@ -34,6 +34,7 @@ class CategoryOut(ORMModel):
     icon: str | None = None
     color: str | None = None
     requires_note: bool = False
+    counts_as_expense: bool = True
 
 
 class CategoryNode(CategoryOut):

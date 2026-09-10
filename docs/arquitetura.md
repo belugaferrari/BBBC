@@ -102,7 +102,23 @@ tivesse a sua, fitas de valores diferentes apareceriam com a mesma espessura e o
 gráfico mentiria. A sobra do mês vira um nó próprio, para a soma dos links que
 saem do nó central fechar com a receita total.
 
-## 9. O que ficou de fora de propósito
+## 9. Nem todo dinheiro que sai é gasto
+
+`categories.counts_as_expense` separa **consumo** de **transferência
+patrimonial**. Amortização de financiamento é dívida virando patrimônio; aporte
+em investimento é dinheiro mudando de bolso. Os dois saem da conta corrente e
+por isso continuam no fluxo de caixa — mas somá-los ao gasto faria o mês parecer
+pior do que foi, e derrubaria a taxa de poupança justamente de quem está
+construindo patrimônio.
+
+O dashboard passa a informar três números onde antes havia dois: `outflow` (tudo
+que saiu), `consumo` e `patrimonio`, com `outflow = consumo + patrimonio`. A
+análise por categoria ignora as categorias patrimoniais; o fluxo de caixa, não.
+
+A mesma coluna resolveu um erro que já existia e ninguém tinha notado: o aporte
+mensal vinha sendo somado como despesa desde o começo.
+
+## 10. O que ficou de fora de propósito
 
 - **Alembic**: as migrations são SQL puro numerado enquanto não há dados em
   produção. Na primeira mudança de schema com dados reais, migrar para Alembic.
