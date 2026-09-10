@@ -178,7 +178,7 @@ def _categoria(client, conta, caminho: str) -> str:
 
 
 def test_categoria_pode_ser_corrigida_na_conferencia(client, conta):
-    categoria = _categoria(client, conta, "despesas.essenciais.educacao.escola")
+    categoria = _categoria(client, conta, "despesas.educacao.escola")
 
     lote = enviar(client, conta, "extrato-exemplo.csv").json()
     escola = next(i for i in lote["preview"] if "COLEGIO" in i["description"].upper())

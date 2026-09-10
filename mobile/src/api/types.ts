@@ -89,6 +89,8 @@ export interface Category {
   ir_treatment: string;
   ir_deduction_type: string;
   icon: string | null;
+  /** 'Únicos (com comentários)': o lançamento só fecha com uma explicação. */
+  requires_note: boolean;
   children: Category[];
 }
 

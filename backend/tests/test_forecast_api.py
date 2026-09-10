@@ -139,13 +139,13 @@ def test_gastos_agrupados_por_categoria(client, familia):
     cat = familia["cat"]
     lancar(client, familia, booked_on=hoje.isoformat(), amount="4200.00",
            direction="SAIDA", description="Mercado",
-           category_id=cat["despesas.essenciais.alimentacao.supermercado"])
+           category_id=cat["despesas.mercado"])
     lancar(client, familia, booked_on=hoje.isoformat(), amount="6800.00",
            direction="SAIDA", description="Escola",
-           category_id=cat["despesas.essenciais.educacao.escola"])
+           category_id=cat["despesas.educacao.escola"])
     lancar(client, familia, booked_on=hoje.isoformat(), amount="890.00",
            direction="SAIDA", description="Bambu Lab",
-           category_id=cat["despesas.estilo_vida.hobbies.impressao_3d"])
+           category_id=cat["despesas.marketplaces"])
 
     resposta = client.get(
         "/api/v1/transactions/by-category",
@@ -156,11 +156,11 @@ def test_gastos_agrupados_por_categoria(client, familia):
     dados = resposta.json()
 
     grupos = {g["name"]: g for g in dados["categories"]}
-    assert float(grupos["Essenciais"]["total"]) == 11000.0   # mercado + escola
-    assert float(grupos["Estilo de Vida"]["total"]) == 890.0
-    assert grupos["Essenciais"]["transactions"] == 2
-    # participacao de cada grupo no total
-    assert float(grupos["Essenciais"]["share"]) == pytest.approx(0.9252, abs=1e-3)
+    assert float(grupos["Mercado"]["total"]) == 4200.0
+    assert float(grupos["Educacao"]["total"]) == 6800.0
+    assert float(grupos["Market places"]["total"]) == 890.0
+    # participacao de cada grupo no total de 11.890
+    assert float(grupos["Educacao"]["share"]) == pytest.approx(0.5719, abs=1e-3)
 
 
 def test_profundidade_muda_o_nivel_do_agrupamento(client, familia):
@@ -168,10 +168,10 @@ def test_profundidade_muda_o_nivel_do_agrupamento(client, familia):
     cat = familia["cat"]
     lancar(client, familia, booked_on=hoje.isoformat(), amount="4200.00",
            direction="SAIDA", description="Mercado",
-           category_id=cat["despesas.essenciais.alimentacao.supermercado"])
+           category_id=cat["despesas.mercado"])
     lancar(client, familia, booked_on=hoje.isoformat(), amount="6800.00",
            direction="SAIDA", description="Escola",
-           category_id=cat["despesas.essenciais.educacao.escola"])
+           category_id=cat["despesas.educacao.escola"])
 
     def nomes(depth):
         r = client.get(
@@ -182,9 +182,10 @@ def test_profundidade_muda_o_nivel_do_agrupamento(client, familia):
         )
         return {g["name"] for g in r.json()["categories"]}
 
+    # na arvore da familia, Mercado e Educacao ja sao filhos diretos de Despesas
     assert nomes(1) == {"Despesas"}
-    assert nomes(2) == {"Essenciais"}
-    assert nomes(3) == {"Alimentacao", "Educacao"}
+    assert nomes(2) == {"Mercado", "Educacao"}
+    assert nomes(3) == {"Mercado", "Escola (dedutivel)"}
 
 
 def test_lancamento_sem_categoria_nao_some_do_agrupamento(client, familia):

@@ -33,6 +33,7 @@ class CategoryOut(ORMModel):
     ir_deduction_type: IRDeductionType
     icon: str | None = None
     color: str | None = None
+    requires_note: bool = False
 
 
 class CategoryNode(CategoryOut):

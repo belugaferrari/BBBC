@@ -59,9 +59,19 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 5.1 | **Viagem à Disney**: valor-alvo, data e quanto já está guardado? | Nenhuma meta cadastrada. O simulador aceita meta corrigida pela inflação. |
 | 5.2 | O fundo da meta rende quanto ao ano? | Campo por meta, começa em 0%. |
 | 5.3 | Tetos por categoria: **familiares, individuais ou os dois**? | Os dois são suportados (`member_id` nulo = familiar). Nenhum teto cadastrado. |
-| 5.5 | **A sua árvore de categorias.** Você disse que manda depois. | O catálogo atual é um ponto de partida (90 categorias). Trocar depois é seguro: cada família tem a sua cópia, a árvore aceita qualquer profundidade e mover uma categoria leva a subárvore junto. Só as marcações de IR precisam vir com ela — quais são dedutíveis (saúde, educação, previdência) e quais receitas são isentas. |
+| 5.5 | ~~A sua árvore de categorias~~ — **recebida e aplicada** (migration 0004). | Restam três pontos abertos, abaixo. |
 | 5.6 | Quais são os **gastos fixos** de vocês (aluguel, escola, plano, seguros) — valor e dia do mês? | O evolutivo já lê gastos fixos cadastrados, mas ainda não há nenhum. Sem eles, a projeção usa só a média histórica, que é mais grosseira. |
 | 5.4 | Querem **alerta antes de estourar** o teto (o padrão é 80%)? | 80%, configurável por teto; a projeção já avisa se o ritmo do mês estoura. |
+
+## 5b. Sobre a taxonomia que você mandou
+
+Apliquei a sua lista como está. Três coisas precisam da sua palavra:
+
+| # | Pergunta | O que fiz por ora |
+|---|---|---|
+| 5.7 | **"Criação" é o quê?** Assumi a criação das meninas (roupa, brinquedo, atividade). Se for outra coisa — criação de conteúdo, animais — me diga. | Categoria essencial, sem subdivisão. |
+| 5.8 | **"Anuais" e "Únicos" descrevem frequência, não natureza.** IPVA, IPTU e seguro caem em "Anuais", mas o IR não consegue saber o que tem lá dentro, e o evolutivo dilui um gasto anual em doze parcelas mensais que não existem. Quer que eu crie filhos (IPVA, IPTU, Seguros) ou prefere manter simples? | Mantidas exatamente como você escreveu. "Únicos" exige comentário no lançamento. |
+| 5.9 | **Financiamento: separar juros de amortização?** A amortização não é despesa — é dívida virando patrimônio. Contá-la como gasto faz o mês parecer pior do que é. | Categoria única, sem separação. |
 
 ## 6. Produto e operação
 

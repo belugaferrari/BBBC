@@ -63,6 +63,8 @@ class Category(PKUuid, TimestampMixin, Base):
     color: Mapped[str | None] = mapped_column(Text)
     icon: Mapped[str | None] = mapped_column(Text)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 'unicos (com comentarios)': o lancamento so fecha com uma explicacao
+    requires_note: Mapped[bool] = mapped_column(Boolean, default=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 

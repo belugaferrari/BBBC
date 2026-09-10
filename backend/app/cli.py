@@ -161,7 +161,55 @@ def seed_family(
             )
 
         clone_catalog(db, family_id)
+        seed_default_rules(db, family_id)
         return family_id
+
+
+def seed_default_rules(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
+    """Cria as regras de fornecedor do catalogo para a familia.
+
+    Ficam com prioridade pior que a das regras aprendidas, entao a primeira
+    correcao que o usuario fizer passa a mandar sobre o padrao.
+    """
+    from app.services.default_rules import (
+        CATALOG_RULE_CONFIDENCE,
+        CATALOG_RULE_PRIORITY,
+        DEFAULT_MERCHANT_RULES,
+    )
+
+    caminhos = {
+        row[0]: row[1]
+        for row in db.execute(
+            text("SELECT path::text, id FROM categories WHERE family_id = :f"),
+            {"f": family_id},
+        )
+    }
+
+    criadas = 0
+    for padrao, caminho in DEFAULT_MERCHANT_RULES:
+        categoria = caminhos.get(caminho)
+        if categoria is None:
+            continue
+        db.execute(
+            text(
+                """
+                INSERT INTO categorization_rules
+                    (family_id, match_type, pattern, category_id, priority,
+                     confidence, is_learned)
+                VALUES (:family_id, 'CONTEM', :pattern, :category_id, :priority,
+                        :confidence, false)
+                """
+            ),
+            {
+                "family_id": family_id,
+                "pattern": padrao,
+                "category_id": categoria,
+                "priority": CATALOG_RULE_PRIORITY,
+                "confidence": CATALOG_RULE_CONFIDENCE,
+            },
+        )
+        criadas += 1
+    return criadas
 
 
 def clone_catalog(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
@@ -175,9 +223,10 @@ def clone_catalog(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
             """
             INSERT INTO categories (family_id, slug, name, kind, path, income_nature,
                                     expense_nature, ir_treatment, ir_deduction_type,
-                                    icon, color, is_system, sort_order)
+                                    requires_note, icon, color, is_system, sort_order)
             SELECT :family_id, slug, name, kind, path, income_nature, expense_nature,
-                   ir_treatment, ir_deduction_type, icon, color, is_system, sort_order
+                   ir_treatment, ir_deduction_type, requires_note, icon, color,
+                   is_system, sort_order
               FROM categories
              WHERE family_id IS NULL
             """
@@ -200,6 +249,47 @@ def clone_catalog(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
         {"family_id": family_id},
     )
     return inserted
+
+
+def reset_categories(family_id: UUID | None = None) -> tuple[int, int]:
+    """Reaplica o catalogo atual na familia, com as regras de fornecedor.
+
+    Recusa se ja houver lancamento apontando para as categorias existentes -
+    apagar categoria com historico em cima transformaria gasto classificado em
+    gasto solto, e o estrago so apareceria no fechamento do mes.
+    """
+    with SessionLocal.begin() as db:
+        if family_id is None:
+            family_id = db.execute(
+                text("SELECT id FROM families ORDER BY created_at LIMIT 1")
+            ).scalar_one_or_none()
+            if family_id is None:
+                raise RuntimeError("nenhuma familia cadastrada")
+
+        em_uso = db.execute(
+            text(
+                """
+                SELECT count(*) FROM transactions t
+                  JOIN categories c ON c.id = t.category_id
+                 WHERE c.family_id = :f
+                """
+            ),
+            {"f": family_id},
+        ).scalar_one()
+        if em_uso:
+            raise RuntimeError(
+                f"{em_uso} lancamentos ja usam as categorias atuais. "
+                "Recategorize-os antes, ou crie as novas categorias pelo app."
+            )
+
+        db.execute(
+            text("DELETE FROM categorization_rules WHERE family_id = :f"),
+            {"f": family_id},
+        )
+        db.execute(text("DELETE FROM categories WHERE family_id = :f"), {"f": family_id})
+        categorias = clone_catalog(db, family_id)
+        regras = seed_default_rules(db, family_id)
+        return categorias, regras
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -232,6 +322,12 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     sub.add_parser("status", help="mostra o que ja existe no sistema")
+    reset = sub.add_parser(
+        "reset-categories",
+        help="reaplica o catalogo de categorias e as regras na familia",
+    )
+    reset.add_argument("--family", help="id da familia (padrao: a primeira)")
+
     sub.add_parser(
         "needs-setup",
         help="codigo de saida: 0 precisa cadastrar, 1 ja existe, 2 sem banco",
@@ -245,6 +341,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "needs-setup":
         return needs_setup()
+
+    if args.command == "reset-categories":
+        try:
+            categorias, regras = reset_categories(
+                UUID(args.family) if args.family else None
+            )
+        except RuntimeError as exc:
+            print(f"nada foi alterado: {exc}")
+            return 1
+        print(f"{categorias} categorias e {regras} regras aplicadas")
+        return 0
 
     if args.command == "status":
         info = status()

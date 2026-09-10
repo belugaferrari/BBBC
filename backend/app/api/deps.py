@@ -61,13 +61,15 @@ def owned_account(db: Session, account_id: UUID, current: Member):
 
 
 def owned_category(db: Session, category_id: UUID, current: Member):
-    """Categoria da familia ou do catalogo global (family_id NULL)."""
+    """Categoria da propria familia.
+
+    O catalogo global nao serve: e um modelo compartilhado entre familias, e
+    apontar um lancamento para ele misturaria o historico de todo mundo na
+    mesma linha.
+    """
     from app.models import Category
 
-    category = db.get(Category, category_id)
-    if category is None or category.family_id not in (current.family_id, None):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Categoria nao encontrada")
-    return category
+    return _owned(db, Category, category_id, current.family_id, "Categoria")
 
 
 def owned_member(db: Session, member_id: UUID, current: Member) -> Member:

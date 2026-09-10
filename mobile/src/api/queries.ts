@@ -111,11 +111,13 @@ export function useRecategorize() {
       id: string;
       category_id?: string;
       owner_member_id?: string;
+      notes?: string;
       learn_rule?: boolean;
     }) =>
       api.patch<Transaction>(`/transactions/${input.id}`, {
         ...(input.category_id ? { category_id: input.category_id } : {}),
         ...(input.owner_member_id ? { owner_member_id: input.owner_member_id } : {}),
+        ...(input.notes ? { notes: input.notes } : {}),
         learn_rule: input.learn_rule ?? true,
       }),
     onSuccess: () => {

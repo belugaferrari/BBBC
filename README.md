@@ -78,7 +78,7 @@ backend/
       sankey.py       montagem do gráfico em cascata
     models/         mapeamento ORM
     integrations/   Open Finance (contrato + Pluggy + Belvo + manual)
-  db/migrations/    DDL versionada em SQL puro
+  db/migrations/    DDL versionada em SQL puro (0004 = a taxonomia da família)
   db/samples/       o mesmo extrato fictício em OFX, CSV e PDF
 mobile/
   src/screens/      uma tela por módulo do sistema

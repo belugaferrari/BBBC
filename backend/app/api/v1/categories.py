@@ -4,7 +4,7 @@ import re
 import unicodedata
 
 from fastapi import APIRouter, status
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from app.api.deps import CurrentMember, DbSession, owned_category
 from app.models import Category, Tag
@@ -25,21 +25,31 @@ def _to_out(row: Category) -> CategoryOut:
         path=str(row.path), depth=row.depth, kind=row.kind,
         income_nature=row.income_nature, expense_nature=row.expense_nature,
         ir_treatment=row.ir_treatment, ir_deduction_type=row.ir_deduction_type,
-        icon=row.icon, color=row.color,
+        icon=row.icon, color=row.color, requires_note=row.requires_note,
     )
 
 
 @router.get("/categories", response_model=list[CategoryNode])
 def category_tree(current: CurrentMember, db: DbSession) -> list[CategoryNode]:
-    """Devolve a arvore montada. O app renderiza recursivamente."""
+    """Devolve a arvore da familia, montada. O app renderiza recursivamente.
+
+    So a copia da familia. O catalogo global (`family_id IS NULL`) e um modelo
+    do qual cada familia recebe a sua copia na criacao - devolver os dois faria
+    cada categoria aparecer duas vezes na tela, com ids diferentes. Ele so
+    aparece como reserva, para uma familia que ainda nao tenha a sua copia.
+    """
     rows = db.scalars(
         select(Category)
-        .where(
-            or_(Category.family_id == current.family_id, Category.family_id.is_(None)),
-            Category.is_archived.is_(False),
-        )
+        .where(Category.family_id == current.family_id, Category.is_archived.is_(False))
         .order_by(Category.sort_order)
     ).all()
+
+    if not rows:
+        rows = db.scalars(
+            select(Category)
+            .where(Category.family_id.is_(None), Category.is_archived.is_(False))
+            .order_by(Category.sort_order)
+        ).all()
 
     nodes = {row.id: CategoryNode(**_to_out(row).model_dump(), children=[]) for row in rows}
     roots: list[CategoryNode] = []

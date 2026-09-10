@@ -112,7 +112,14 @@ def create_transaction(
     so precisa confirmar quando o motor errar."""
     account = owned_account(db, payload.account_id, current)
     if payload.category_id:
-        owned_category(db, payload.category_id, current)
+        categoria = owned_category(db, payload.category_id, current)
+        # 'Unicos (com comentarios)': daqui a seis meses ninguem lembra o que
+        # foi aquele gasto de R$ 3.400 se ele entrar sem explicacao
+        if categoria.requires_note and not (payload.notes or "").strip():
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"A categoria '{categoria.name}' exige um comentario explicando o gasto.",
+            )
     if payload.ir_deduction_member_id:
         owned_member(db, payload.ir_deduction_member_id, current)
     if payload.owner_member_id:
@@ -157,7 +164,12 @@ def update_transaction(
         setattr(tx, field, value)
 
     if payload.category_id and payload.category_id != tx.category_id:
-        owned_category(db, payload.category_id, current)
+        categoria = owned_category(db, payload.category_id, current)
+        if categoria.requires_note and not (payload.notes or tx.notes or "").strip():
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"A categoria '{categoria.name}' exige um comentario explicando o gasto.",
+            )
         apply_correction(
             db, current.family_id, tx, payload.category_id, current.id, learn=payload.learn_rule
         )

@@ -48,6 +48,10 @@ export function ExpensesScreen(): React.ReactElement {
   const [search, setSearch] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
+  // categoria que exige explicação (ex.: 'Únicos'): guarda a escolha até o
+  // comentário ser escrito, em vez de gravar um gasto que ninguém vai lembrar
+  const [pedindoNota, setPedindoNota] = useState<Category | null>(null);
+  const [nota, setNota] = useState('');
   const [modo, setModo] = useState<'lista' | 'categorias'>('lista');
   // 1 agrupa nos grandes blocos, 3 desce até a subcategoria
   const [nivel, setNivel] = useState(2);
@@ -250,25 +254,74 @@ export function ExpensesScreen(): React.ReactElement {
                   );
                 })}
             </View>
+            {pedindoNota ? (
+              <View style={styles.noteBox}>
+                <Text style={styles.noteTitle}>{pedindoNota.name}</Text>
+                <Text style={styles.modalHint}>
+                  Escreva o que foi este gasto. Daqui a seis meses, esta frase é
+                  a única coisa que vai explicar o lançamento.
+                </Text>
+                <TextInput
+                  value={nota}
+                  onChangeText={setNota}
+                  placeholder="Ex.: conserto do telhado depois do temporal"
+                  placeholderTextColor={colors.textFaint}
+                  multiline
+                  style={styles.noteInput}
+                />
+                <Pressable
+                  style={[styles.noteButton, !nota.trim() && styles.noteButtonOff]}
+                  disabled={!nota.trim()}
+                  onPress={() => {
+                    if (!editing || !pedindoNota) return;
+                    recategorize.mutate({
+                      id: editing.id,
+                      category_id: pedindoNota.id,
+                      notes: nota.trim(),
+                    });
+                    setPedindoNota(null);
+                    setEditing(null);
+                  }}
+                >
+                  <Text style={styles.noteButtonText}>Salvar</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <FlatList
-              data={expenseOptions}
+              data={pedindoNota ? [] : expenseOptions}
               keyExtractor={({ category }) => category.id}
               style={styles.modalList}
               renderItem={({ item }) => (
                 <Pressable
                   style={[styles.option, { paddingLeft: spacing.md + item.depth * spacing.md }]}
                   onPress={() => {
-                    if (editing) {
-                      recategorize.mutate({ id: editing.id, category_id: item.category.id });
+                    if (!editing) return;
+                    if (item.category.requires_note) {
+                      setPedindoNota(item.category);
+                      setNota('');
+                      return;
                     }
+                    recategorize.mutate({ id: editing.id, category_id: item.category.id });
                     setEditing(null);
                   }}
                 >
-                  <Text style={styles.optionText}>{item.category.name}</Text>
+                  <Text style={styles.optionText}>
+                    {item.category.name}
+                    {item.category.requires_note ? (
+                      <Text style={styles.needsNote}>  pede comentário</Text>
+                    ) : null}
+                  </Text>
                 </Pressable>
               )}
             />
-            <Pressable style={styles.close} onPress={() => setEditing(null)}>
+            <Pressable
+              style={styles.close}
+              onPress={() => {
+                setPedindoNota(null);
+                setEditing(null);
+              }}
+            >
               <Text style={styles.closeText}>Fechar</Text>
             </Pressable>
           </View>
@@ -331,6 +384,27 @@ const styles = StyleSheet.create({
   sliceName: { ...typography.body, color: colors.text, flex: 1 },
   sliceValue: { ...typography.body, color: colors.text },
   sliceHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  needsNote: { ...typography.caption, color: colors.red },
+  noteBox: { marginTop: spacing.md },
+  noteTitle: { ...typography.body, color: colors.text, marginBottom: spacing.xs },
+  noteInput: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    color: colors.text,
+    minHeight: 84,
+    textAlignVertical: 'top',
+    marginTop: spacing.sm,
+  },
+  noteButton: {
+    backgroundColor: colors.red,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  noteButtonOff: { backgroundColor: colors.surfaceAlt },
+  noteButtonText: { ...typography.body, color: colors.white },
   people: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   person: {
     paddingHorizontal: spacing.md,
