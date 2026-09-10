@@ -3,12 +3,15 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 
+# A lista de dependencias sai do pyproject.toml, e nao repetida aqui: quando as
+# duas listas existiam, o pyproject ganhou python-multipart e pypdf e o
+# Dockerfile nao. A API subia como container e morria na importacao, sem que
+# nenhum teste percebesse - eles rodam num ambiente onde tudo ja esta instalado.
+# Copiar so o pyproject nesta etapa mantem o cache: mexer no codigo nao refaz o
+# pip install.
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir \
-      "fastapi>=0.115" "uvicorn[standard]>=0.32" "sqlalchemy>=2.0.36" \
-      "psycopg[binary]>=3.2" "pydantic>=2.9" "pydantic-settings>=2.6" \
-      "python-jose[cryptography]>=3.3" "bcrypt>=4.2" "httpx>=0.27" \
-      "python-dateutil>=2.9"
+RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']))" > /tmp/requirements.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY . .
 
