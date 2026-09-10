@@ -22,13 +22,77 @@ from app.db.session import SessionLocal, engine
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parent.parent / "db" / "migrations"
 
 
+# Migrations que a versao sem registro aplicava. Ela rodava tudo dentro de um
+# unico `engine.begin()`, entao um banco criado por ela tem exatamente estas e
+# nenhuma outra: nao ha meio-termo entre todas e nenhuma. A lista e fixa de
+# proposito - adotar "todos os arquivos presentes" marcaria como aplicada uma
+# migration nova que o banco antigo nunca viu.
+MIGRATIONS_ANTES_DO_REGISTRO = (
+    "0001_init.sql",
+    "0002_seed_catalog.sql",
+    "0003_statement_imports.sql",
+    "0004_taxonomia_bbbc.sql",
+    "0005_filhos_e_amortizacao.sql",
+    "0006_patrimonio_avisos_pontos.sql",
+)
+
+_TRACKING_DDL = """
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    filename   text PRIMARY KEY,
+    applied_at timestamptz NOT NULL DEFAULT now()
+)
+"""
+
+
 def migrate() -> None:
-    """Aplica as migrations em ordem. Substituir por Alembic quando o schema
-    comecar a evoluir com dados em producao."""
+    """Aplica as migrations que ainda nao rodaram, em ordem.
+
+    O registro do que ja foi aplicado e o que permite ligar o sistema duas
+    vezes. Sem ele, a segunda partida reexecutava 0001 e morria no CREATE
+    TRIGGER - o Postgres nao tem CREATE TRIGGER IF NOT EXISTS, entao o erro
+    aparecia como falha de schema, e nao como o que era: uma migration rodando
+    de novo. Substituir por Alembic quando o schema comecar a evoluir com dados
+    em producao.
+    """
     with engine.begin() as conn:
-        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        # Lido antes de criar a tabela de registro, senao o teste vira sempre
+        # falso e um banco existente seria tratado como novo.
+        sem_registro = conn.execute(
+            text("SELECT to_regclass('public.schema_migrations') IS NULL")
+        ).scalar()
+        tem_schema = conn.execute(
+            text("SELECT to_regclass('public.families') IS NOT NULL")
+        ).scalar()
+
+        conn.execute(text(_TRACKING_DDL))
+
+        if sem_registro and tem_schema:
+            # Banco criado pela versao anterior: o schema esta de pe, so falta
+            # dizer isso. Registrar sem reexecutar - reexecutar e justamente o
+            # que quebrava.
+            for nome in MIGRATIONS_ANTES_DO_REGISTRO:
+                conn.execute(
+                    text("INSERT INTO schema_migrations (filename) VALUES (:f)"),
+                    {"f": nome},
+                )
+            print(f"banco existente adotado ({len(MIGRATIONS_ANTES_DO_REGISTRO)} migrations)")
+
+        aplicadas = {
+            linha[0] for linha in conn.execute(text("SELECT filename FROM schema_migrations"))
+        }
+
+        pendentes = [p for p in sorted(MIGRATIONS_DIR.glob("*.sql")) if p.name not in aplicadas]
+        if not pendentes:
+            print("nenhuma migration pendente")
+            return
+
+        for path in pendentes:
             print(f"aplicando {path.name}")
             conn.execute(text(path.read_text()))
+            conn.execute(
+                text("INSERT INTO schema_migrations (filename) VALUES (:f)"),
+                {"f": path.name},
+            )
 
 
 def count_families() -> int:
