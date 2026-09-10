@@ -52,9 +52,22 @@ senha do passo 2.
 
 ## Se não conectar
 
+A saida quase universal e o **modo tunel**, que serve o app pela internet em vez
+da rede local:
+
+```bash
+npm run start:tunnel
+```
+
+E mais lento, mas atravessa firewall, roteador que isola aparelhos e celular na
+rede errada - as tres causas da tabela de uma vez. Os arquivos INICIAR-APP
+oferecem isso como opcao 2.
+
 | Sintoma | Causa quase sempre |
 |---|---|
+| "Failed to download remote update" | O celular nao alcanca o computador. Firewall do Windows bloqueando o Node, ou redes diferentes. Use o modo tunel. |
 | QR abre mas o app trava carregando | Celular e computador em redes diferentes (uma no Wi-Fi de visitantes, outra na principal). |
+| "Something went wrong" logo ao abrir | Expo Go mais novo que o SDK do projeto. Toque em "View error log" para ver qual dos dois e. |
 | "Falha na requisição" no login | Firewall do computador bloqueando a porta 8000. Libere-a na rede local. |
 | "Sessão expirada" logo ao entrar | A API não subiu; confira `docker compose ps`. |
 | Quero fixar o endereço na mão | Edite `extra.apiBaseUrl` em `mobile/app.json` com `http://SEU_IP:8000/api/v1`. |
