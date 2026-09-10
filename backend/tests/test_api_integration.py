@@ -118,13 +118,12 @@ def test_arvore_de_categorias_vem_montada(client, family):
     assert {"Receitas", "Despesas"} <= nomes
 
     despesas = next(node for node in roots if node["name"] == "Despesas")
-    essenciais = next(n for n in despesas["children"] if n["name"] == "Essenciais")
-    saude = next(n for n in essenciais["children"] if n["name"] == "Saude")
+    saude = next(n for n in despesas["children"] if n["name"] == "Saude")
     assert saude["ir_deduction_type"] == "SAUDE"
-    assert saude["depth"] == 2
-    # medicamento herda a categoria de saude mas nao e dedutivel
-    medicamentos = next(n for n in saude["children"] if n["name"].startswith("Medicamentos"))
-    assert medicamentos["ir_deduction_type"] == "NENHUMA"
+    assert saude["depth"] == 1
+    # a farmacia fica dentro de Saude, mas remedio nao e dedutivel
+    farmacia = next(n for n in saude["children"] if n["name"].startswith("Farmacia"))
+    assert farmacia["ir_deduction_type"] == "NENHUMA"
 
 
 def test_dashboard_reflete_os_lancamentos(client, family, account):
@@ -136,15 +135,15 @@ def test_dashboard_reflete_os_lancamentos(client, family, account):
     post_tx(
         client, family, amount="15000.00", direction="ENTRADA",
         description="Distribuicao de lucros Checkmotor",
-        category_id=cats["receitas.ativa_variavel.distribuicao_lucros"],
+        category_id=cats["receitas.ativa_variavel.lucros"],
     )
     post_tx(
         client, family, amount="4200.00", direction="SAIDA", description="Supermercado Angeloni",
-        category_id=cats["despesas.essenciais.alimentacao.supermercado"],
+        category_id=cats["despesas.mercado"],
     )
     post_tx(
         client, family, amount="6800.00", direction="SAIDA", description="Mensalidade escolar",
-        category_id=cats["despesas.essenciais.educacao.escola"],
+        category_id=cats["despesas.educacao.escola"],
         ir_deduction_member_id=family["filhas"][0],
     )
 
@@ -195,7 +194,7 @@ def test_ir_separa_tributavel_de_isento_e_deduz_educacao(client, family, account
 
 def test_correcao_manual_ensina_o_motor_de_categorizacao(client, family, account):
     cats = family["categories"]
-    hobby = cats["despesas.estilo_vida.hobbies.impressao_3d"]
+    hobby = cats["despesas.marketplaces"]
 
     criada = post_tx(
         client, family, amount="890.00", direction="SAIDA",
@@ -228,13 +227,13 @@ def test_filtro_de_categoria_inclui_a_subarvore(client, family, account):
         params={
             "start": hoje.replace(day=1).isoformat(),
             "end": hoje.replace(day=28).isoformat(),
-            "category_id": cats["despesas.essenciais"],
+            "category_id": cats["despesas.educacao"],
         },
         headers=family["headers"],
     )
     assert response.status_code == 200, response.text
     descricoes = {item["description"] for item in response.json()}
-    # supermercado e escola estao em ramos diferentes sob 'Essenciais'
-    assert "Supermercado Angeloni" in descricoes
+    # o filtro desce a subarvore: 'Escola' esta abaixo de 'Educacao'
     assert "Mensalidade escolar" in descricoes
+    assert "Supermercado Angeloni" not in descricoes   # esta em Mercado
     assert all("BAMBU" not in d for d in descricoes)

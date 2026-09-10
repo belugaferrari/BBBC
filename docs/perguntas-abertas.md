@@ -59,7 +59,26 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 5.1 | **Viagem à Disney**: valor-alvo, data e quanto já está guardado? | Nenhuma meta cadastrada. O simulador aceita meta corrigida pela inflação. |
 | 5.2 | O fundo da meta rende quanto ao ano? | Campo por meta, começa em 0%. |
 | 5.3 | Tetos por categoria: **familiares, individuais ou os dois**? | Os dois são suportados (`member_id` nulo = familiar). Nenhum teto cadastrado. |
+| 5.5 | ~~A sua árvore de categorias~~ — **recebida e aplicada** (migration 0004). | Restam três pontos abertos, abaixo. |
+| 5.6 | Quais são os **gastos fixos** de vocês (aluguel, escola, plano, seguros) — valor e dia do mês? | O evolutivo já lê gastos fixos cadastrados, mas ainda não há nenhum. Sem eles, a projeção usa só a média histórica, que é mais grosseira. |
 | 5.4 | Querem **alerta antes de estourar** o teto (o padrão é 80%)? | 80%, configurável por teto; a projeção já avisa se o ritmo do mês estoura. |
+
+## 5b. Taxonomia — fechada
+
+As três pendências foram respondidas e aplicadas (migration 0005):
+
+| # | Definido | O que virou |
+|---|---|---|
+| 5.7 | **Criação** é a criação das meninas | Categoria essencial, sem subdivisão. |
+| 5.8 | **Anuais e Únicos ganharam filhos** | Anuais: IPVA, IPTU, Licenciamento, Seguros, Anuidades e taxas, Outros. Únicos: Móveis e eletrodomésticos, Eletrônicos, Presentes, Viagens, Reformas e reparos, Multas, Outros — **todos herdam a exigência de comentário**. |
+| 5.9 | **Financiamento separa juros de amortização** | Juros, Amortização e Seguros e taxas. A amortização não conta como gasto (ver abaixo). |
+
+**Consequência que vale saber:** a separação de juros e amortização trouxe um
+conceito que faltava — nem todo dinheiro que sai da conta é gasto. Amortização é
+dívida virando patrimônio, e aporte é dinheiro mudando de bolso. Os dois saem da
+conta (o fluxo de caixa continua honesto), mas não entram no consumo nem
+derrubam a taxa de poupança. O aporte já estava sendo contado errado antes disso
+— o mesmo engano, que só apareceu quando o financiamento foi separado.
 
 ## 6. Produto e operação
 
@@ -68,7 +87,9 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 6.1 | **iOS, Android ou os dois?** | Expo cobre os dois. |
 | 6.2 | Onde a API vai rodar (VPS, Fly, Render, Cloud Run)? | Só `docker compose`; sem pipeline de deploy. |
 | 6.3 | **Backup do banco** — frequência e retenção? | Não configurado. É o item que eu resolveria primeiro depois do deploy. |
-| 6.4 | Push notification para alertas (teto estourado, fatura, consentimento vencendo)? | Alertas são gravados e aparecem no dashboard; sem push. |
+| 6.4 | ~~Push notification para alertas~~ — **feito**. Falta você agendar a tarefa diária e, se quiser e-mail, configurar o SMTP. | Ver `docs/notificacoes.md`. |
+| 6.6 | **Qual e-mail deve receber os avisos?** E vale a pena um para você e outro para a Clarissa? | Nenhum cadastrado. |
+| 6.7 | **Você tem servidor de e-mail** ou uso o seu Gmail com senha de app? | Não configurado — sem isso, só push e a tela. |
 | 6.5 | Querem **importar histórico** (OFX/CSV do banco, planilha antiga)? | Enums `IMPORT_OFX`/`IMPORT_CSV` existem; o importador não foi escrito. |
 
 ---

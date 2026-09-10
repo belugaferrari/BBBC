@@ -62,7 +62,7 @@ def _nova_familia(client) -> dict:
             db.execute(
                 text(
                     "SELECT id FROM categories WHERE family_id = :f"
-                    " AND path = 'despesas.essenciais.alimentacao.supermercado'"
+                    " AND path = 'despesas.mercado'"
                 ),
                 {"f": family_id},
             ).scalar_one()

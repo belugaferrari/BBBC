@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { getToken } from '@/api/client';
+import { registrarAparelho } from '@/api/push';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { LoginScreen } from '@/screens/LoginScreen';
 
@@ -19,6 +20,12 @@ export default function App(): React.ReactElement | null {
   useEffect(() => {
     getToken().then((token) => setAuthenticated(Boolean(token)));
   }, []);
+
+  useEffect(() => {
+    // registra o aparelho para receber avisos. Falha aqui não impede o uso do
+    // app: sem push, os avisos continuam chegando por e-mail e na tela.
+    if (authenticated) void registrarAparelho();
+  }, [authenticated]);
 
   if (authenticated === null) return null;
 

@@ -70,7 +70,16 @@ export function DashboardScreen(): React.ReactElement {
 
       <View style={styles.tiles}>
         <StatTile label="Entrou" value={money(cashflow.inflow)} />
-        <StatTile label="Saiu" value={money(cashflow.outflow)} tone="alert" />
+        <StatTile
+          label="Gastou"
+          value={money(cashflow.consumo)}
+          tone="alert"
+          hint={
+            Number(cashflow.patrimonio) > 0
+              ? `+ ${money(cashflow.patrimonio)} viraram patrimônio`
+              : undefined
+          }
+        />
       </View>
       <View style={styles.tiles}>
         <StatTile

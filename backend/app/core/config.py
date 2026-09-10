@@ -16,6 +16,18 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://bbbc:bbbc@localhost:5432/bbbc"
 
+    # ---- Notificacoes ----
+    # Push do Expo nao precisa de credencial: o token do aparelho basta.
+    # E-mail precisa de um servidor SMTP; sem ele, o canal fica indisponivel e
+    # o sistema avisa em vez de fingir que enviou.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
+
     open_finance_provider: str = "none"
     pluggy_client_id: str | None = None
     pluggy_client_secret: str | None = None

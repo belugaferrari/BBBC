@@ -4,7 +4,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from './client';
 import type {
+  Account,
   BenchmarkEvolution,
+  CardPrograms,
+  Forecast,
+  Holding,
+  HoldingKind,
+  Member,
+  NetWorth,
+  StatementChecklist,
+  Scope as ScopeType,
+  SpendByCategory,
   Category,
   DashboardData,
   Goal,
@@ -22,7 +32,83 @@ export const queryKeys = {
   portfolio: ['portfolio'] as const,
   evolution: (benchmark: string) => ['evolution', benchmark] as const,
   tax: (year: number) => ['tax', year] as const,
+  accounts: ['accounts'] as const,
+  imports: ['imports'] as const,
+  members: ['members'] as const,
+  byCategory: (params: object) => ['by-category', params] as const,
+  forecast: (months: number, scope: ScopeType) => ['forecast', months, scope] as const,
+  netWorth: ['net-worth'] as const,
+  holdings: (kind?: HoldingKind) => ['holdings', kind ?? 'todos'] as const,
+  cardPrograms: ['card-programs'] as const,
+  checklist: (month: string) => ['statement-checklist', month] as const,
 };
+
+/** Patrimônio total: contas, carteira, bens e o que se deve. */
+export function useNetWorth() {
+  return useQuery({
+    queryKey: queryKeys.netWorth,
+    queryFn: () => api.get<NetWorth>('/net-worth'),
+  });
+}
+
+export function useHoldings(kind?: HoldingKind) {
+  return useQuery({
+    queryKey: queryKeys.holdings(kind),
+    queryFn: () => api.get<Holding[]>('/holdings', kind ? { kind } : undefined),
+  });
+}
+
+export function useCardPrograms() {
+  return useQuery({
+    queryKey: queryKeys.cardPrograms,
+    queryFn: () => api.get<CardPrograms>('/card-programs'),
+  });
+}
+
+/** De quais bancos o extrato do mês já chegou. */
+export function useStatementChecklist(month: string) {
+  return useQuery({
+    queryKey: queryKeys.checklist(month),
+    queryFn: () => api.get<StatementChecklist>('/statements/checklist', { month }),
+  });
+}
+
+export function useMembers() {
+  return useQuery({
+    queryKey: queryKeys.members,
+    queryFn: () => api.get<Member[]>('/auth/members'),
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+/** Gastos somados por categoria. `depth` escolhe o corte da árvore. */
+export function useSpendByCategory(params: {
+  start: string;
+  end: string;
+  scope: Scope;
+  depth: number;
+  member_id?: string;
+}) {
+  return useQuery({
+    queryKey: queryKeys.byCategory(params),
+    queryFn: () => api.get<SpendByCategory>('/transactions/by-category', params),
+  });
+}
+
+/** Evolutivo dos próximos meses. */
+export function useForecast(months: number, scope: Scope) {
+  return useQuery({
+    queryKey: queryKeys.forecast(months, scope),
+    queryFn: () => api.get<Forecast>('/forecast', { months, scope }),
+  });
+}
+
+export function useAccounts() {
+  return useQuery({
+    queryKey: queryKeys.accounts,
+    queryFn: () => api.get<Account[]>('/accounts'),
+  });
+}
 
 export function useDashboard(month: string, scope: Scope) {
   return useQuery({
@@ -53,17 +139,29 @@ export function useTransactions(params: {
   });
 }
 
-/** Recategorizar alimenta o aprendizado de regras no backend. */
+/**
+ * Editar um lançamento. Mudar a categoria alimenta o aprendizado de regras;
+ * mudar o responsável só reatribui o gasto, sem criar regra nenhuma.
+ */
 export function useRecategorize() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; category_id: string; learn_rule?: boolean }) =>
+    mutationFn: (input: {
+      id: string;
+      category_id?: string;
+      owner_member_id?: string;
+      notes?: string;
+      learn_rule?: boolean;
+    }) =>
       api.patch<Transaction>(`/transactions/${input.id}`, {
-        category_id: input.category_id,
+        ...(input.category_id ? { category_id: input.category_id } : {}),
+        ...(input.owner_member_id ? { owner_member_id: input.owner_member_id } : {}),
+        ...(input.notes ? { notes: input.notes } : {}),
         learn_rule: input.learn_rule ?? true,
       }),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ['transactions'] });
+      client.invalidateQueries({ queryKey: ['by-category'] });
       client.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });

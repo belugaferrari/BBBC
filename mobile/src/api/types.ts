@@ -13,7 +13,12 @@ export interface AuthToken {
 export interface Cashflow {
   month: string;
   inflow: string;
+  /** tudo que saiu da conta */
   outflow: string;
+  /** o que foi consumido de verdade */
+  consumo: string;
+  /** amortização e aporte: saiu da conta, mas virou patrimônio */
+  patrimonio: string;
   net: string;
   savings_rate: string;
 }
@@ -89,6 +94,10 @@ export interface Category {
   ir_treatment: string;
   ir_deduction_type: string;
   icon: string | null;
+  /** 'Únicos (com comentários)': o lançamento só fecha com uma explicação. */
+  requires_note: boolean;
+  /** false em amortização e aporte: sai da conta, mas não é consumo */
+  counts_as_expense: boolean;
   children: Category[];
 }
 
@@ -184,4 +193,183 @@ export interface TaxAssessment {
   completo: TaxModelResult;
   simplificado: TaxModelResult;
   aviso?: string;
+}
+
+export interface ImportPreviewRow {
+  index: number;
+  booked_on: string;
+  amount: string;
+  direction: 'ENTRADA' | 'SAIDA';
+  description: string;
+  document: string | null;
+  duplicate: boolean;
+  duplicate_reason: string | null;
+  suggested_category_id: string | null;
+  suggested_category_name: string | null;
+  confidence: string | null;
+  selected: boolean;
+}
+
+export interface StatementImport {
+  id: string;
+  account_id: string;
+  filename: string;
+  file_format: 'OFX' | 'CSV' | 'PDF';
+  status: 'CRIADO' | 'CONFIRMADO' | 'DESCARTADO' | 'ERRO';
+  period_start: string | null;
+  period_end: string | null;
+  rows_detected: number;
+  rows_duplicated: number;
+  rows_imported: number;
+  warnings: string[];
+  preview: ImportPreviewRow[];
+  created_at: string;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  type: string;
+  owner_member_id: string;
+  current_balance: string;
+  is_shared: boolean;
+}
+
+export interface Member {
+  id: string;
+  name: string;
+  role: 'TITULAR' | 'CONJUGE' | 'DEPENDENTE' | 'CONTADOR';
+  is_ir_dependent: boolean;
+  can_login: boolean;
+}
+
+export interface CategorySlice {
+  path: string;
+  name: string;
+  icon: string | null;
+  total: string;
+  transactions: number;
+  share: string;
+}
+
+export interface MemberSlice {
+  member_id: string;
+  name: string;
+  total: string;
+  transactions: number;
+  share: string;
+}
+
+export interface SpendByCategory {
+  start: string;
+  end: string;
+  depth: number;
+  total: string;
+  categories: CategorySlice[];
+  by_member: MemberSlice[];
+}
+
+/** FIXO = recorrente cadastrado, ESPERADO = já lançado, ESTIMADO = média. */
+export type FlowKind = 'FIXO' | 'ESPERADO' | 'ESTIMADO';
+
+export interface MonthProjection {
+  month: string;
+  opening_balance: string;
+  inflow: string;
+  outflow: string;
+  net: string;
+  closing_balance: string;
+  inflow_by_kind: Partial<Record<FlowKind, string>>;
+  outflow_by_kind: Partial<Record<FlowKind, string>>;
+  items: {
+    kind: FlowKind;
+    direction: 'ENTRADA' | 'SAIDA';
+    amount: string;
+    label: string;
+    category_name: string | null;
+  }[];
+}
+
+export interface Forecast {
+  start: string;
+  months: number;
+  scope: Scope;
+  sources: {
+    recurring_rules: number;
+    scheduled_transactions: number;
+    estimated_categories: number;
+    history_months: number;
+  };
+  summary: {
+    months: number;
+    total_inflow: string;
+    total_outflow: string;
+    net: string;
+    closing_balance: string;
+    first_negative_month: string | null;
+    average_monthly_outflow: string;
+  };
+  projection: MonthProjection[];
+}
+
+export type HoldingKind = 'IMOVEL' | 'TERRENO' | 'VEICULO' | 'PARTICIPACAO' | 'OUTRO';
+
+export interface Holding {
+  id: string;
+  kind: HoldingKind;
+  name: string;
+  description: string | null;
+  acquired_on: string | null;
+  acquisition_value: string | null;
+  current_value: string;
+  /** a Receita declara pelo custo de aquisição, não pelo valor de mercado */
+  ir_declared_value: string | null;
+  unrealized_gain: string | null;
+  company_cnpj: string | null;
+  ownership_percentage: string | null;
+  address: string | null;
+  is_active: boolean;
+}
+
+export interface NetWorth {
+  liquid: string;
+  invested: string;
+  holdings: string;
+  debts: string;
+  total: string;
+  /** quanto do patrimônio não vira dinheiro rápido */
+  illiquid_share: string;
+  by_kind: Record<string, string>;
+  by_owner: Record<string, string>;
+}
+
+export interface CardProgram {
+  id: string;
+  name: string;
+  card_name: string | null;
+  points_per_currency: string;
+  currency_basis: string;
+  balance: string;
+  balance_value_brl: string | null;
+  expires_next_on: string | null;
+  expires_next_points: string | null;
+  days_to_expire: number | null;
+  should_alert: boolean;
+}
+
+export interface CardPrograms {
+  programs: CardProgram[];
+  total_points: string;
+  total_value_brl: string;
+}
+
+export interface StatementChecklist {
+  month: string;
+  expected: number;
+  received: number;
+  missing: number;
+  complete: boolean;
+  received_list: { account_id: string; name: string; received_at: string | null }[];
+  pending_list: { account_id: string; name: string; expected_day: number | null }[];
+  late_list: { account_id: string; name: string; days_late: number | null }[];
 }

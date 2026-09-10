@@ -122,13 +122,17 @@ def rule_matches(rule: Rule, tx: TransactionFacts) -> bool:
 
 
 def categorize(tx: TransactionFacts, rules: list[Rule]) -> Match | None:
-    """Primeira regra que casa, na ordem (prioridade, -confianca, -acertos).
+    """Primeira regra que casa, na ordem (prioridade, especificidade, confianca).
 
-    Padroes mais especificos (mais longos) desempatam antes dos genericos.
+    A ESPECIFICIDADE vem antes da confianca de proposito. Com a ordem invertida,
+    bastava a regra 'uber' acertar uma corrida para ficar mais confiante que
+    'uber eats' - e a partir dali todo delivery viraria transporte, sem ninguem
+    perceber. Padrao mais longo descreve o fornecedor com mais precisao, e isso
+    nao muda com o uso.
     """
     ordered = sorted(
         rules,
-        key=lambda r: (r.priority, -float(r.confidence), -r.hit_count, -len(r.pattern)),
+        key=lambda r: (r.priority, -len(r.pattern), -float(r.confidence), -r.hit_count),
     )
     for rule in ordered:
         if rule_matches(rule, tx):

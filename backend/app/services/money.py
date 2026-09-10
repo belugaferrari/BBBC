@@ -18,3 +18,14 @@ def pct(value: Decimal | int | float | str) -> Decimal:
 
 def safe_div(numerator: Decimal, denominator: Decimal) -> Decimal:
     return ZERO if denominator == 0 else numerator / denominator
+
+
+def format_brl(value: Decimal | int | float | str) -> str:
+    """Formata para leitura humana: R$ 1.234,56.
+
+    Existe separado de `brl()` porque aquele devolve Decimal para continuar
+    somando; este e o que vai para a tela e para a notificacao no celular, onde
+    "450.00" parece defeito.
+    """
+    numero = f"{brl(value):,.2f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+    return f"R$ {numero}"

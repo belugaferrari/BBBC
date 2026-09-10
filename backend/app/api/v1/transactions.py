@@ -1,6 +1,7 @@
 """Lancamentos: listagem com filtros individual/familiar, criacao e correcao."""
 
 from datetime import date
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -19,6 +20,7 @@ from app.models import Category, Transaction, TransactionTag
 from app.models.enums import TxStatus
 from app.schemas.transactions import TransactionCreate, TransactionOut, TransactionUpdate
 from app.services.categorization_repository import apply_correction, autocategorize
+from app.services.queries import note_required_for, spend_by_category, spend_by_member
 
 router = APIRouter(prefix="/transactions", tags=["gastos"])
 
@@ -70,6 +72,38 @@ def list_transactions(
     )
 
 
+@router.get("/by-category")
+def by_category(
+    current: CurrentMember,
+    db: DbSession,
+    start: date,
+    end: date,
+    scope: str = Query("familia", pattern="^(familia|individual)$"),
+    depth: int = Query(2, ge=1, le=6),
+    member_id: UUID | None = None,
+) -> dict:
+    """Gastos do periodo somados por categoria, no nivel de detalhe pedido.
+
+    `depth` escolhe o corte da arvore: 1 agrupa nos grandes blocos, 2 desce um
+    nivel, e assim por diante. `member_id` responde 'quanto a Clarissa gastou'.
+    """
+    if member_id:
+        owned_member(db, member_id, current)
+        alvo = member_id
+    else:
+        alvo = scope_member_id(current, scope)
+
+    grupos = spend_by_category(db, current.family_id, start, end, alvo, depth)
+    return {
+        "start": start,
+        "end": end,
+        "depth": depth,
+        "total": sum((g["total"] for g in grupos), Decimal("0")),
+        "categories": grupos,
+        "by_member": spend_by_member(db, current.family_id, start, end),
+    }
+
+
 @router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
 def create_transaction(
     payload: TransactionCreate, current: CurrentMember, db: DbSession
@@ -79,16 +113,27 @@ def create_transaction(
     account = owned_account(db, payload.account_id, current)
     if payload.category_id:
         owned_category(db, payload.category_id, current)
+        # 'Unicos (com comentarios)': daqui a seis meses ninguem lembra o que
+        # foi aquele gasto de R$ 3.400 se ele entrar sem explicacao
+        exige = note_required_for(db, payload.category_id)
+        if exige and not (payload.notes or "").strip():
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"A categoria '{exige}' exige um comentario explicando o gasto.",
+            )
     if payload.ir_deduction_member_id:
         owned_member(db, payload.ir_deduction_member_id, current)
+    if payload.owner_member_id:
+        owned_member(db, payload.owner_member_id, current)
     for tag_id in payload.tags:
         owned_tag(db, tag_id, current)
 
     tx = Transaction(
         family_id=current.family_id,
-        owner_member_id=account.owner_member_id,
+        # sem responsavel informado, o gasto e de quem e a conta
         ir_year=payload.booked_on.year,
-        **payload.model_dump(exclude={"tags"}),
+        **payload.model_dump(exclude={"tags", "owner_member_id"}),
+        owner_member_id=payload.owner_member_id or account.owner_member_id,
     )
     if not tx.category_id:
         autocategorize(db, current.family_id, tx)
@@ -112,6 +157,8 @@ def update_transaction(
 
     if payload.ir_deduction_member_id:
         owned_member(db, payload.ir_deduction_member_id, current)
+    if payload.owner_member_id:
+        owned_member(db, payload.owner_member_id, current)
 
     data = payload.model_dump(exclude_unset=True, exclude={"learn_rule", "category_id"})
     for field, value in data.items():
@@ -119,6 +166,12 @@ def update_transaction(
 
     if payload.category_id and payload.category_id != tx.category_id:
         owned_category(db, payload.category_id, current)
+        exige = note_required_for(db, payload.category_id)
+        if exige and not (payload.notes or tx.notes or "").strip():
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"A categoria '{exige}' exige um comentario explicando o gasto.",
+            )
         apply_correction(
             db, current.family_id, tx, payload.category_id, current.id, learn=payload.learn_rule
         )
