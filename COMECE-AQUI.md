@@ -134,11 +134,12 @@ Aparece um **QR code** na janela:
 
 Entre com o e-mail e a senha que você escolheu na Etapa 3.
 
-> **Se o celular disser "Failed to download remote update":** ele não conseguiu
-> alcançar o computador pela rede. Feche a janela, abra o INICIAR-APP de novo e
-> escolha a opção **2**. Isso resolve os três motivos comuns de uma vez —
-> Firewall do Windows bloqueando, roteador que separa os aparelhos, e celular
-> na rede errada.
+> **Se o celular disser "Failed to download remote update":** olhe na janela a
+> linha `Metro waiting on exp://...`. Se o endereço ali for `127.0.0.1`, o QR
+> code está mandando o celular procurar o app nele mesmo — feche a janela e
+> abra o INICIAR-APP de novo, que ele descobre o endereço certo. Se o endereço
+> já for o do seu computador (algo como `192.168.x.x`), então é a rede
+> bloqueando: escolha a opção **2**, que atravessa firewall e roteador.
 
 ---
 

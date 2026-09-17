@@ -43,6 +43,17 @@ FIM
 read -r -p "  Digite 1 ou 2 e aperte Enter [1]: " MODO
 MODO="${MODO:-1}"
 
+# O Expo tenta descobrir sozinho o endereco desta maquina na rede, mas quando
+# falha ele nao reclama: devolve 127.0.0.1 e desenha um QR code apontando para o
+# proprio celular. Descobrir aqui e dizer explicitamente evita esse silencio.
+IP=""
+IFACE="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
+[ -n "$IFACE" ] && IP="$(ipconfig getifaddr "$IFACE" 2>/dev/null)"
+if [ -n "$IP" ]; then
+  export REACT_NATIVE_PACKAGER_HOSTNAME="$IP"
+  echo "  Este computador e o $IP - o celular vai buscar o app em exp://$IP:8081"
+fi
+
 cat <<'FIM'
 
   Vai aparecer um QR code aqui embaixo.
