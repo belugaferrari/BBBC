@@ -65,7 +65,8 @@ oferecem isso como opcao 2.
 
 | Sintoma | Causa quase sempre |
 |---|---|
-| "Failed to download remote update" | O celular nao alcanca o computador. Firewall do Windows bloqueando o Node, ou redes diferentes. Use o modo tunel. |
+| "Failed to download remote update", e o terminal diz `exp://127.0.0.1:8081` | O Expo nao descobriu o IP desta maquina e desistiu em silencio - os adaptadores virtuais do Docker sao a causa comum no Windows. O QR manda o celular procurar o app nele mesmo. Os INICIAR-APP descobrem o IP e informam via `REACT_NATIVE_PACKAGER_HOSTNAME`. |
+| "Failed to download remote update", com o IP correto no terminal | Ai sim o celular nao alcanca o computador: firewall, ou redes diferentes. Use o modo tunel. |
 | QR abre mas o app trava carregando | Celular e computador em redes diferentes (uma no Wi-Fi de visitantes, outra na principal). |
 | "Something went wrong" logo ao abrir | Expo Go mais novo que o SDK do projeto. Toque em "View error log" para ver qual dos dois e. |
 | "Falha na requisição" no login | Firewall do computador bloqueando a porta 8000. Libere-a na rede local. |
