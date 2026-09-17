@@ -13,7 +13,14 @@ services:
       test: ["CMD-SHELL", "pg_isready -U bbbc"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      # start_period nao e detalhe: sem ele a contagem de retries comeca no
+      # instante zero, antes de o Postgres ter chance de inicializar, e a api
+      # desiste com "dependency failed to start: db is unhealthy". Numa maquina
+      # carregada - ou com o banco se recuperando de um desligamento abrupto -
+      # os ~50s que 10 retries davam nao bastam. Durante o start_period, exame
+      # que falha nao conta.
+      start_period: 90s
+      retries: 20
 
   api:
     build: ./backend
