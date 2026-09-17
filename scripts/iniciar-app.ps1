@@ -66,12 +66,60 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 }
 Ok "Node.js instalado"
 
+function Instalar-Dependencias($log) {
+    # A saida vai por um cano de proposito. Alem de guardar o relato, isso faz o
+    # npm perceber que nao esta num terminal e desligar a barra de progresso -
+    # que, quando a instalacao morre no meio, fica congelada por cima justamente
+    # da mensagem de erro que interessa.
+    #
+    # O Out-Host no fim nao e enfeite: sem ele as linhas do npm sairiam pelo
+    # cano da funcao e entrariam no valor de retorno, que deixaria de ser um
+    # booleano e viraria um array. Array nao vazio e sempre verdadeiro, entao
+    # `if (-not (Instalar-Dependencias ...))` concluiria que deu certo mesmo
+    # com as duas tentativas falhando.
+    npm install --no-audit --no-fund 2>&1 | Tee-Object -FilePath $log | Out-Host
+    if ($LASTEXITCODE -eq 0) { return $true }
+
+    Write-Host ""
+    Aviso "A primeira tentativa nao terminou. Vou limpar e tentar de novo."
+    Write-Host "      Instalacao interrompida deixa a pasta pela metade, e a"
+    Write-Host "      tentativa seguinte tropeca no que ficou."
+    Write-Host ""
+
+    if (Test-Path 'node_modules') { Remove-Item 'node_modules' -Recurse -Force -ErrorAction SilentlyContinue }
+    # O package-lock fixa a arvore exata validada no desenvolvimento, o que e
+    # melhor quando funciona. Quando nao funciona, resolver na hora costuma
+    # passar - e ter o aplicativo rodando vale mais que a arvore identica.
+    if (Test-Path 'package-lock.json') {
+        Move-Item 'package-lock.json' 'package-lock.json.nao-usado' -Force -ErrorAction SilentlyContinue
+    }
+
+    npm install --no-audit --no-fund 2>&1 | Tee-Object -FilePath $log -Append | Out-Host
+    return ($LASTEXITCODE -eq 0)
+}
+
 if (-not (Test-Path 'node_modules')) {
     Titulo "2. Preparando o aplicativo"
     Write-Host "  (so na primeira vez, alguns minutos)"
     Write-Host ""
-    npm install
-    if ($LASTEXITCODE -ne 0) { Erro "Nao consegui preparar o aplicativo."; Fim 1 }
+
+    $log = Join-Path (Get-Location) 'instalacao.log'
+    if (-not (Instalar-Dependencias $log)) {
+        Erro "Nao consegui preparar o aplicativo."
+        Write-Host ""
+        Write-Host "  As ultimas linhas do que o npm respondeu:" -ForegroundColor White
+        Write-Host ""
+        Get-Content $log -Tail 25 -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "    $_"
+        }
+        Write-Host ""
+        Write-Host "  O relato inteiro ficou guardado em:" -ForegroundColor White
+        Write-Host "    $log"
+        Write-Host ""
+        Write-Host "  A causa mais comum e a internet ter oscilado no meio do"
+        Write-Host "  download. Rodar este arquivo de novo costuma resolver."
+        Fim 1
+    }
     Ok "Aplicativo preparado"
 }
 
