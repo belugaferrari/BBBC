@@ -45,11 +45,50 @@ Titulo "2. Ligando o sistema"
 Write-Host "  (na primeira vez demora alguns minutos - esta baixando o necessario)"
 Write-Host ""
 
-docker compose up -d --build
+# A saida vai gravada tambem: falhando, e ela que diz o motivo, e adivinhar
+# em cima ("deve ser porta ocupada") manda o usuario para o lado errado.
+$logSubida = Join-Path (Get-Location) 'subida.log'
+docker compose up -d --build 2>&1 | Tee-Object -FilePath $logSubida | Out-Host
+
 if ($LASTEXITCODE -ne 0) {
     Erro "Nao consegui subir o sistema."
-    Write-Host "  A causa mais comum e ja existir outro programa usando a porta"
-    Write-Host "  5432 ou a 8000. Feche-o e tente de novo."
+    $relato = (Get-Content $logSubida -Raw -ErrorAction SilentlyContinue)
+
+    if ($relato -match 'already allocated|address already in use|bind: ') {
+        Write-Host ""
+        Write-Host "  Outro programa ja esta usando a porta 5432 ou a 8000." -ForegroundColor White
+        Write-Host "  O mais comum e um PostgreSQL instalado direto no Windows."
+        Write-Host "  Feche-o e rode este arquivo de novo."
+    }
+    elseif ($relato -match 'unhealthy|dependency failed to start') {
+        Write-Host ""
+        Write-Host "  O banco de dados nao respondeu a tempo." -ForegroundColor White
+        Write-Host "  Isso costuma ser so demora, e nao defeito - especialmente"
+        Write-Host "  com o computador carregado. Rodar de novo quase sempre"
+        Write-Host "  resolve, porque na segunda vez o banco ja subiu antes."
+        Write-Host ""
+        Write-Host "  O que o banco registrou:" -ForegroundColor White
+        Write-Host ""
+        docker compose logs --tail=30 db 2>&1 | ForEach-Object { Write-Host "    $_" }
+        Write-Host ""
+        Write-Host "  Se aparecer ali que os dados estao corrompidos, e possivel"
+        Write-Host "  recomecar o banco do zero com estes dois comandos - mas"
+        Write-Host "  isso apaga os lancamentos ja cadastrados:"
+        Write-Host ""
+        Write-Host "      docker compose down -v" -ForegroundColor Yellow
+        Write-Host "      (e rodar este arquivo de novo)" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host ""
+        Write-Host "  As ultimas linhas do que o Docker respondeu:" -ForegroundColor White
+        Write-Host ""
+        Get-Content $logSubida -Tail 25 -ErrorAction SilentlyContinue |
+            ForEach-Object { Write-Host "    $_" }
+    }
+
+    Write-Host ""
+    Write-Host "  O relato inteiro ficou guardado em:" -ForegroundColor White
+    Write-Host "    $logSubida"
     Fim 1
 }
 Ok "Banco de dados e API no ar"
