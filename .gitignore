@@ -11,6 +11,10 @@ venv/
 .env
 .env.local
 
+# Restos da instalacao vinculada (pip install -e .)
+*.egg-info/
+build/
+
 # Node / Expo
 node_modules/
 .expo/
