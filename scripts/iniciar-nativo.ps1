@@ -30,26 +30,57 @@ $BANCO_USUARIO = 'bbbc'
 $BANCO_SENHA   = 'bbbc'
 $BANCO_NOME    = 'bbbc'
 
+# Guarda o que foi encontrado mas recusado, para a mensagem de erro poder
+# dizer "achei o 3.10" em vez de "nao achei nada".
+$script:PythonsRecusados = @()
+
+function Versao-De($exe, $parametros) {
+    # O parametro NAO pode se chamar $args: e variavel automatica do PowerShell,
+    # e o valor passado se perde em silencio. Com ela, 'py -3.13' virava 'py'
+    # puro, respondia com o Python velho da maquina, e a deteccao reportava uma
+    # versao que nunca foi pedida.
+    if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { return $null }
+    try {
+        $saida = (& $exe @($parametros + '--version') 2>&1 | Out-String).Trim()
+    } catch { return $null }
+
+    # O codigo de saida decide primeiro. Sem ele, 'py -3.12' numa maquina que
+    # so tem o 3.10 responde "Python 3.12 not found!" e sai com erro - e
+    # procurar a versao solta no meio do texto aceita essa frase como se fosse
+    # a resposta. Foi exatamente o que aconteceu: o passo 1 anunciou Python
+    # 3.12 e o passo 4 morreu dizendo que o 3.12 nao existe.
+    if ($LASTEXITCODE -ne 0) { return $null }
+
+    # Ancorado no inicio: a resposta legitima e exatamente "Python X.Y.Z".
+    if ($saida -notmatch '^Python (\d+)\.(\d+)') { return $null }
+
+    return @{ maior = [int]$Matches[1]; menor = [int]$Matches[2] }
+}
+
 function Achar-Python {
-    # O 'python' do Windows pode ser o atalho da Microsoft Store, que nao e
-    # Python nenhum: abre a loja e devolve versao vazia. Por isso a versao e
-    # conferida de verdade, em vez de confiar em Get-Command.
+    # O 'python' do Windows pode ainda ser o atalho da Microsoft Store, que nao
+    # e Python nenhum: abre a loja e sai com erro. O teste de codigo de saida em
+    # Versao-De cobre esse caso junto com o do 'py'.
     foreach ($candidato in @(
-        @{ exe = 'py';     args = @('-3.12') },
-        @{ exe = 'py';     args = @('-3.11') },
-        @{ exe = 'py';     args = @('-3')    },
-        @{ exe = 'python'; args = @()        }
+        @{ exe = 'py';      args = @('-3.13') },
+        @{ exe = 'py';      args = @('-3.12') },
+        @{ exe = 'py';      args = @('-3.11') },
+        @{ exe = 'py';      args = @('-3')    },
+        @{ exe = 'python';  args = @()        },
+        @{ exe = 'python3'; args = @()        }
     )) {
-        if (-not (Get-Command $candidato.exe -ErrorAction SilentlyContinue)) { continue }
-        try {
-            $saida = & $candidato.exe @($candidato.args + '--version') 2>&1 | Out-String
-        } catch { continue }
-        if ($saida -match 'Python (\d+)\.(\d+)') {
-            $maior = [int]$Matches[1]; $menor = [int]$Matches[2]
-            if ($maior -eq 3 -and $menor -ge 11) {
-                return @{ exe = $candidato.exe; args = $candidato.args; versao = "$maior.$menor" }
+        $v = Versao-De $candidato.exe $candidato.args
+        if (-not $v) { continue }
+
+        if ($v.maior -eq 3 -and $v.menor -ge 11) {
+            return @{
+                exe    = $candidato.exe
+                args   = $candidato.args
+                versao = "$($v.maior).$($v.menor)"
             }
         }
+        # Serve como Python, mas e velho demais: guarda para o aviso.
+        $script:PythonsRecusados += "$($candidato.exe) $($candidato.args) -> Python $($v.maior).$($v.menor)"
     }
     return $null
 }
@@ -74,6 +105,16 @@ Titulo "1. Conferindo o Python"
 $py = Achar-Python
 if (-not $py) {
     Erro "Nao encontrei o Python 3.11 ou mais novo."
+    if ($script:PythonsRecusados.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Achei Python nesta maquina, mas velho demais:" -ForegroundColor Yellow
+        $script:PythonsRecusados | Select-Object -Unique | ForEach-Object {
+            Write-Host "    $_"
+        }
+        Write-Host ""
+        Write-Host "  Instalar o novo nao remove nem estraga esse que ja esta ai."
+        Write-Host ""
+    }
     Write-Host "  Baixe em https://www.python.org/downloads/"
     Write-Host ""
     Write-Host "  IMPORTANTE: na primeira tela do instalador, marque a caixinha" -ForegroundColor Yellow
@@ -83,7 +124,7 @@ if (-not $py) {
     Start-Process "https://www.python.org/downloads/"
     Fim 1
 }
-Ok "Python $($py.versao)"
+Ok "Python $($py.versao) (via $($py.exe) $($py.args))"
 
 # ------------------------------------------------------------ PostgreSQL ---
 Titulo "2. Conferindo o PostgreSQL"
