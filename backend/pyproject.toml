@@ -21,6 +21,16 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.7", "mypy>=1.13"]
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# Sem isto o setuptools encontra 'app' e 'tests' lado a lado, nao sabe qual e o
+# pacote, e recusa: "Multiple top-level packages discovered in a flat-layout".
+# O 'pip install -e .' do README falhava por causa disso.
+include = ["app*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

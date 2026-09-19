@@ -22,6 +22,62 @@ Você fica com uma pasta chamada **BBBC-main**. É ela que interessa.
 
 ---
 
+## Dois caminhos — escolha um
+
+| | **Sem Docker** | **Com Docker** |
+|---|---|---|
+| O que instalar | Python e PostgreSQL | Docker Desktop |
+| Peso na máquina | leve, roda direto | pesado: um Linux inteiro numa máquina virtual |
+| Se o computador for modesto | **é este** | pode travar ou demorar 15 minutos |
+| Arquivo para clicar | `INICIAR-SEM-DOCKER-windows.bat` | `INICIAR-windows.bat` |
+
+**Na dúvida, vá pelo Sem Docker.** É mais rápido no dia a dia e tem menos peças
+para dar errado. O caminho com Docker continua aqui para quem já o tem
+funcionando.
+
+---
+
+# Caminho A — Sem Docker (recomendado)
+
+## A1 — Instalar o Python
+
+1. Abra https://www.python.org/downloads/
+2. Clique no botão amarelo **Download Python**
+3. Abra o arquivo baixado
+
+> **O passo que todo mundo erra:** na primeira tela do instalador, marque a
+> caixinha **"Add python.exe to PATH"**, embaixo, **antes** de clicar em
+> *Install Now*. Sem ela o Windows não encontra o Python depois.
+
+## A2 — Instalar o PostgreSQL
+
+1. Abra https://www.postgresql.org/download/windows/
+2. Clique em **Download the installer**
+3. Baixe a versão mais recente e abra o arquivo
+
+Durante a instalação ele pede uma **senha para o usuário `postgres`**.
+**Anote essa senha** — vou pedi-la uma vez só, no próximo passo. O resto pode
+aceitar como vem, inclusive a porta 5432.
+
+## A3 — Ligar
+
+Duplo clique em **`INICIAR-SEM-DOCKER-windows.bat`**.
+
+Ele confere as duas instalações, cria o banco (pedindo aquela senha do
+`postgres`), prepara o necessário e pergunta o seu e-mail, uma senha sua e o
+nome das meninas.
+
+No fim, o navegador abre em `http://localhost:8000/docs`.
+
+> **Essa janela preta fica aberta** enquanto você usar o sistema — é ela que
+> segura tudo no ar. Para desligar, feche-a ou aperte Ctrl+C.
+
+Agora pule para a **Etapa 4**, do aplicativo no celular.
+
+---
+
+# Caminho B — Com Docker
+
 ## Etapa 2 — Instalar o Docker Desktop
 
 O Docker é o programa que faz o sistema funcionar sem você precisar instalar
