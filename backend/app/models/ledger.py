@@ -10,7 +10,14 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, PKUuid, TimestampMixin, pg_enum, uuid_fk
-from app.models.enums import IRDeductionType, IRTreatment, TxDirection, TxSource, TxStatus
+from app.models.enums import (
+    IRDeductionType,
+    IRTreatment,
+    SocioFlow,
+    TxDirection,
+    TxSource,
+    TxStatus,
+)
 
 
 class Transaction(PKUuid, TimestampMixin, Base):
@@ -47,6 +54,14 @@ class Transaction(PKUuid, TimestampMixin, Base):
     installment_no: Mapped[int | None] = mapped_column(SmallInteger)
     installment_total: Mapped[int | None] = mapped_column(SmallInteger)
     installment_group: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+
+    # Fronteira entre pessoa fisica e empresa. Ver SocioFlow.
+    socio_flow: Mapped[SocioFlow | None] = mapped_column(
+        pg_enum(SocioFlow, "socio_flow"), nullable=True
+    )
+    # Data do acerto. Preenchido com socio_flow = em aberto: e dai que sai a
+    # lista de "a empresa me deve".
+    settled_on: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     transfer_pair_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("transactions.id")
