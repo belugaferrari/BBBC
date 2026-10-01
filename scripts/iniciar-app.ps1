@@ -136,15 +136,17 @@ if ($ip) {
 # ----------------------------------------------------------------- Modo ---
 Titulo "4. Como o celular vai se conectar?"
 Write-Host ""
-Write-Host "    [1] Pelo Wi-Fi da casa - mais rapido."
-Write-Host "    [2] Pela internet      - mais lenta, mas atravessa firewall e"
-Write-Host "                             roteador que separa os aparelhos."
+Write-Host "    [1] No celular, pelo Wi-Fi da casa - mais rapido."
+Write-Host "    [2] No celular, pela internet      - mais lenta, mas atravessa"
+Write-Host "                                         firewall e roteador."
+Write-Host "    [3] Aqui no computador, no navegador - sem celular nenhum."
 Write-Host ""
 Write-Host "  Se a 1 falhar com 'Failed to download remote update', use a 2."
+Write-Host "  A 3 nao depende de rede: abre numa aba do navegador."
 Write-Host ""
 
 # Enter aceita a 1: o caminho normal nao deve exigir escolha.
-$modo = Read-Host "  Digite 1 ou 2 e aperte Enter [1]"
+$modo = Read-Host "  Digite 1, 2 ou 3 e aperte Enter [1]"
 if ([string]::IsNullOrWhiteSpace($modo)) { $modo = '1' }
 
 Write-Host ""
@@ -156,7 +158,13 @@ Write-Host ""
 Write-Host "  Para parar, aperte Ctrl+C nesta janela."
 Write-Host ""
 
-if ($modo -eq '2') {
+if ($modo -eq '3') {
+    # No navegador nao ha QR code nem rede no meio: o Expo abre a aba sozinho.
+    Write-Host "  Modo navegador: vou abrir uma aba assim que estiver pronto."
+    Write-Host "  Push nao existe aqui - os avisos chegam por e-mail."
+    Write-Host ""
+    npm run web
+} elseif ($modo -eq '2') {
     Write-Host "  Modo internet: a primeira vez demora mais, esta abrindo o caminho."
     Write-Host ""
     npm run start:tunnel
