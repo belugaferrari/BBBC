@@ -5,57 +5,87 @@
  * pedido uma vez, é o endereço. O servidor guarda esse token e manda os avisos
  * para ele.
  *
- * Só funciona em aparelho de verdade — emulador não recebe push. E a permissão
- * é pedida uma vez: se o usuário recusar, o app continua funcionando, só sem
- * aviso no celular (o e-mail continua valendo).
+ * Nada aqui pode derrubar o aplicativo. Aviso é um extra — o e-mail continua
+ * valendo — e o app precisa abrir mesmo quando o push não está disponível:
+ *
+ *   * **No Expo Go**, desde o SDK 53, o push foi removido. Só de importar o
+ *     expo-notifications no topo do arquivo, a tela vermelha aparecia e o app
+ *     inteiro não abria. Por isso o módulo é carregado sob demanda, dentro da
+ *     função, e só depois de confirmar que não estamos no Expo Go.
+ *   * **No navegador**, não há aparelho para registrar.
+ *   * **No emulador**, push não chega.
  */
 
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { api } from './client';
-
-Notifications.setNotificationHandler({
-  // shouldShowAlert virou shouldShowBanner + shouldShowList: o Android passou a
-  // separar o aviso que aparece na hora do que fica guardado na central.
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
 
 export interface RegistroPush {
   registrado: boolean;
   motivo?: string;
 }
 
+/** O Expo Go da loja; não confundir com um aplicativo compilado de verdade. */
+function noExpoGo(): boolean {
+  return Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+}
+
+export function pushDisponivel(): boolean {
+  return Platform.OS !== 'web' && Device.isDevice && !noExpoGo();
+}
+
 export async function registrarAparelho(): Promise<RegistroPush> {
+  if (Platform.OS === 'web') {
+    return { registrado: false, motivo: 'No navegador os avisos chegam por e-mail.' };
+  }
   if (!Device.isDevice) {
     return { registrado: false, motivo: 'Push só funciona em aparelho de verdade.' };
   }
-
-  if (Platform.OS === 'android') {
-    // no Android o canal precisa existir antes do primeiro aviso
-    await Notifications.setNotificationChannelAsync('avisos', {
-      name: 'Avisos financeiros',
-      importance: Notifications.AndroidImportance.HIGH,
-      lightColor: '#E11D2E',
-    });
-  }
-
-  const atual = await Notifications.getPermissionsAsync();
-  let permissao = atual.status;
-  if (permissao !== 'granted') {
-    permissao = (await Notifications.requestPermissionsAsync()).status;
-  }
-  if (permissao !== 'granted') {
-    return { registrado: false, motivo: 'Você não autorizou notificações neste aparelho.' };
+  if (noExpoGo()) {
+    return {
+      registrado: false,
+      motivo:
+        'O Expo Go não entrega mais notificações (desde o SDK 53). ' +
+        'O resto do aplicativo funciona normalmente, e os avisos continuam por e-mail.',
+    };
   }
 
   try {
+    // Carregado aqui, e não no topo: no Expo Go a simples importação derruba o
+    // aplicativo, e esta linha nunca é alcançada lá por causa da checagem acima.
+    const Notifications = await import('expo-notifications');
+
+    Notifications.setNotificationHandler({
+      // shouldShowAlert virou shouldShowBanner + shouldShowList: o Android passou
+      // a separar o aviso que aparece na hora do que fica guardado na central.
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+
+    if (Platform.OS === 'android') {
+      // no Android o canal precisa existir antes do primeiro aviso
+      await Notifications.setNotificationChannelAsync('avisos', {
+        name: 'Avisos financeiros',
+        importance: Notifications.AndroidImportance.HIGH,
+        lightColor: '#E11D2E',
+      });
+    }
+
+    const atual = await Notifications.getPermissionsAsync();
+    let permissao = atual.status;
+    if (permissao !== 'granted') {
+      permissao = (await Notifications.requestPermissionsAsync()).status;
+    }
+    if (permissao !== 'granted') {
+      return { registrado: false, motivo: 'Você não autorizou notificações neste aparelho.' };
+    }
+
     const { data: token } = await Notifications.getExpoPushTokenAsync();
     await api.post('/notification-targets', {
       channel: 'PUSH',
