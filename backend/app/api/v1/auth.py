@@ -7,6 +7,7 @@ from app.api.deps import CurrentMember, DbSession
 from app.core.security import create_access_token, verify_password
 from app.models import Member
 from app.schemas.common import LoginRequest, Token
+from app.services.mascara import nome_curto
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -25,7 +26,7 @@ def login(payload: LoginRequest, db: DbSession) -> Token:
         access_token=create_access_token(member.id, member.family_id),
         member_id=member.id,
         family_id=member.family_id,
-        full_name=member.full_name,
+        full_name=nome_curto(member.full_name),
     )
 
 
@@ -41,7 +42,7 @@ def list_members(current: CurrentMember, db: DbSession) -> list[dict]:
     return [
         {
             "id": m.id,
-            "name": m.nickname or m.full_name,
+            "name": m.nickname or nome_curto(m.full_name),
             "role": m.role,
             "is_ir_dependent": m.is_ir_dependent,
             "can_login": m.can_login,
@@ -54,7 +55,7 @@ def list_members(current: CurrentMember, db: DbSession) -> list[dict]:
 def me(current: CurrentMember) -> dict:
     return {
         "id": current.id,
-        "full_name": current.full_name,
+        "full_name": nome_curto(current.full_name),
         "nickname": current.nickname,
         "role": current.role,
         "family_id": current.family_id,

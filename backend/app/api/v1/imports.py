@@ -21,11 +21,27 @@ from app.services.importers.detect import MAX_FILE_BYTES, SUPPORTED
 router = APIRouter(prefix="/imports", tags=["importacao"])
 
 
+def _rotulo(row: StatementImport) -> str:
+    """Como o lote aparece na tela, sem o nome do arquivo.
+
+    Nome de arquivo de extrato costuma trazer o banco e o numero da conta no
+    proprio nome ("extrato-itau-12345.pdf"). Esconder os digitos nao bastaria:
+    o nome do banco ficaria. O periodo e o formato identificam o lote sem
+    contar nada que nao precise ser contado. O nome original continua no banco
+    de dados, em casa, para quando for preciso investigar.
+    """
+    if row.period_start and row.period_end:
+        inicio = row.period_start.strftime("%d/%m")
+        fim = row.period_end.strftime("%d/%m/%Y")
+        return f"Extrato {row.file_format} de {inicio} a {fim}"
+    return f"Extrato {row.file_format}"
+
+
 def _serialize(row: StatementImport) -> dict:
     return {
         "id": row.id,
         "account_id": row.account_id,
-        "filename": row.filename,
+        "rotulo": _rotulo(row),
         "file_format": row.file_format,
         "status": row.status,
         "period_start": row.period_start,
