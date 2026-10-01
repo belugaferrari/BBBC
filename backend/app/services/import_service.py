@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Account, Category, StatementImport, Transaction
-from app.models.enums import TxDirection, TxSource, TxStatus
+from app.models.enums import SocioFlow, TxDirection, TxSource, TxStatus
 from app.services.categorization import (
     Rule,
     TransactionFacts,
@@ -31,6 +31,11 @@ from app.services.categorization import (
 from app.services.categorization_repository import load_rules
 from app.services.importers.base import ParsedTransaction, fingerprint
 from app.services.importers.detect import parse_statement
+from app.services.socio import (
+    CONTRAPARTIDA_PADRAO,
+    CONTRAPARTIDAS,
+    ContrapartidaDesconhecida,
+)
 
 # Mesma janela da conciliacao do Open Finance: o banco publica alguns dias
 # depois da compra, entao o lancamento manual pode estar deslocado.
@@ -179,14 +184,32 @@ def build_preview(
     return row
 
 
+def _categoria_por_path(db: Session, family_id: UUID, path: str) -> Category | None:
+    """A copia da familia primeiro; o catalogo global so como reserva."""
+    return db.scalar(
+        select(Category)
+        .where(Category.path == path, Category.family_id.in_((family_id, None)))
+        # family_id NULL por ultimo: a copia da familia manda
+        .order_by(Category.family_id.is_(None))
+    )
+
+
 def confirm_import(
     db: Session,
     row: StatementImport,
     *,
     selected_indexes: list[int] | None = None,
     category_overrides: dict[int, UUID] | None = None,
+    contrapartidas: dict[int, str] | None = None,
 ) -> StatementImport:
-    """Grava os lancamentos escolhidos na tela de conferencia."""
+    """Grava os lancamentos escolhidos na tela de conferencia.
+
+    Numa conta da empresa, confirmar uma linha quer dizer "isto e meu": o que
+    fica de fora e o que pertence a empresa. Cada linha confirmada ali vira um
+    PAR - a despesa na categoria escolhida e a entrada que a cobre - para o
+    caixa da familia nao cair por um gasto que nao saiu do bolso dela. Ver
+    app/services/socio.py.
+    """
     if row.status == "CONFIRMADO":
         raise ValueError("esta importacao ja foi confirmada")
 
@@ -219,26 +242,66 @@ def confirm_import(
         )
         description = item["description"]
 
-        db.add(
-            Transaction(
-                family_id=row.family_id,
-                account_id=account.id,
-                owner_member_id=account.owner_member_id,
-                category_id=category_id,
-                booked_on=datetime.fromisoformat(item["booked_on"]).date(),
-                amount=Decimal(item["amount"]),
-                direction=TxDirection(item["direction"]),
-                description=description,
-                description_norm=normalize(description),
-                status=TxStatus.EFETIVADA,
-                source=_SOURCE_BY_FORMAT[row.file_format],
-                import_id=row.id,
-                import_fingerprint=item["fingerprint"],
-                ir_year=datetime.fromisoformat(item["booked_on"]).year,
-                auto_confidence=Decimal(item["confidence"]) if item["confidence"] else None,
-            )
+        booked_on = datetime.fromisoformat(item["booked_on"]).date()
+        direction = TxDirection(item["direction"])
+        amount = Decimal(item["amount"])
+        da_empresa = bool(getattr(account, "is_business", False))
+
+        lancamento = Transaction(
+            family_id=row.family_id,
+            account_id=account.id,
+            owner_member_id=account.owner_member_id,
+            category_id=category_id,
+            booked_on=booked_on,
+            amount=amount,
+            direction=direction,
+            description=description,
+            description_norm=normalize(description),
+            status=TxStatus.EFETIVADA,
+            source=_SOURCE_BY_FORMAT[row.file_format],
+            import_id=row.id,
+            import_fingerprint=item["fingerprint"],
+            ir_year=booked_on.year,
+            auto_confidence=Decimal(item["confidence"]) if item["confidence"] else None,
+            socio_flow=SocioFlow.PESSOAL_VIA_EMPRESA if da_empresa else None,
         )
+        db.add(lancamento)
         created += 1
+
+        # So despesa gera par. Uma ENTRADA na conta da empresa confirmada como
+        # minha ja e o dinheiro chegando (pro-labore, lucro): criar contrapartida
+        # ali dobraria a receita.
+        if da_empresa and direction == TxDirection.SAIDA:
+            escolha = (contrapartidas or {}).get(index, CONTRAPARTIDA_PADRAO)
+            if escolha not in CONTRAPARTIDAS:
+                raise ContrapartidaDesconhecida(
+                    f"contrapartida '{escolha}' desconhecida na linha {index}"
+                )
+            contra_cat = _categoria_por_path(db, row.family_id, CONTRAPARTIDAS[escolha])
+            db.flush()  # precisa do id da despesa para ligar o par
+            db.add(
+                Transaction(
+                    family_id=row.family_id,
+                    account_id=account.id,
+                    owner_member_id=account.owner_member_id,
+                    category_id=contra_cat.id if contra_cat else None,
+                    booked_on=booked_on,
+                    amount=amount,
+                    direction=TxDirection.ENTRADA,
+                    description=f"Pago pela empresa: {description}",
+                    description_norm=normalize(f"Pago pela empresa: {description}"),
+                    status=TxStatus.EFETIVADA,
+                    source=_SOURCE_BY_FORMAT[row.file_format],
+                    import_id=row.id,
+                    # Sem impressao digital: ela identifica a linha do extrato, e
+                    # esta nao veio de linha nenhuma. Repeti-la bateria no indice
+                    # unico e impediria a propria despesa de ser gravada.
+                    import_fingerprint=None,
+                    ir_year=booked_on.year,
+                    socio_flow=SocioFlow.PESSOAL_VIA_EMPRESA,
+                    transfer_pair_id=lancamento.id,
+                )
+            )
 
     row.rows_imported = created
     row.status = "CONFIRMADO"

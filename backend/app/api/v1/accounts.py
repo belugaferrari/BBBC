@@ -25,6 +25,7 @@ class AccountIn(BaseModel):
     statement_close_day: int | None = Field(default=None, ge=1, le=31)
     statement_due_day: int | None = Field(default=None, ge=1, le=31)
     is_shared: bool = False
+    is_business: bool = False
     owner_member_id: UUID | None = None
 
 
@@ -36,6 +37,7 @@ class AccountOut(ORMModel):
     current_balance: Decimal
     credit_limit: Decimal | None = None
     is_shared: bool
+    is_business: bool
     is_archived: bool
 
 
