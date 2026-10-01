@@ -10,6 +10,7 @@ import os
 import pathlib
 import uuid
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
@@ -266,3 +267,73 @@ def test_importado_alimenta_o_dashboard_e_o_ir(client, conta):
     # sem categoria os lancamentos ainda nao entram na apuracao de IR
     ir = client.get(f"/api/v1/tax/{date.today().year}", headers=conta["headers"])
     assert ir.status_code == 200
+
+
+# ------------------------------------------------- extrato da conta da empresa
+
+
+@pytest.fixture
+def conta_da_empresa(client, conta):
+    """Mesma familia, mais uma conta marcada como da empresa."""
+    account = client.post(
+        "/api/v1/accounts",
+        json={"name": "Checkmotor", "type": "PJ", "is_business": True},
+        headers=conta["headers"],
+    ).json()
+    assert account["is_business"] is True
+    return {"headers": conta["headers"], "account_id": account["id"]}
+
+
+def test_linha_confirmada_na_conta_da_empresa_vira_par(client, conta_da_empresa):
+    """Confirmar quer dizer "isto e meu" - e um gasto meu pago pela empresa
+    precisa das duas pontas, senao o caixa da familia cai por dinheiro que
+    nunca saiu do bolso dela."""
+    lote = enviar(client, conta_da_empresa, "extrato-exemplo.ofx").json()
+    saida = next(i for i in lote["preview"] if i["direction"] == "SAIDA")
+
+    resposta = client.post(
+        f"/api/v1/imports/{lote['id']}/confirm",
+        json={"selected_indexes": [saida["index"]]},
+        headers=conta_da_empresa["headers"],
+    )
+    assert resposta.status_code == 200, resposta.text
+
+    linhas = transacoes(client, conta_da_empresa)
+    desta_conta = [t for t in linhas if t["account_id"] == conta_da_empresa["account_id"]]
+    assert len(desta_conta) == 2, "uma linha confirmada tem que virar um par"
+
+    entradas = [t for t in desta_conta if t["direction"] == "ENTRADA"]
+    saidas = [t for t in desta_conta if t["direction"] == "SAIDA"]
+    assert len(entradas) == 1 and len(saidas) == 1
+
+    # o par se anula no caixa
+    assert Decimal(entradas[0]["amount"]) == Decimal(saidas[0]["amount"])
+    assert entradas[0]["description"].startswith("Pago pela empresa:")
+
+
+def test_conta_normal_nao_ganha_contrapartida(client, conta):
+    """A regra so vale para conta da empresa; o resto segue como sempre foi."""
+    lote = enviar(client, conta, "extrato-exemplo.ofx").json()
+    saida = next(i for i in lote["preview"] if i["direction"] == "SAIDA")
+    client.post(
+        f"/api/v1/imports/{lote['id']}/confirm",
+        json={"selected_indexes": [saida["index"]]},
+        headers=conta["headers"],
+    )
+    desta_conta = [
+        t for t in transacoes(client, conta) if t["account_id"] == conta["account_id"]
+    ]
+    assert len(desta_conta) == 1
+
+
+def test_contrapartida_invalida_e_recusada(client, conta_da_empresa):
+    """A classificacao decide o imposto; inventar uma seria pior que recusar."""
+    lote = enviar(client, conta_da_empresa, "extrato-exemplo.ofx").json()
+    saida = next(i for i in lote["preview"] if i["direction"] == "SAIDA")
+    resposta = client.post(
+        f"/api/v1/imports/{lote['id']}/confirm",
+        json={"selected_indexes": [saida["index"]],
+              "contrapartidas": {str(saida["index"]): "SEI_LA"}},
+        headers=conta_da_empresa["headers"],
+    )
+    assert resposta.status_code == 409, resposta.text

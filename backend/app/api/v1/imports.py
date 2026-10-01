@@ -77,10 +77,18 @@ async def upload_statement(
 
 class ConfirmIn(BaseModel):
     """Quais linhas gravar. Omitir `selected_indexes` grava o que veio marcado
-    na pre-visualizacao (tudo que nao foi detectado como duplicado)."""
+    na pre-visualizacao (tudo que nao foi detectado como duplicado).
+
+    Numa conta da empresa, confirmar uma linha quer dizer "isto e meu": o que
+    fica de fora pertence a empresa e nao entra em nada da familia.
+    """
 
     selected_indexes: list[int] | None = None
     category_overrides: dict[int, UUID] | None = None
+    # Por linha: PRO_LABORE, LUCROS ou ADIANTAMENTO. Decide o IR da entrada que
+    # cobre a despesa; so vale em conta da empresa. Omitido, vai o padrao, que e
+    # o unico que nao afirma nada sobre imposto.
+    contrapartidas: dict[int, str] | None = None
 
 
 @router.post("/{import_id}/confirm")
@@ -100,7 +108,9 @@ def confirm(
             row,
             selected_indexes=payload.selected_indexes,
             category_overrides=payload.category_overrides,
+            contrapartidas=payload.contrapartidas,
         )
+    # ContrapartidaDesconhecida e ValueError: cai aqui junto com os demais
     except ValueError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
 

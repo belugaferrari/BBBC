@@ -92,4 +92,7 @@ class Account(PKUuid, TimestampMixin, Base):
     statement_due_day: Mapped[int | None] = mapped_column(SmallInteger)
     provider_account_id: Mapped[str | None] = mapped_column(Text)
     is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Conta da empresa: o saldo e da pessoa juridica, nao entra no patrimonio da
+    # familia, e o extrato dela chega para ser triado linha a linha.
+    is_business: Mapped[bool] = mapped_column(Boolean, default=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
