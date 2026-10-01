@@ -199,6 +199,43 @@ Entre com o e-mail e a senha que você escolheu na Etapa 3.
 
 ---
 
+## No dia a dia, depois de tudo instalado
+
+Duplo clique em **`ABRIR-BBBC-windows.bat`**. Um arquivo só: ele liga o sistema
+numa janela e abre o aplicativo em seguida, na ordem certa, esperando o
+primeiro ficar pronto.
+
+São sempre **duas janelas abertas** enquanto você usa o BBBC:
+
+| Janela | O que é |
+|---|---|
+| a primeira, que abre sozinha | **o sistema** — banco de dados e servidor |
+| a segunda | **o aplicativo** — a tela, no navegador ou servindo o celular |
+
+A primeira precisa ficar aberta. É ela que guarda e serve os seus dados; o
+aplicativo só mostra. Fechou, o app perde o chão.
+
+> Isso é consequência de o sistema rodar na sua máquina, e não hospedado na
+> internet. Em troca, seus dados financeiros não saem daí.
+
+---
+
+## Quando eu avisar que há novidade
+
+Baixe o ZIP de novo e substitua a pasta. **Não refaz nada do que já foi feito:**
+
+| | |
+|---|---|
+| Python e PostgreSQL | continuam instalados |
+| Seu cadastro e sua senha | continuam valendo |
+| Lançamentos e categorias | ficam no banco, intactos |
+| O que muda | só os arquivos do programa |
+
+O `INICIAR` reconhece o que já existe e pula direto. Da segunda vez em diante
+ele não pergunta mais nada.
+
+---
+
 ## Para desligar
 
 Clique duas vezes em **`PARAR-windows.bat`** ou **`PARAR-mac.command`**.
