@@ -48,7 +48,7 @@ Write-Host ""
 # A saida vai gravada tambem: falhando, e ela que diz o motivo, e adivinhar
 # em cima ("deve ser porta ocupada") manda o usuario para o lado errado.
 $logSubida = Join-Path (Get-Location) 'subida.log'
-docker compose up -d --build 2>&1 | Tee-Object -FilePath $logSubida | Out-Host
+docker compose up -d --build 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $logSubida | Out-Host
 
 if ($LASTEXITCODE -ne 0) {
     Erro "Nao consegui subir o sistema."
