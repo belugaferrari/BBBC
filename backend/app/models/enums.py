@@ -147,3 +147,19 @@ class HoldingKind(StrEnum):
 class NotificationChannel(StrEnum):
     PUSH = "PUSH"
     EMAIL = "EMAIL"
+
+
+class SocioFlow(StrEnum):
+    """Dinheiro que cruzou a fronteira entre a pessoa fisica e a empresa.
+
+    Fica NULL na esmagadora maioria dos lancamentos - so as duas situacoes que
+    a familia de fato vive recebem marca.
+    """
+
+    # Conta minha, paga pela empresa. Grava um par: a despesa na categoria certa
+    # e a entrada que a cobre, para o caixa nao cair por um gasto que nao saiu
+    # do bolso da familia.
+    PESSOAL_VIA_EMPRESA = "PESSOAL_VIA_EMPRESA"
+    # Conta da empresa, paga com meu dinheiro. Sai da conta de verdade, mas nao
+    # e consumo da familia: e credito a receber ate o acerto.
+    EMPRESA_VIA_PESSOAL = "EMPRESA_VIA_PESSOAL"
