@@ -62,6 +62,10 @@ class TagOut(ORMModel):
 
 
 class TransactionCreate(BaseModel):
+    # Gerada pelo aplicativo quando o lancamento nasce, mesmo sem conexao.
+    # Reenviar a fila com a mesma chave devolve o lancamento ja gravado em vez
+    # de criar outro.
+    client_key: str | None = None
     account_id: UUID
     # Quem e o responsavel pelo gasto. Opcional: quando vazio, assume o dono da
     # conta. Existe porque a conta pode ser conjunta e o gasto ser de um so -

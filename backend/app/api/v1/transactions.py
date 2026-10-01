@@ -109,7 +109,25 @@ def create_transaction(
     payload: TransactionCreate, current: CurrentMember, db: DbSession
 ) -> Transaction:
     """Insercao manual. A categorizacao automatica roda mesmo aqui - o usuario
-    so precisa confirmar quando o motor errar."""
+    so precisa confirmar quando o motor errar.
+
+    Com `client_key`, reenviar o mesmo lancamento devolve o que ja foi gravado
+    em vez de criar outro. E o que permite ao aplicativo subir a fila offline
+    sem medo: conexao que cai no meio, aplicativo fechado e nova tentativa sao
+    o caminho normal, nao a excecao.
+    """
+    if payload.client_key:
+        ja_gravado = db.scalar(
+            select(Transaction).where(
+                Transaction.family_id == current.family_id,
+                Transaction.client_key == payload.client_key,
+            )
+        )
+        if ja_gravado is not None:
+            # Mesma resposta da primeira vez. O aplicativo nao precisa saber se
+            # acertou agora ou da outra vez - em ambos o lancamento existe.
+            return ja_gravado
+
     account = owned_account(db, payload.account_id, current)
     if payload.category_id:
         owned_category(db, payload.category_id, current)
