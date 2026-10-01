@@ -16,6 +16,8 @@ class Token(BaseModel):
     token_type: str = "bearer"
     member_id: UUID
     family_id: UUID
+    # Nome curto, nao completo: ver app/services/mascara.py. O que o servidor
+    # manda e o que fica gravado no celular para o modo offline.
     full_name: str
 
 

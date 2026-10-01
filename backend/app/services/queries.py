@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services.mascara import nome_curto
 from app.services.money import ZERO, brl
 from app.services.sankey import FlowRow
 
@@ -226,7 +227,10 @@ def ir_year_rows(db: Session, family_id: UUID, member_id: UUID, year: int) -> di
 
     return {
         "incomes": [dict(r) for r in incomes],
-        "deductions": [dict(r) for r in deductions],
+        "deductions": [
+            {**dict(r), "member_name": nome_curto(r["member_name"])}
+            for r in deductions
+        ],
         "dependents": int(dependents or 0),
     }
 
@@ -339,7 +343,9 @@ def spend_by_member(
     return [
         {
             "member_id": r["id"],
-            "name": r["apelido"],
+            # Nome curto, nao completo: o que a API manda e o que fica
+            # gravado no celular no modo offline. Ver app/services/mascara.py.
+            "name": nome_curto(r["apelido"]),
             "total": brl(r["total"]),
             "transactions": int(r["lancamentos"]),
             "share": (

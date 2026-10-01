@@ -8,13 +8,14 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_, select
 
 from app.api.deps import CurrentMember, DbSession, owned_member
 from app.models import Account
 from app.models.enums import AccountType
 from app.schemas.common import ORMModel
+from app.services.mascara import sem_digitos_sensiveis
 
 
 class AccountIn(BaseModel):
@@ -32,6 +33,14 @@ class AccountIn(BaseModel):
 class AccountOut(ORMModel):
     id: UUID
     name: str
+
+    @field_validator("name", mode="after")
+    @classmethod
+    def _sem_agencia_nem_conta(cls, valor: str) -> str:
+        """O nome da conta e digitado pelo usuario, e e comum digitar o numero
+        junto ("Itau 1234-5"). O numero nao sai do servidor."""
+        return sem_digitos_sensiveis(valor)
+
     type: AccountType
     owner_member_id: UUID
     current_balance: Decimal

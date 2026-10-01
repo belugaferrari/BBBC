@@ -21,10 +21,11 @@ from app.integrations.openfinance.base import (
     ProviderAccount,
     ProviderTransaction,
 )
-from app.models import Account, BankConnection, SyncLog, Transaction
+from app.models import Account, BankConnection, Institution, SyncLog, Transaction
 from app.models.enums import TxSource, TxStatus
 from app.services.categorization import normalize
 from app.services.categorization_repository import autocategorize
+from app.services.mascara import sigla_instituicao
 
 # Janela de tolerancia para casar um lancamento manual com o do banco.
 MATCH_WINDOW_DAYS = 3
@@ -64,6 +65,12 @@ def upsert_accounts(
         ).all()
     }
 
+    instituicao = (
+        db.get(Institution, connection.institution_id)
+        if connection.institution_id
+        else None
+    )
+
     touched = 0
     for item in provider_accounts:
         account = existing.get(item.provider_account_id)
@@ -73,7 +80,14 @@ def upsert_accounts(
                 owner_member_id=connection.owner_member_id,
                 institution_id=connection.institution_id,
                 connection_id=connection.id,
-                name=item.name,
+                # O provedor manda algo como "Itau Conta Corrente 1234".
+                # Guardar isso faria o nome do banco e o numero da conta
+                # atravessarem a borda e ficarem gravados no celular. A sigla
+                # basta para a familia se orientar; o tipo da conta ja viaja em
+                # campo proprio.
+                name=sigla_instituicao(
+                    instituicao.name if instituicao else item.name
+                ),
                 type=item.type,
                 currency=item.currency,
                 provider_account_id=item.provider_account_id,
