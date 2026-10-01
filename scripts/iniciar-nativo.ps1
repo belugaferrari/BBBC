@@ -200,11 +200,11 @@ if (-not (Test-Path $pyVenv)) {
 }
 
 $logPip = Join-Path (Get-Location) 'instalacao.log'
-& $pyVenv -m pip install --upgrade pip --quiet 2>&1 | Tee-Object -FilePath $logPip | Out-Host
+& $pyVenv -m pip install --upgrade pip --quiet 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $logPip | Out-Host
 # -e (vinculado a pasta) e nao copia: o cli.py localiza as migrations a partir
 # de onde ele proprio esta. Copiado para dentro do Python, procuraria db\migrations
 # ao lado da copia, onde nao ha nada, e "criar as tabelas" falharia.
-& $pyVenv -m pip install -e . 2>&1 | Tee-Object -FilePath $logPip -Append | Out-Host
+& $pyVenv -m pip install -e . 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $logPip -Append | Out-Host
 if ($LASTEXITCODE -ne 0) {
     Erro "Nao consegui instalar as bibliotecas."
     Write-Host ""

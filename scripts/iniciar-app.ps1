@@ -77,7 +77,7 @@ function Instalar-Dependencias($log) {
     # booleano e viraria um array. Array nao vazio e sempre verdadeiro, entao
     # `if (-not (Instalar-Dependencias ...))` concluiria que deu certo mesmo
     # com as duas tentativas falhando.
-    npm install --no-audit --no-fund 2>&1 | Tee-Object -FilePath $log | Out-Host
+    npm install --no-audit --no-fund 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $log | Out-Host
     if ($LASTEXITCODE -eq 0) { return $true }
 
     Write-Host ""
@@ -94,7 +94,7 @@ function Instalar-Dependencias($log) {
         Move-Item 'package-lock.json' 'package-lock.json.nao-usado' -Force -ErrorAction SilentlyContinue
     }
 
-    npm install --no-audit --no-fund 2>&1 | Tee-Object -FilePath $log -Append | Out-Host
+    npm install --no-audit --no-fund 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $log -Append | Out-Host
     return ($LASTEXITCODE -eq 0)
 }
 
