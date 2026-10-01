@@ -1,8 +1,9 @@
 /**
  * Cliente HTTP.
  *
- * Token e endereco do servidor ficam no SecureStore (Keychain/Keystore) - nunca
- * em AsyncStorage, porque o app abre dados financeiros da familia inteira.
+ * Token e endereco do servidor ficam no cofre do sistema (Keychain/Keystore)
+ * quando ha um - o app abre dados financeiros da familia inteira. No navegador
+ * nao ha; ver src/api/cofre.ts, que escolhe o lugar conforme onde o app roda.
  *
  * O endereco da API e resolvido em tres niveis, nesta ordem:
  *   1. o que o usuario digitou na tela de login (vale para APK instalado);
@@ -15,8 +16,8 @@
  */
 
 import Constants from 'expo-constants';
-import * as SecureStore from 'expo-secure-store';
 
+import { cofre } from './cofre';
 import { isLocalHostUrl, normalizeServerUrl, withLanHost } from './serverUrl';
 import type { AuthToken } from './types';
 
@@ -28,14 +29,14 @@ let cachedServer: string | null = null;
 
 export async function getToken(): Promise<string | null> {
   if (cachedToken) return cachedToken;
-  cachedToken = await SecureStore.getItemAsync(TOKEN_KEY);
+  cachedToken = await cofre.ler(TOKEN_KEY);
   return cachedToken;
 }
 
 export async function setToken(token: string | null): Promise<void> {
   cachedToken = token;
-  if (token) await SecureStore.setItemAsync(TOKEN_KEY, token);
-  else await SecureStore.deleteItemAsync(TOKEN_KEY);
+  if (token) await cofre.gravar(TOKEN_KEY, token);
+  else await cofre.apagar(TOKEN_KEY);
 }
 
 /** Endereco padrao: em desenvolvimento, o IP da maquina que serve o Expo. */
@@ -52,14 +53,14 @@ export function defaultServerUrl(): string {
 
 export async function getServerUrl(): Promise<string> {
   if (cachedServer) return cachedServer;
-  cachedServer = (await SecureStore.getItemAsync(SERVER_KEY)) ?? defaultServerUrl();
+  cachedServer = (await cofre.ler(SERVER_KEY)) ?? defaultServerUrl();
   return cachedServer;
 }
 
 export async function setServerUrl(url: string | null): Promise<void> {
   cachedServer = url ? normalizeServerUrl(url, defaultServerUrl()) : null;
-  if (cachedServer) await SecureStore.setItemAsync(SERVER_KEY, cachedServer);
-  else await SecureStore.deleteItemAsync(SERVER_KEY);
+  if (cachedServer) await cofre.gravar(SERVER_KEY, cachedServer);
+  else await cofre.apagar(SERVER_KEY);
 }
 
 export class ApiError extends Error {
