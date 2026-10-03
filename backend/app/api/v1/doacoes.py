@@ -191,7 +191,7 @@ def resumo_das_doacoes(
                AND t.direction = 'ENTRADA'
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
                AND t.donor_id IS NULL
-               AND COALESCE(c.counts_as_income, true) = false
+               AND c.path <@ 'receitas.doacoes'::ltree
                AND EXTRACT(YEAR FROM t.booked_on) = :ano
             """
         ),
@@ -211,7 +211,7 @@ def resumo_das_doacoes(
                AND t.direction = 'ENTRADA'
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
                AND t.donor_id IS NULL
-               AND COALESCE(c.counts_as_income, true) = false
+               AND c.path <@ 'receitas.doacoes'::ltree
                AND EXTRACT(YEAR FROM t.booked_on) = :ano
              ORDER BY t.booked_on DESC
              LIMIT 50

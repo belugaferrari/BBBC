@@ -71,6 +71,48 @@ menor que o do Resumo, sem uma linha explicando a diferença.
 A categoria "A definir" não pode ser excluída: ela é o destino do que o sistema
 não soube classificar. Ela fica vazia sozinha, conforme você decide.
 
+## Cartão de crédito: dois arquivos, e a conta que tem de fechar
+
+O cartão é o único lugar onde o **mesmo dinheiro aparece em dois extratos**:
+
+| Arquivo | O que traz |
+|---|---|
+| OFX da **conta corrente** | uma linha só: "PAGTO FATURA CARTAO", o total pago |
+| OFX da **fatura do cartão** | cada compra, com data, descrição e valor |
+
+A regra do sistema é: **a despesa é a compra, no dia dela**. O pagamento da
+fatura é bolso trocando de lugar, e por isso a categoria "Pagamento de fatura"
+não conta como gasto. Com os dois arquivos importados, as contas fecham sozinhas
+e nada é contado duas vezes.
+
+Só que essa regra erra para o outro lado quando a fatura **não** é importada: o
+pagamento não conta como gasto, as compras não existem, e milhares de reais saem
+da conta sem aparecer em gasto nenhum. O mês fica barato no papel. É o caso de
+quem só baixa o extrato da conta corrente — e era silencioso.
+
+Agora não é. Em **Mais › Cartão de crédito**, o sistema compara duas coisas:
+
+- quanto de **fatura foi paga** no mês;
+- quanto de **compra de cartão ele conhece** na janela que essa fatura cobre (o
+  mês anterior e o atual — a fatura de outubro cobra compras de setembro).
+
+Fatura paga com compra conhecida **zero** é um buraco do tamanho da fatura, e
+vem escrito na tela. Duas saídas, e as duas servem:
+
+1. **Importar a fatura** do cartão (o detalhe). É o melhor: cada compra na sua
+   categoria, e os pontos do cartão com base certa.
+2. **"Contar como gasto"**, no botão ao lado do pagamento. A linha vai para a
+   categoria **"Cartão (sem detalhe)"** e passa a contar como um gasto só. O mês
+   fica certo no total, sem o detalhe.
+
+Se você escolher a 2 e depois importar a fatura, o sistema **aponta a duplicata**
+— e o botão vira "Voltar a não contar". É a mesma vigilância que já existia para
+a linha de fatura classificada como gasto por engano.
+
+Uma coisa que a fatura do cartão **ainda não** faz: ler o parcelamento. A
+descrição vem com "PARCELA 01/03", e cada fatura trará a sua parcela — o gasto do
+mês fica certo —, mas a **Previsão não antecipa** as parcelas que faltam.
+
 ## O que impede lançamento duplicado
 
 Três camadas, da mais exata para a mais tolerante:

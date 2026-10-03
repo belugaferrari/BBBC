@@ -218,6 +218,9 @@ export function useRecategorize() {
       client.invalidateQueries({ queryKey: ['transactions'] });
       client.invalidateQueries({ queryKey: ['by-category'] });
       client.invalidateQueries({ queryKey: ['dashboard'] });
+      // o cartão também: é de lá que sai a ação de contar (ou não) a fatura
+      client.invalidateQueries({ queryKey: ['card-summary'] });
+      client.invalidateQueries({ queryKey: ['category-overview'] });
     },
   });
 }

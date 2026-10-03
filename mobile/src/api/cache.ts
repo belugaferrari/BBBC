@@ -37,7 +37,7 @@ const CHAVE = 'consultas';
  * o antigo é descartado e o aplicativo volta a ser só online até a primeira
  * resposta nova, que é degradação aceitável.
  */
-const VERSAO = 4;
+const VERSAO = 5;
 
 /** Teto do que se guarda. Acima disso, não guarda — e não é erro. */
 const TETO_DE_BYTES = 600_000;

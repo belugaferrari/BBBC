@@ -99,6 +99,24 @@ _DOACOES_APLICADAS = f"""
 def monthly_cashflow(
     db: Session, family_id: UUID, month: date, member_id: UUID | None
 ) -> dict:
+    """O mes em numeros, com as entradas separadas por natureza.
+
+    Tres baldes de entrada, e nao um:
+
+      * `renda` - o que e renda da familia;
+      * `doacoes` - doacao recebida, reconhecida pelo CAMINHO da categoria
+        (`receitas.doacoes`), e nao por "nao e renda". Os dois nao sao a mesma
+        coisa: o credito do pagamento da fatura tambem nao e renda, e chama-lo
+        de doacao seria dizer que os sogros pagaram o cartao;
+      * `outras_entradas` - o resto que entrou e nao e renda: transferencia
+        entre contas proprias, devolucao, emprestimo.
+
+    E o CARTAO fica fora dos tres. O OFX da fatura traz o pagamento dela como
+    credito: numa conta de cartao, dinheiro que "entra" ou paga a divida ou
+    cancela uma compra - nenhum dos dois e dinheiro entrando na familia. Por
+    isso a regra aqui e estrutural (pelo tipo da conta) e nao depende de a linha
+    estar classificada: classificacao erra, tipo de conta nao.
+    """
     row = db.execute(
         text(
             f"""
@@ -109,22 +127,53 @@ def monthly_cashflow(
                     AND COALESCE(c.counts_as_income, true)), 0)                 AS renda,
               COALESCE(SUM(t.amount) FILTER (
                   WHERE t.direction = 'ENTRADA'
-                    AND COALESCE(c.counts_as_income, true) = false), 0)         AS doacoes,
+                    AND c.path <@ 'receitas.doacoes'::ltree), 0)                AS doacoes,
+              COALESCE(SUM(t.amount) FILTER (
+                  WHERE t.direction = 'ENTRADA'
+                    AND COALESCE(c.counts_as_income, true) = false
+                    AND NOT COALESCE(c.path <@ 'receitas.doacoes'::ltree, false)), 0)
+                                                                                AS outras_entradas,
               COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'SAIDA'),   0) AS outflow,
               COALESCE(SUM(t.amount) FILTER (
                   WHERE t.direction = 'SAIDA'
                     AND COALESCE(c.counts_as_expense, true) = false), 0)        AS patrimonio
               FROM transactions t
               LEFT JOIN categories c ON c.id = t.category_id
+              JOIN accounts a ON a.id = t.account_id
              WHERE t.family_id = :family_id
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
                AND t.direction <> 'TRANSFERENCIA'
+               -- credito em conta de cartao nao e dinheiro entrando na familia
+               AND NOT (t.direction = 'ENTRADA' AND a.type = 'CARTAO_CREDITO')
                AND date_trunc('month', t.booked_on) = date_trunc('month', CAST(:month AS date))
                {_SCOPE_FILTER}
             """
         ),
         {"family_id": family_id, "month": month, "member_id": member_id},
     ).mappings().one()
+
+    # O que foi creditado no cartao no mes, em linha separada. Nao soma em nada:
+    # esta aqui para o numero existir em algum lugar, em vez de o lancamento
+    # parecer ter sido engolido.
+    credito_no_cartao = brl(
+        db.execute(
+            text(
+                f"""
+                SELECT COALESCE(SUM(t.amount), 0)
+                  FROM transactions t
+                  JOIN accounts a ON a.id = t.account_id
+                 WHERE t.family_id = :family_id
+                   AND t.direction = 'ENTRADA'
+                   AND a.type = 'CARTAO_CREDITO'
+                   AND t.status IN ('EFETIVADA', 'CONCILIADA')
+                   AND date_trunc('month', t.booked_on)
+                       = date_trunc('month', CAST(:month AS date))
+                   {_SCOPE_FILTER}
+                """
+            ),
+            {"family_id": family_id, "month": month, "member_id": member_id},
+        ).scalar()
+    )
 
     aplicadas = brl(
         db.execute(
@@ -147,6 +196,7 @@ def monthly_cashflow(
     # vontade de outra pessoa.
     renda = brl(row["renda"])
     doacoes = brl(row["doacoes"])
+    outras_entradas = brl(row["outras_entradas"])
 
     # E o outro lado da mesma honestidade: a escola paga pelos avos saiu da conta,
     # mas nao foi a familia que a pagou. Tirar a doacao da renda sem tirar o gasto
@@ -160,6 +210,8 @@ def monthly_cashflow(
         "inflow": inflow,
         "renda": renda,
         "doacoes": doacoes,
+        "outras_entradas": outras_entradas,
+        "credito_no_cartao": credito_no_cartao,
         "doacoes_aplicadas": aplicadas,
         "outflow": outflow,
         "consumo": consumo,

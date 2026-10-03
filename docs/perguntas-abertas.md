@@ -21,6 +21,8 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 1.7 | **Confirmar a tabela oficial de 2026.** A regra nova (isenção ampliada + redutor progressivo) está implementada de forma parametrizada, mas as faixas de 2026 hoje são uma **cópia das de 2025** e o ano está marcado `PROVISORIO`. | Ver `db/migrations/0002_seed_catalog.sql`. Corrigir é um `INSERT`, sem deploy. |
 | 1.8 | Vocês têm **contador**? Ele deveria ter acesso de leitura (papel `CONTADOR` já existe no schema)? | Sem acesso criado. |
 | 1.9 | **Qual o estado e o limite anual de isenção do ITCMD** que vale para as doações da Vera e do José? | Nada preenchido, de propósito — ver abaixo. |
+| 1.10 | A sua retirada da Checkmotor é **salário ou pró-labore**? Criei "Salário › Felipe" como você pediu, e o Pró-labore continua lá. | Para o **imposto de renda** os dois são tributáveis pela tabela, então o número sai igual. O que muda é o INSS, que não está modelado. |
+| 1.11 | Os **dividendos da Check e da LDM são de quem** — você, a Clarissa, os dois? | Hoje a entrada é atribuída ao titular da conta onde ela cai. Cada um declara os seus, então se houver dividendo da Clarissa numa conta sua, a apuração do IR vai para o lugar errado. Ver 2.6. |
 
 > Sobre 1.7: o motor não chuta. Ano sem tabela cadastrada devolve erro explícito
 > em vez de calcular zero, e ano `PROVISORIO` volta com aviso na resposta da API.
@@ -49,7 +51,8 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 2.2 | Vocês querem ver **os gastos um do outro** por completo, ou cada um tem uma parte privada? | Visão familiar mostra tudo; o filtro "só eu" é conveniência, não privacidade. Se quiserem gasto privado de verdade, é uma regra a mais no filtro. |
 | 2.3 | Quais **bancos, cartões e corretoras** entram? | Nenhum pré-cadastrado. |
 | 2.4 | Cartão de crédito: querem ver por **competência** (data da compra) ou por **caixa** (data da fatura)? | Ambas as datas existem (`booked_on` / `paid_on`); o dashboard usa competência. |
-| 2.5 | Compra parcelada deve aparecer **integral no mês da compra** ou parcela a parcela? | Parcela a parcela (`installment_no` / `installment_total`). |
+| 2.5 | Compra parcelada deve aparecer **integral no mês da compra** ou parcela a parcela? | Parcela a parcela (`installment_no` / `installment_total`). O leitor de OFX **ainda não lê** o "PARCELA 01/03" da fatura: o gasto do mês fica certo, mas a Previsão não antecipa as parcelas que faltam. |
+| 2.6 | Na **conferência do extrato**, vale poder escolher o **responsável** linha a linha (hoje é sempre o titular da conta)? | Hoje não dá: o importador usa o dono da conta. Importa para o IR quando a entrada é de um e a conta é do outro. |
 
 ## 3. Open Finance
 

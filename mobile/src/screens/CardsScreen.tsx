@@ -19,15 +19,54 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useCardSummary } from '@/api/queries';
+import { useCardSummary, useCategories, useRecategorize } from '@/api/queries';
 import { MonthPicker, mesAtualISO } from '@/components/MonthPicker';
-import { Card, Mensagem, Screen, SectionTitle } from '@/components/ui';
+import { Botao, Card, Mensagem, Screen, SectionTitle } from '@/components/ui';
 import { colors, spacing, typography } from '@/theme';
 import { dayLabel, money } from '@/theme/format';
 
 export function CardsScreen(): React.ReactElement {
   const [mes, setMes] = useState(mesAtualISO);
   const { data, isLoading } = useCardSummary(mes);
+  const { data: categorias } = useCategories();
+  const recategorizar = useRecategorize();
+  const [erro, setErro] = useState<string | null>(null);
+
+  // Os dois destinos da linha de pagamento de fatura. Buscados pelo caminho, e
+  // nao pelo nome: nome muda, caminho e identidade.
+  const destinos = React.useMemo(() => {
+    const achar = (caminho: string): string | null => {
+      const procurar = (nos: typeof categorias): string | null => {
+        for (const no of nos ?? []) {
+          if (no.path === caminho) return no.id;
+          const dentro = procurar(no.children);
+          if (dentro) return dentro;
+        }
+        return null;
+      };
+      return procurar(categorias);
+    };
+    return {
+      semDetalhe: achar('despesas.cartao_sem_detalhe'),
+      pagamento: achar('transferencias.pagamento_cartao'),
+    };
+  }, [categorias]);
+
+  async function trocarDestino(id: string, contarComoGasto: boolean): Promise<void> {
+    const destino = contarComoGasto ? destinos.semDetalhe : destinos.pagamento;
+    if (!destino) {
+      setErro('Nao achei a categoria. Atualize o sistema e tente de novo.');
+      return;
+    }
+    setErro(null);
+    try {
+      // learn_rule desligado: isto e uma decisao sobre ESTE mes, e aprender com
+      // ela faria toda fatura futura entrar como gasto sem ninguem pedir.
+      await recategorizar.mutateAsync({ id, category_id: destino, learn_rule: false });
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Nao consegui mudar.');
+    }
+  }
 
   if (isLoading || !data) {
     return (
@@ -100,7 +139,63 @@ export function CardsScreen(): React.ReactElement {
           mês: a despesa foi a compra, no dia dela. Este número está aqui só para
           você poder conferir contra o extrato.
         </Text>
+        {Number(data.purchases_known) > 0 ? (
+          <Text style={styles.hint}>
+            Compras de cartão que o sistema conhece no período que essa fatura cobre:{' '}
+            {money(data.purchases_known)}.
+          </Text>
+        ) : null}
       </Card>
+
+      {erro ? <Mensagem tom="erro">{erro}</Mensagem> : null}
+
+      {data.aviso_sem_detalhe ? (
+        <>
+          <SectionTitle>Falta o detalhe do cartão</SectionTitle>
+          <Mensagem tom="erro">{data.aviso_sem_detalhe}</Mensagem>
+        </>
+      ) : null}
+
+      {Number(data.sem_detalhe) > 0 ? (
+        <Card>
+          <Text style={styles.rotulo}>Contado como gasto sem detalhe</Text>
+          <Text style={styles.faturaValor}>{money(data.sem_detalhe)}</Text>
+          <Text style={styles.hint}>
+            Você escolheu contar a fatura como um gasto só, sem as compras. Se um dia
+            importar essa fatura, desfaça aqui — senão o mês conta o cartão duas vezes.
+          </Text>
+        </Card>
+      ) : null}
+
+      {data.bill_payments.length > 0 ? (
+        <Card>
+          <Text style={styles.rotulo}>Pagamentos de fatura deste mês</Text>
+          {data.bill_payments.map((pagamento) => (
+            <View key={pagamento.id} style={styles.suspeita}>
+              <View style={styles.linhaMain}>
+                <Text style={styles.nome} numberOfLines={1}>
+                  {money(pagamento.amount)}
+                </Text>
+                <Text style={styles.detalhe}>
+                  {dayLabel(pagamento.booked_on)} · {pagamento.description}
+                </Text>
+                <Text style={pagamento.counted_as_expense ? styles.contado : styles.detalhe}>
+                  {pagamento.counted_as_expense
+                    ? 'contando como gasto (sem detalhe)'
+                    : 'não conta como gasto — a despesa é a compra'}
+                </Text>
+              </View>
+              <Botao
+                tom="secundario"
+                disabled={recategorizar.isPending}
+                onPress={() => void trocarDestino(pagamento.id, !pagamento.counted_as_expense)}
+              >
+                {pagamento.counted_as_expense ? 'Voltar a não contar' : 'Contar como gasto'}
+              </Botao>
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       {data.possible_duplicates.length > 0 ? (
         <>
@@ -142,6 +237,7 @@ export function CardsScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   rotulo: { ...typography.caption, color: colors.textFaint },
   valor: { ...typography.display, color: colors.text, marginTop: 2 },
+  contado: { ...typography.caption, color: colors.red, marginTop: 2 },
   faturaValor: { ...typography.title, color: colors.textMuted },
   hint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
   linha: {

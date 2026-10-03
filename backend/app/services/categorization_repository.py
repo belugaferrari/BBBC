@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import CategorizationRule, Category, Transaction
+from app.models import Account, CategorizationRule, Category, Transaction
 from app.models.enums import TxDirection
 from app.services.categorization import (
     Rule,
@@ -51,6 +51,37 @@ _A_DEFINIR = {
     TxDirection.SAIDA: "despesas.a_definir",
     TxDirection.ENTRADA: "receitas.a_definir",
 }
+
+
+def categoria_padrao(
+    db: Session,
+    family_id: UUID,
+    direction: TxDirection | str,
+    account_type: str | None = None,
+) -> UUID | None:
+    """Onde o lancamento cai quando nenhuma regra o reconheceu.
+
+    Em conta de CARTAO DE CREDITO, uma ENTRADA nao e dinheiro entrando na
+    familia: o saldo de um cartao e divida, e o que "entra" nele ou paga a
+    divida ou cancela uma compra. O caso de longe mais comum e o pagamento da
+    fatura, que vem no proprio OFX do cartao como credito - e "Pagamento de
+    fatura" e o destino que o mantem fora da renda E fora do gasto. Mandar para
+    "A definir" tambem o manteria fora da renda, mas ficaria pedindo uma decisao
+    todo mes, para sempre, sobre a linha mais previsivel do extrato.
+
+    Estorno vem antes daqui: a descricao dele ("ESTORNO", "DEVOLUCAO") e casada
+    pelas regras de fornecedor, que rodam primeiro.
+    """
+    if TxDirection(direction) == TxDirection.ENTRADA and account_type == "CARTAO_CREDITO":
+        pagamento = db.scalar(
+            select(Category.id).where(
+                Category.family_id == family_id,
+                Category.path == "transferencias.pagamento_cartao",
+            )
+        )
+        if pagamento:
+            return pagamento
+    return categoria_a_definir(db, family_id, direction)
 
 
 def categoria_a_definir(
@@ -98,7 +129,13 @@ def autocategorize(db: Session, family_id: UUID, tx: Transaction) -> Transaction
         load_rules(db, family_id),
     )
     if not match:
-        tx.category_id = categoria_a_definir(db, family_id, tx.direction)
+        conta = db.get(Account, tx.account_id) if tx.account_id else None
+        tx.category_id = categoria_padrao(
+            db,
+            family_id,
+            tx.direction,
+            conta.type.value if conta and conta.type else None,
+        )
         return tx
 
     tx.category_id = match.category_id

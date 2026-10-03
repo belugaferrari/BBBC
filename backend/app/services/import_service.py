@@ -28,7 +28,7 @@ from app.services.categorization import (
     categorize,
     normalize,
 )
-from app.services.categorization_repository import categoria_a_definir, load_rules
+from app.services.categorization_repository import categoria_padrao, load_rules
 from app.services.importers.base import ParsedTransaction, fingerprint
 from app.services.importers.detect import parse_statement
 from app.services.socio import (
@@ -96,10 +96,12 @@ def build_preview(
             select(Category).where(Category.family_id.in_([family_id, None]))
         ).all()
     }
-    # Para onde vai o que nenhuma regra reconheceu. Fica fora do `if` do laco de
-    # proposito: sao duas consultas, uma vez cada, e nao uma por linha do extrato.
+    # Para onde vai o que nenhuma regra reconheceu - depende da direcao e do TIPO
+    # da conta (ver `categoria_padrao`). Fica fora do laco de proposito: duas
+    # consultas uma vez, e nao duas por linha do extrato.
+    tipo_da_conta = account.type.value if account.type else None
     a_definir = {
-        direcao: categoria_a_definir(db, family_id, direcao)
+        direcao: categoria_padrao(db, family_id, direcao, tipo_da_conta)
         for direcao in (TxDirection.SAIDA, TxDirection.ENTRADA)
     }
 

@@ -109,11 +109,17 @@ export function DashboardScreen(): React.ReactElement {
 
   const { cashflow, balances, budget_caps: caps, alerts, pendentes } = data;
   const net = Number(cashflow.net);
-  // Doação recebida: entrou na conta, mas não é renda da família. Fica em linha
-  // separada - somada à renda, inflaria o mês e a taxa de poupança, e é o tipo
-  // de número que depois ninguém desconfia.
+  // O que entrou e NÃO é renda fica em linha separada - somado à renda, inflaria
+  // o mês e a taxa de poupança, e é o tipo de número que depois ninguém
+  // desconfia. São duas coisas diferentes, e por isso dois números: doação
+  // recebida, e o resto (transferência entre contas próprias, devolução).
   const doacoes = Number(cashflow.doacoes);
+  const outras = Number(cashflow.outras_entradas ?? 0);
+  const foraDaRenda = doacoes + outras;
   const cobriu = Number(cashflow.doacoes_aplicadas);
+  const avisos: string[] = [];
+  if (doacoes > 0) avisos.push(`+ ${money(doacoes)} de doação`);
+  if (outras > 0) avisos.push(`+ ${money(outras)} que não é renda`);
 
   return (
     <ScrollView
@@ -138,9 +144,9 @@ export function DashboardScreen(): React.ReactElement {
 
       <View style={styles.tiles}>
         <StatTile
-          label={doacoes > 0 ? 'Renda' : 'Entrou'}
-          value={money(doacoes > 0 ? cashflow.renda : cashflow.inflow)}
-          hint={doacoes > 0 ? `+ ${money(doacoes)} de doação` : undefined}
+          label={foraDaRenda > 0 ? 'Renda' : 'Entrou'}
+          value={money(foraDaRenda > 0 ? cashflow.renda : cashflow.inflow)}
+          hint={avisos.length > 0 ? avisos.join(' · ') : undefined}
         />
         <StatTile
           label="Gastou"
@@ -159,6 +165,11 @@ export function DashboardScreen(): React.ReactElement {
         <Text style={styles.avisoDoSaldo}>
           A doação entrou na conta, mas não conta como renda — e o gasto que ela cobriu saiu do
           que a casa gastou. Em Mais › Doações recebidas está a soma do ano, por quem deu.
+        </Text>
+      ) : null}
+      {Number(cashflow.credito_no_cartao ?? 0) > 0 ? (
+        <Text style={styles.avisoDoSaldo}>
+          {`${money(cashflow.credito_no_cartao)} foram creditados no cartão (o pagamento da própria fatura, que vem dentro do extrato dele). Não é dinheiro entrando na família: o saldo de um cartão é dívida.`}
         </Text>
       ) : null}
       <View style={styles.tiles}>

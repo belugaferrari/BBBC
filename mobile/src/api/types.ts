@@ -18,6 +18,14 @@ export interface Cashflow {
   renda: string;
   /** doação recebida no mês: entrou na conta, mas não é renda */
   doacoes: string;
+  /** o resto que entrou e não é renda: transferência entre contas, devolução */
+  outras_entradas: string;
+  /**
+   * crédito lançado numa conta de cartão — o pagamento da própria fatura, que
+   * vem dentro do OFX do cartão. Fora da renda e fora do "entrou": o saldo de um
+   * cartão é dívida, e o que entra nele paga dívida ou cancela compra.
+   */
+  credito_no_cartao: string;
   /** quanto da doação de fato cobriu gasto do destino dela, no mês */
   doacoes_aplicadas: string;
   /** tudo que saiu da conta */
@@ -605,6 +613,21 @@ export interface CardSummary {
   }[];
   /** quanto saiu da conta para pagar fatura — não é gasto, é bolso trocando */
   bill_paid: string;
+  /** compras de cartão que o sistema conhece na janela que a fatura cobre */
+  purchases_known: string;
+  /** o que ele escolheu contar como gasto sem detalhar */
+  sem_detalhe: string;
+  /** fatura paga sem nenhuma compra conhecida: dinheiro que saiu e não é gasto */
+  gap: string;
+  /** as linhas de pagamento de fatura do mês, para poder contá-las como gasto */
+  bill_payments: {
+    id: string;
+    booked_on: string;
+    amount: string;
+    description: string;
+    counted_as_expense: boolean;
+  }[];
+  aviso_sem_detalhe: string | null;
   /** linhas que parecem fatura e estão contando como gasto */
   possible_duplicates: {
     id: string;

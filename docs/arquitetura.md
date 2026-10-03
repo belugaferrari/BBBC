@@ -143,6 +143,27 @@ somar tudo num balde só não responde à pergunta que o imposto faz. O limite e
 fica em `families.itcmd_annual_exemption`, **nulo por padrão** — ver o aviso em
 `docs/perguntas-abertas.md`, item 1.9.
 
+### Três baldes de entrada, e não um
+
+`counts_as_income = false` diz "não é renda". Não diz "é doação" — e confundir as
+duas coisas foi o primeiro erro desta parte do sistema. Transferência entre contas
+próprias também não é renda; o crédito do pagamento da fatura, que vem dentro do
+OFX do cartão, também não. Com um balde só, o Resumo chamaria de **doação dos
+sogros** o pagamento do próprio cartão.
+
+Então o mês devolve `renda`, `doacoes` (pelo **caminho** `receitas.doacoes`) e
+`outras_entradas` (o resto que não é renda). E o cartão fica fora dos três:
+
+```sql
+AND NOT (t.direction = 'ENTRADA' AND a.type = 'CARTAO_CREDITO')
+```
+
+A regra é **estrutural, pelo tipo da conta**, e de propósito: numa conta de
+cartão o saldo é dívida, e o que "entra" nela ou paga a dívida ou cancela uma
+compra — nunca é dinheiro entrando na família. Depender da categoria estar certa
+seria depender de classificação, e classificação erra; tipo de conta não. O valor
+não desaparece: volta como `credito_no_cartao`, em linha própria.
+
 ## 11. Offline: duas peças com propósitos diferentes
 
 O servidor mora no computador da casa, então "sem rede" aqui quer dizer "sem o

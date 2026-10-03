@@ -16,6 +16,19 @@ contas fecham sozinhas quando a linha da fatura esta classificada ali. Quando
 nao esta - porque o banco escreveu a descricao de um jeito que nenhuma regra
 reconheceu - ninguem avisa, e e justamente esse silencio que este modulo quebra:
 o `/cards/summary` devolve as linhas suspeitas junto com os numeros.
+
+E TEM O SILENCIO CONTRARIO, que e pior porque parece bom: quando a fatura e paga
+e as compras NAO foram importadas, aquela regra faz o gasto do cartao
+desaparecer. O extrato de conta corrente dele traz o cartao como uma linha so, o
+total pago, sem detalhe - entao, sem a fatura importada, saem milhares de reais
+da conta e o mes nao registra gasto nenhum. O mes fica barato no papel.
+
+Por isso o resumo compara as duas coisas: quanto de fatura foi PAGA no mes e
+quanto de compra de cartao o sistema CONHECE na janela que essa fatura cobre.
+Compra conhecida zero com fatura paga e um buraco do tamanho da fatura, e vem
+escrito. A saida oferecida e classificar o pagamento como "Cartao (sem
+detalhe)", que conta como gasto num valor so - e, se um dia a fatura for
+importada, a vigilancia passa a apontar aquela linha como duplicata.
 """
 
 from __future__ import annotations
@@ -102,9 +115,80 @@ def card_summary(
         {"familia": current.family_id, "mes": mes},
     ).scalar_one()
 
+    # Quanto de compra de cartao o sistema conhece na janela que a fatura paga
+    # neste mes cobre: o mes anterior e este. A fatura que vence em outubro cobra
+    # compras de setembro (e o comeco de outubro, se o fechamento for no meio do
+    # mes), entao comparar so dentro do mes do pagamento acusaria buraco todo
+    # mes, inclusive quando nao ha nenhum.
+    compras_na_janela = db.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(t.amount), 0)
+              FROM transactions t
+              JOIN accounts a ON a.id = t.account_id
+              LEFT JOIN categories c ON c.id = t.category_id
+             WHERE t.family_id = :familia
+               AND a.type = 'CARTAO_CREDITO'
+               AND t.direction = 'SAIDA'
+               AND t.status IN ('EFETIVADA', 'CONCILIADA')
+               AND COALESCE(c.counts_as_expense, true)
+               AND t.booked_on >= (CAST(:mes AS date) - INTERVAL '1 month')
+               AND t.booked_on < (CAST(:mes AS date) + INTERVAL '1 month')
+            """
+        ),
+        {"familia": current.family_id, "mes": mes},
+    ).scalar_one()
+
+    # O que ele decidiu contar como gasto sem detalhar. Fica visivel para a
+    # conta poder ser desfeita no dia em que a fatura for importada.
+    sem_detalhe = db.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(t.amount), 0)
+              FROM transactions t
+              JOIN categories c ON c.id = t.category_id
+             WHERE t.family_id = :familia
+               AND c.path = 'despesas.cartao_sem_detalhe'::ltree
+               AND t.status IN ('EFETIVADA', 'CONCILIADA')
+               AND date_trunc('month', t.booked_on)
+                   = date_trunc('month', CAST(:mes AS date))
+            """
+        ),
+        {"familia": current.family_id, "mes": mes},
+    ).scalar_one()
+
+    # As linhas de pagamento de fatura do mes, para a tela poder oferecer "contar
+    # como gasto" quando o detalhe nao vai vir.
+    pagamentos = db.execute(
+        text(
+            """
+            SELECT t.id, t.booked_on, t.amount, t.description,
+                   c.path::text AS category_path
+              FROM transactions t
+              JOIN categories c ON c.id = t.category_id
+              JOIN accounts a ON a.id = t.account_id
+             WHERE t.family_id = :familia
+               AND t.direction = 'SAIDA'
+               AND t.status IN ('EFETIVADA', 'CONCILIADA')
+               AND a.type <> 'CARTAO_CREDITO'
+               AND (c.path <@ 'transferencias.pagamento_cartao'::ltree
+                    OR c.path = 'despesas.cartao_sem_detalhe'::ltree)
+               AND date_trunc('month', t.booked_on)
+                   = date_trunc('month', CAST(:mes AS date))
+             ORDER BY t.amount DESC
+            """
+        ),
+        {"familia": current.family_id, "mes": mes},
+    ).mappings().all()
+
     # A vigilancia: linha que PARECE pagamento de fatura e que, do jeito que
     # esta classificada, esta sendo contada como gasto. Cada uma dessas e uma
     # fatura inteira somada em cima das compras que ela paga.
+    #
+    # "Cartao (sem detalhe)" fica de fora enquanto nao houver compra conhecida na
+    # janela: ali contar como gasto e a decisao certa, e acusar duplicata seria
+    # reclamar do que o sistema mesmo sugeriu. Com compra conhecida, volta a ser
+    # duplicata de verdade - e a tela diz isso.
     suspeitas = db.execute(
         text(
             """
@@ -119,6 +203,8 @@ def card_summary(
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
                AND COALESCE(c.counts_as_expense, true)
                AND a.type <> 'CARTAO_CREDITO'
+               AND NOT (c.path = 'despesas.cartao_sem_detalhe'::ltree
+                        AND :compras_conhecidas = 0)
                AND date_trunc('month', t.booked_on)
                    = date_trunc('month', CAST(:mes AS date))
                AND (
@@ -132,6 +218,7 @@ def card_summary(
         {
             "familia": current.family_id,
             "mes": mes,
+            "compras_conhecidas": compras_na_janela,
             "jeito1": _JEITOS_DE_ESCREVER_FATURA[0],
             "jeito2": _JEITOS_DE_ESCREVER_FATURA[1],
             "jeito3": _JEITOS_DE_ESCREVER_FATURA[2],
@@ -155,11 +242,42 @@ def card_summary(
     ]
     total = sum((Decimal(c["spent"]) for c in cartoes), Decimal("0.00"))
 
+    # O buraco: fatura paga sem compra conhecida na janela. Dinheiro que saiu da
+    # conta e nao esta em gasto nenhum.
+    buraco = brl(fatura_paga) if brl(compras_na_janela) == Decimal("0.00") else Decimal("0.00")
+
     return {
         "month": mes,
         "total_spent": brl(total),
         "cards": cartoes,
         "bill_paid": brl(fatura_paga),
+        # Quanto de compra de cartao o sistema conhece na janela que a fatura
+        # cobre (mes anterior e este).
+        "purchases_known": brl(compras_na_janela),
+        "sem_detalhe": brl(sem_detalhe),
+        "gap": buraco,
+        "bill_payments": [
+            {
+                "id": linha["id"],
+                "booked_on": linha["booked_on"],
+                "amount": brl(linha["amount"]),
+                "description": linha["description"],
+                # true quando ele ja escolheu contar esta linha como gasto
+                "counted_as_expense": linha["category_path"]
+                == "despesas.cartao_sem_detalhe",
+            }
+            for linha in pagamentos
+        ],
+        "aviso_sem_detalhe": (
+            f"Foram pagos {brl(fatura_paga)} de fatura neste mês e o sistema não "
+            "conhece nenhuma compra de cartão no período que ela cobre. Esse "
+            "dinheiro saiu da conta e não está em gasto nenhum: ou você importa "
+            "a fatura do cartão (o detalhe, compra por compra), ou marca o "
+            "pagamento como “Cartão (sem detalhe)” para ele contar como um gasto "
+            "só. Do jeito que está, o mês parece mais barato do que foi."
+            if buraco > 0
+            else None
+        ),
         "possible_duplicates": [
             {
                 "id": linha["id"],
