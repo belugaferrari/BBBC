@@ -27,6 +27,7 @@ import { CardsScreen } from '@/screens/CardsScreen';
 import { CategoriesScreen } from '@/screens/CategoriesScreen';
 import { CategoryDetailScreen } from '@/screens/CategoryDetailScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
+import { DonationsScreen } from '@/screens/DonationsScreen';
 import { EntryScreen } from '@/screens/EntryScreen';
 import { ExpensesScreen } from '@/screens/ExpensesScreen';
 import { ForecastScreen } from '@/screens/ForecastScreen';
@@ -44,6 +45,7 @@ type StackParams = {
   IR: undefined;
   Cartoes: undefined;
   Previsoes: undefined;
+  Doacoes: undefined;
   // a tela de categoria empilha sobre si mesma: de "Transporte" para
   // "Gasolina" e de volta, com o mes escolhido vindo junto
   Categoria: { id: string; nome: string; mes: string };
@@ -176,6 +178,11 @@ export function RootNavigator(): React.ReactElement {
           name="Previsoes"
           component={ForecastScreen}
           options={{ title: 'Previsões' }}
+        />
+        <Stack.Screen
+          name="Doacoes"
+          component={DonationsScreen}
+          options={{ title: 'Doações recebidas' }}
         />
         <Stack.Screen name="IR" component={TaxScreen} options={{ title: 'Imposto de Renda' }} />
       </Stack.Navigator>

@@ -107,7 +107,12 @@ def test_a_arvore_tem_as_categorias_que_a_familia_pediu(client, familia):
         "Criacao", "Cla PJ",
     ]
     assert set(esperadas) <= nomes, f"faltando: {set(esperadas) - nomes}"
-    assert [f["name"] for f in despesas["children"]] == esperadas
+    # "A definir" entra no fim da lista (sort_order 9000) e nao e uma das dele:
+    # e o destino do que o sistema nao soube classificar. As dele continuam sendo
+    # exatamente estas, nesta ordem.
+    nomes_despesas = [f["name"] for f in despesas["children"]]
+    assert nomes_despesas[: len(esperadas)] == esperadas
+    assert nomes_despesas[len(esperadas) :] == ["A definir"]
 
 
 def test_transporte_guarda_as_subcategorias_que_ele_citou(client, familia):

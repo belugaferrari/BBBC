@@ -98,9 +98,33 @@ function Instalar-Dependencias($log) {
     return ($LASTEXITCODE -eq 0)
 }
 
-if (-not (Test-Path 'node_modules')) {
+# Nao basta perguntar se a pasta node_modules existe.
+#
+# Quando uma atualizacao traz biblioteca nova, a pasta continua ali - com tudo
+# menos a nova. E a falta nao aparece aqui: aparece no celular, mais tarde,
+# como um pedaco do aplicativo que simplesmente nao funciona (o modo offline
+# foi o primeiro caso: sem a biblioteca de armazenamento ele nao guarda nada, e
+# nao reclama). Entao a pergunta certa e se TUDO o que o package.json pede esta
+# instalado.
+function Faltam-Dependencias {
+    if (-not (Test-Path 'node_modules')) { return $true }
+    try {
+        $pacote = Get-Content 'package.json' -Raw | ConvertFrom-Json
+    } catch {
+        return $true   # package.json ilegivel: deixa o npm falar
+    }
+    foreach ($nome in $pacote.dependencies.PSObject.Properties.Name) {
+        if (-not (Test-Path (Join-Path 'node_modules' $nome))) {
+            Aviso "Falta a biblioteca $nome - vou instalar o que a atualizacao trouxe."
+            return $true
+        }
+    }
+    return $false
+}
+
+if (Faltam-Dependencias) {
     Titulo "2. Preparando o aplicativo"
-    Write-Host "  (so na primeira vez, alguns minutos)"
+    Write-Host "  (na primeira vez, e quando uma atualizacao traz biblioteca nova)"
     Write-Host ""
 
     $log = Join-Path (Get-Location) 'instalacao.log'

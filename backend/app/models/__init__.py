@@ -1,6 +1,7 @@
 """Modelos ORM. Importar deste pacote garante o registro no metadata do SQLAlchemy."""
 
 from app.models.base import Base
+from app.models.doacoes import Donor
 from app.models.family import Account, BankConnection, Family, Institution, Member
 from app.models.imports import StatementImport
 from app.models.investments import (
@@ -26,6 +27,7 @@ from app.models.taxonomy import CategorizationRule, Category, Merchant, Tag
 
 __all__ = [
     "Account", "Alert", "Asset", "BankConnection", "Base", "BenchmarkSeries", "BudgetCap",
+    "Donor",
     "CardProgram",
     "CategorizationRule", "Category", "Family", "Goal", "GoalContribution", "IRAssessment",
     "Holding", "HoldingValuation", "IRIncomeStatement", "Institution",

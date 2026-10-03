@@ -12,7 +12,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.bbbc.app"
+      "bundleIdentifier": "com.bbbc.app",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "package": "com.bbbc.app",
@@ -28,6 +33,14 @@
         "expo-notifications",
         {
           "color": "#E11D2E"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
         }
       ]
     ],

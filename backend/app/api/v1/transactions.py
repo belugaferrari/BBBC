@@ -5,13 +5,14 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 
 from app.api.deps import (
     CurrentMember,
     DbSession,
     owned_account,
     owned_category,
+    owned_donor,
     owned_member,
     owned_tag,
     scope_member_id,
@@ -48,7 +49,17 @@ def list_transactions(
     if owner:
         filters.append(Transaction.owner_member_id == owner)
     if only_uncategorized:
-        filters.append(Transaction.category_id.is_(None))
+        # "Sem categoria" passou a ter duas formas: a antiga (categoria nula, de
+        # antes de existir "A definir") e a de agora, que e a categoria "A
+        # definir" propriamente. Filtrar so por uma delas deixaria metade dos
+        # pendentes invisivel justamente na tela onde eles sao resolvidos.
+        pendente = select(Category.id).where(
+            Category.family_id == current.family_id,
+            Category.slug == "a_definir",
+        )
+        filters.append(
+            or_(Transaction.category_id.is_(None), Transaction.category_id.in_(pendente))
+        )
     if search:
         filters.append(Transaction.description.ilike(f"%{search}%"))
     if category_id:
@@ -143,6 +154,10 @@ def create_transaction(
         owned_member(db, payload.ir_deduction_member_id, current)
     if payload.owner_member_id:
         owned_member(db, payload.owner_member_id, current)
+    if payload.donor_id:
+        owned_donor(db, payload.donor_id, current)
+    if payload.donation_for_category_id:
+        owned_category(db, payload.donation_for_category_id, current)
     for tag_id in payload.tags:
         owned_tag(db, tag_id, current)
 
@@ -177,6 +192,10 @@ def update_transaction(
         owned_member(db, payload.ir_deduction_member_id, current)
     if payload.owner_member_id:
         owned_member(db, payload.owner_member_id, current)
+    if payload.donor_id:
+        owned_donor(db, payload.donor_id, current)
+    if payload.donation_for_category_id:
+        owned_category(db, payload.donation_for_category_id, current)
 
     data = payload.model_dump(exclude_unset=True, exclude={"learn_rule", "category_id"})
     for field, value in data.items():

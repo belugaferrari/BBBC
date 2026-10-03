@@ -1,8 +1,12 @@
 /** Hooks de dados. Uma chave por recurso, para o cache invalidar certo. */
 
+import { useEffect, useState } from 'react';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from './client';
+import { ApiError, api } from './client';
+import { assinarFila, descartar, enfileirar, listarFila, subirFila } from './fila';
+import type { ItemDaFila, ResultadoDaSubida } from './fila';
 import type {
   Account,
   AccountCreate,
@@ -23,6 +27,8 @@ import type {
   SpendByCategory,
   Category,
   DashboardData,
+  DonationsSummary,
+  Donor,
   Goal,
   Portfolio,
   Scope,
@@ -52,6 +58,8 @@ export const queryKeys = {
   categoryAnalysis: (id: string, month: string) => ['category-analysis', id, month] as const,
   budgetCaps: (month: string) => ['budget-caps', month] as const,
   cardSummary: (month: string) => ['card-summary', month] as const,
+  donors: ['donors'] as const,
+  doacoes: (year: number) => ['doacoes', year] as const,
   evolucao: (month: string, scope: string) => ['evolucao', month, scope] as const,
   checklist: (month: string) => ['statement-checklist', month] as const,
 };
@@ -145,27 +153,6 @@ export function useCreateAccount() {
       client.invalidateQueries({ queryKey: ['dashboard'] });
       client.invalidateQueries({ queryKey: queryKeys.netWorth });
       client.invalidateQueries({ queryKey: ['statement-checklist'] });
-    },
-  });
-}
-
-/**
- * Lançamento manual - é por aqui que entra o gasto pago em dinheiro, que não
- * aparece em extrato nenhum.
- *
- * `client_key` vai sempre preenchida: se a resposta se perder no caminho e o
- * app tentar de novo, o servidor devolve o lançamento que já gravou em vez de
- * duplicar o gasto.
- */
-export function useCreateTransaction() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (input: TransactionCreate) => api.post<Transaction>('/transactions', input),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ['transactions'] });
-      client.invalidateQueries({ queryKey: ['by-category'] });
-      client.invalidateQueries({ queryKey: ['dashboard'] });
-      client.invalidateQueries({ queryKey: ['forecast'] });
     },
   });
 }
@@ -411,4 +398,195 @@ export function useCardSummary(month: string) {
     queryKey: queryKeys.cardSummary(month),
     queryFn: () => api.get<CardSummary>('/cards/summary', { month }),
   });
+}
+
+// ------------------------------------------------------------ doacoes ---
+// Dinheiro que entra e não é renda. Os avós depositam para a escola das meninas:
+// o dinheiro passa pela conta, mas não é da família, e tratar como renda estraga
+// o mês, a taxa de poupança e a projeção — esta última é a pior, porque passaria
+// a contar com dinheiro que depende da vontade de outra pessoa.
+
+/** Quem doa. Serve para o seletor do lançamento e para a soma do ano. */
+export function useDonors() {
+  return useQuery({
+    queryKey: queryKeys.donors,
+    queryFn: () => api.get<Donor[]>('/donors'),
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+function invalidarDoacoes(client: ReturnType<typeof useQueryClient>): void {
+  client.invalidateQueries({ queryKey: queryKeys.donors });
+  client.invalidateQueries({ queryKey: ['doacoes'] });
+  client.invalidateQueries({ queryKey: ['dashboard'] });
+}
+
+export function useCreateDonor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; relationship?: string; notes?: string }) =>
+      api.post<Donor>('/donors', input),
+    onSuccess: () => invalidarDoacoes(client),
+  });
+}
+
+export function useUpdateDonor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; name: string; relationship?: string }) =>
+      api.patch<Donor>(`/donors/${input.id}`, {
+        name: input.name,
+        relationship: input.relationship,
+      }),
+    onSuccess: () => invalidarDoacoes(client),
+  });
+}
+
+/**
+ * Arquiva o doador — não apaga. As doações dele continuam no histórico: apagar
+ * deixaria soma sem dono no ano que já passou.
+ */
+export function useArchiveDonor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ arquivado: boolean; nome: string }>(`/donors/${id}`),
+    onSuccess: () => invalidarDoacoes(client),
+  });
+}
+
+/** Quanto cada um doou no ano, contra o limite de isenção do ITCMD. */
+export function useDonationsSummary(year: number) {
+  return useQuery({
+    queryKey: queryKeys.doacoes(year),
+    queryFn: () => api.get<DonationsSummary>('/doacoes/resumo', { year }),
+  });
+}
+
+/**
+ * O limite de isenção do ITCMD, que é ESTADUAL: muda de estado para estado e é
+ * corrigido todo ano. Por isso é digitado, e não embutido no sistema — um número
+ * chutado tranquilizaria sobre um limite que pode não ser o deste estado.
+ */
+export function useSaveItcmdLimit() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { itcmd_state?: string; itcmd_annual_exemption?: number | null }) =>
+      api.put<{ itcmd_state: string | null; itcmd_annual_exemption: string | null }>(
+        '/doacoes/limite',
+        input,
+      ),
+    onSuccess: () => invalidarDoacoes(client),
+  });
+}
+
+/**
+ * Aponta quem depositou num lançamento que entrou sem doador — é como chega o
+ * depósito vindo do extrato, porque o banco não sabe quem depositou.
+ *
+ * `learn_rule` fica de fora: o que se está corrigindo é o doador, não a
+ * categoria, e não há regra de fornecedor a aprender com isso.
+ */
+export function useSetDonor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { transaction_id: string; donor_id: string }) =>
+      api.patch<Transaction>(`/transactions/${input.transaction_id}`, {
+        donor_id: input.donor_id,
+      }),
+    onSuccess: () => {
+      invalidarDoacoes(client);
+      client.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+}
+
+// ------------------------------------------------------- fila offline ---
+// O gasto em dinheiro só existe se for lançado na hora. "Lanço quando chegar em
+// casa" é o mesmo que não lançar — então, sem servidor, o lançamento é guardado
+// no aparelho e sobe depois, com a mesma `client_key`, que é o que impede o gasto
+// de ser contado duas vezes.
+
+export interface ResultadoDoLancamento {
+  /** ficou guardado no aparelho em vez de ir para o servidor */
+  enfileirado: boolean;
+  transacao?: Transaction;
+}
+
+/**
+ * Lançar à mão — é por aqui que entra o gasto pago em dinheiro, que não aparece
+ * em extrato nenhum. É o único caminho de lançamento do aplicativo, e de
+ * propósito: um atalho que falasse direto com o servidor perderia o que foi
+ * digitado justamente nas horas em que ele não responde.
+ *
+ * `client_key` vai sempre preenchida, e nasce com o rascunho na tela: se a
+ * resposta se perder no caminho — ou se o lançamento subir pela fila depois — o
+ * servidor devolve o que já gravou em vez de cobrar o gasto duas vezes.
+ *
+ * Só cai na fila o que falhou por falta de servidor (status 0). Recusa do
+ * servidor — categoria que exige comentário, valor inválido — volta como erro
+ * para a tela, porque guardar na fila um lançamento que já se sabe que não
+ * entra seria empurrar o problema para depois, longe de quem pode resolver.
+ */
+export function useLancar() {
+  const client = useQueryClient();
+  return useMutation<ResultadoDoLancamento, Error, TransactionCreate>({
+    mutationFn: async (input) => {
+      if (!input.client_key) throw new Error('Lancamento sem chave de idempotencia.');
+      try {
+        const transacao = await api.post<Transaction>('/transactions', input);
+        return { enfileirado: false, transacao };
+      } catch (erro) {
+        if (erro instanceof ApiError && erro.status === 0) {
+          await enfileirar(input);
+          return { enfileirado: true };
+        }
+        throw erro;
+      }
+    },
+    onSuccess: (resultado) => {
+      if (resultado.enfileirado) return;
+      client.invalidateQueries({ queryKey: ['transactions'] });
+      client.invalidateQueries({ queryKey: ['by-category'] });
+      client.invalidateQueries({ queryKey: ['dashboard'] });
+      client.invalidateQueries({ queryKey: ['forecast'] });
+      client.invalidateQueries({ queryKey: ['category-overview'] });
+    },
+  });
+}
+
+/** O que está esperando para subir, e o botão de tentar agora. */
+export function useFila() {
+  const client = useQueryClient();
+  const [itens, setItens] = useState<ItemDaFila[]>([]);
+  const [subindo, setSubindo] = useState(false);
+
+  useEffect(() => assinarFila(setItens), []);
+
+  async function subir(): Promise<ResultadoDaSubida> {
+    setSubindo(true);
+    try {
+      const resultado = await subirFila();
+      if (resultado.enviados > 0) {
+        client.invalidateQueries({ queryKey: ['transactions'] });
+        client.invalidateQueries({ queryKey: ['by-category'] });
+        client.invalidateQueries({ queryKey: ['dashboard'] });
+        client.invalidateQueries({ queryKey: ['forecast'] });
+        client.invalidateQueries({ queryKey: ['category-overview'] });
+      }
+      setItens(await listarFila());
+      return resultado;
+    } finally {
+      setSubindo(false);
+    }
+  }
+
+  return {
+    itens,
+    subindo,
+    subir,
+    descartar: async (id: string) => {
+      await descartar(id);
+      setItens(await listarFila());
+    },
+  };
 }

@@ -199,6 +199,33 @@ Entre com o e-mail e a senha que você escolheu na Etapa 3.
 
 ---
 
+## Etapa 5 (opcional) — Instalar o app no celular, para abrir com o PC desligado
+
+O Expo Go da Etapa 4 **não guarda o aplicativo no celular**: ele baixa o
+programa do seu computador cada vez que abre. Ótimo para testar, e é por isso que
+você não precisa instalar nada. Mas significa que, com o PC desligado, o app não
+abre — não há de onde baixar.
+
+Se você quiser **consultar os números na rua e lançar gasto em dinheiro na hora**,
+o app precisa estar instalado de verdade. Aí ele abre sozinho, mostra os números
+da última vez que falou com o PC (dizendo de quando são) e guarda os lançamentos
+para subir quando você chegar em casa.
+
+**No Android:** clique duas vezes em **`GERAR-APK-windows.bat`**. Ele conduz tudo
+e pede uma conta gratuita na Expo (quem compila é o serviço dela, na nuvem — fazer
+isso aqui exigiria uns 10 GB de programas). Leva uns 20 minutos, quase tudo fila.
+No fim, ele mostra um QR code com o link do arquivo e **o endereço do seu
+computador**, que você digita uma vez na tela de login do app instalado.
+
+**No iPhone não há caminho gratuito:** a Apple cobra US$ 99/ano para instalar
+aplicativo fora da App Store. Lá o Expo Go da Etapa 4 continua sendo o caminho,
+com o PC ligado.
+
+Detalhes, e o que funciona ou não sem o PC:
+[`docs/offline.md`](docs/offline.md).
+
+---
+
 ## No dia a dia, depois de tudo instalado
 
 Duplo clique em **`ABRIR-BBBC-windows.bat`**. Um arquivo só: ele liga o sistema
@@ -248,9 +275,17 @@ vai perguntar nada, só ligar.
 ## Perguntas que você provavelmente tem
 
 **Preciso deixar o computador ligado?**
-Enquanto quiser usar o app no celular, sim. O sistema roda na sua máquina, não
-na internet. Para usar de qualquer lugar, ele precisaria ficar hospedado — veja
-`docs/seguranca.md`.
+Para **lançar e consultar com os dados de agora**, sim: o sistema roda na sua
+máquina, não na internet. Com o app instalado no celular (Etapa 5), você
+consulta os números da última sincronização e lança gasto com o PC desligado —
+o lançamento sobe sozinho quando o PC voltar. O que não existe com o PC
+desligado é dado novo, porque é lá que ele mora. Para o sistema responder de
+qualquer lugar, ele precisaria ficar hospedado — veja `docs/seguranca.md`.
+
+**Tem como o sistema ligar junto com o Windows?**
+Tem: `LIGAR-COM-O-WINDOWS.bat`. Ele põe o sistema (banco e servidor) na
+inicialização, sem pedir administrador e sem abrir janela. O aplicativo não vai
+junto de propósito — ele é uma tela, e abrir uma aba a cada boot atrapalharia.
 
 **Aquela janela preta é perigosa?**
 Não. Ela só mostra o que está acontecendo. Se fechar sem querer, é só abrir o

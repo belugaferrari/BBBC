@@ -28,7 +28,7 @@ from app.services.categorization import (
     categorize,
     normalize,
 )
-from app.services.categorization_repository import load_rules
+from app.services.categorization_repository import categoria_a_definir, load_rules
 from app.services.importers.base import ParsedTransaction, fingerprint
 from app.services.importers.detect import parse_statement
 from app.services.socio import (
@@ -96,6 +96,12 @@ def build_preview(
             select(Category).where(Category.family_id.in_([family_id, None]))
         ).all()
     }
+    # Para onde vai o que nenhuma regra reconheceu. Fica fora do `if` do laco de
+    # proposito: sao duas consultas, uma vez cada, e nao uma por linha do extrato.
+    a_definir = {
+        direcao: categoria_a_definir(db, family_id, direcao)
+        for direcao in (TxDirection.SAIDA, TxDirection.ENTRADA)
+    }
 
     preview: list[dict] = []
     duplicates = 0
@@ -131,6 +137,9 @@ def build_preview(
             ),
             rules,
         )
+        # Sem regra que reconheca, a categoria sugerida e "A definir": melhor um
+        # lugar visivel para o pendente que categoria nenhuma.
+        sugerida = match.category_id if match else a_definir.get(tx.direction)
 
         preview.append(
             {
@@ -144,10 +153,13 @@ def build_preview(
                 "duplicate": duplicate_reason is not None,
                 "duplicate_reason": duplicate_reason,
                 "matched_transaction_id": str(equivalent.id) if equivalent else None,
-                "suggested_category_id": str(match.category_id) if match else None,
-                "suggested_category_name": (
-                    category_names.get(match.category_id) if match else None
-                ),
+                "suggested_category_id": str(sugerida) if sugerida else None,
+                "suggested_category_name": category_names.get(sugerida),
+                # A tela precisa distinguir as duas coisas: sugestao e um palpite
+                # com base em algo ("MERCADO X" -> Mercado), e "A definir" e a
+                # ausencia de palpite. Mostradas iguais, a segunda passaria por
+                # sugestao e seria confirmada sem ninguem olhar.
+                "suggested_is_pending": match is None,
                 "confidence": str(match.confidence) if match else None,
                 # marcado por padrao: o que nao e duplicado entra
                 "selected": duplicate_reason is None,

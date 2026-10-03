@@ -218,15 +218,20 @@ def test_corrigir_um_pix_em_setembro_resolve_o_de_outubro():
             headers=headers,
         ).json()
         with SessionLocal() as db:
-            diarista = str(
-                db.execute(
-                    text(
-                        "SELECT id FROM categories WHERE family_id = :f"
-                        " AND path = 'despesas.limpeza.diarista'"
-                    ),
-                    {"f": family_id},
-                ).scalar_one()
-            )
+
+            def categoria(caminho: str) -> str:
+                return str(
+                    db.execute(
+                        text(
+                            "SELECT id FROM categories WHERE family_id = :f"
+                            " AND path = CAST(:p AS ltree)"
+                        ),
+                        {"f": family_id, "p": caminho},
+                    ).scalar_one()
+                )
+
+            diarista = categoria("despesas.limpeza.diarista")
+            a_definir = categoria("despesas.a_definir")
 
         def lancar(dia: str, descricao: str):
             return client.post(
@@ -242,7 +247,11 @@ def test_corrigir_um_pix_em_setembro_resolve_o_de_outubro():
             ).json()
 
         setembro = lancar("2026-09-28", "PIX TRANSF KARINA 27 09")
-        assert setembro["category_id"] is None, "nenhuma regra devia adivinhar um PIX"
+        # Nenhuma regra devia adivinhar um PIX - e sem regra o lancamento vai
+        # para "A definir", que e onde ele fica visivel para ser corrigido.
+        assert setembro["category_id"] == a_definir, (
+            "sem regra, o PIX devia cair em 'A definir'"
+        )
 
         client.patch(
             f"/api/v1/transactions/{setembro['id']}",

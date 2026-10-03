@@ -28,6 +28,7 @@ import {
   useTransactions,
 } from '@/api/queries';
 import type { Category, Scope, Transaction } from '@/api/types';
+import { AvisoDeConexao } from '@/components/AvisoDeConexao';
 import { MonthPicker, mesAtualISO } from '@/components/MonthPicker';
 import { Card, ProgressBar, ScopeToggle, SectionTitle } from '@/components/ui';
 import { colors, layout, radius, spacing, typography } from '@/theme';
@@ -115,6 +116,7 @@ export function ExpensesScreen(): React.ReactElement {
   return (
     <View style={styles.screen}>
       <MonthPicker value={mes} onChange={setMes} />
+      <AvisoDeConexao />
 
       <View style={styles.toolbar}>
         <TextInput
@@ -146,7 +148,7 @@ export function ExpensesScreen(): React.ReactElement {
       {modo === 'lista' && (
         <Pressable onPress={() => setOnlyPending((v) => !v)} style={styles.filterChip}>
           <Text style={[styles.filterText, onlyPending && { color: colors.white }]}>
-            {onlyPending ? '✓ ' : ''}Só sem categoria
+            {onlyPending ? '✓ ' : ''}Só os pendentes
           </Text>
         </Pressable>
       )}

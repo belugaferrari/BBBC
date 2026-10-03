@@ -75,27 +75,71 @@ oferecem isso como opcao 2.
 
 ## Caminho 2: um APK instalado no aparelho
 
-Se você quiser o app instalado, sem o Expo Go e sem o terminal aberto, o build
-sai pelo **EAS Build** (serviço da própria Expo). O perfil já está pronto em
-`eas.json`:
+É o caminho de quem quer **abrir o aplicativo com o PC desligado**. No Expo Go
+isso não existe: o código vem do computador a cada abertura, então com o PC
+desligado o aplicativo não sobe — e a cópia local dos números e a fila de
+lançamentos ficam dentro de um aplicativo que não subiu (ver
+[`offline.md`](offline.md)).
+
+### O jeito curto
+
+Clique duas vezes em **`GERAR-APK-windows.bat`**, na pasta do sistema. Ele
+conduz tudo: confere o Node, pede o login da Expo (conta gratuita), manda
+compilar e, no fim, imprime **o endereço desta máquina** para você digitar no
+celular. São uns 20 minutos, e a maior parte é fila do serviço.
+
+Antes de clicar, rode o **ATUALIZAR** uma vez: o APK é feito a partir do código
+que está nesta máquina, e gerar antes de atualizar produziria um aplicativo sem
+as novidades.
+
+### O que o script faz, para quem quiser conferir
 
 ```bash
-npm install -g eas-cli
-eas login                                        # conta gratuita
-eas build --platform android --profile preview   # devolve um link de .apk
+cd mobile
+set EAS_NO_VCS=1
+npx eas-cli@latest login                                     # conta gratuita
+npx eas-cli@latest build --platform android --profile preview
 ```
 
-O build roda na nuvem da Expo e leva uns 15 minutos. No fim, sai uma URL: abra
-no celular, baixe e instale (o Android vai pedir para permitir "instalar de
-fonte desconhecida"). O plano gratuito tem fila e um número limitado de builds
-por mês — suficiente para uso pessoal.
+Três detalhes que custam tempo descobrir sozinho, e por isso estão resolvidos no
+script e no projeto:
 
-**Antes de instalar, decida onde a API vai rodar.** Um app instalado não tem
-servidor do Expo de onde deduzir o endereço. Por isso a tela de login tem o
-campo **"Configurar servidor"**: digite ali `192.168.0.10:8000` (o IP da sua
-máquina) e o app guarda no Keychain/Keystore. Enquanto o Docker estiver rodando
-em casa e o celular no mesmo Wi-Fi, funciona. Fora de casa, só com a API
-hospedada — veja o checklist em `docs/seguranca.md`.
+- **`npx`, e não `npm install -g eas-cli`.** A instalação global no Windows pede
+  administrador ou deixa o comando fora do PATH da janela atual — o erro seguinte
+  é "eas não é reconhecido" num terminal onde a instalação acabou de dizer que
+  deu certo.
+- **`EAS_NO_VCS=1`.** A pasta instalada nasceu de um zip, não é um repositório
+  git, e sem isso o EAS se recusa a enviar o projeto.
+- **HTTP na rede local.** O Android bloqueia conexão sem HTTPS em aplicativo
+  instalado, e o servidor de casa é `http://192.168.x.x:8000`. Sem tratar isso, o
+  login falha com um erro de rede que não diz a causa. O projeto já carrega o
+  `expo-build-properties` com `usesCleartextTraffic` ligado (e o equivalente no
+  iOS, `NSAllowsLocalNetworking`), em `mobile/app.json`.
+
+### Depois de instalar: o endereço do servidor
+
+Um aplicativo instalado não tem servidor do Expo de onde deduzir o endereço, e o
+padrão (`localhost`) no celular é o próprio aparelho. Por isso, no aplicativo
+instalado, **o campo do servidor abre sozinho na tela de login**, com a
+explicação. Digite o IP desta máquina e a porta:
+
+```
+192.168.0.10:8000
+```
+
+O script imprime o número certo no fim; o INICIAR-APP também mostra, no passo 3.
+Fica guardado no Keychain/Keystore — você não digita de novo. Enquanto o sistema
+estiver rodando em casa e o celular no mesmo Wi-Fi, funciona igual ao Expo Go;
+com o PC desligado, funciona como descrito em [`offline.md`](offline.md). Fora de
+casa com o PC desligado, só com a API hospedada — veja o checklist em
+[`seguranca.md`](seguranca.md).
+
+**Abra o aplicativo em casa uma vez antes de precisar dele na rua:** a cópia
+local só existe depois da primeira conversa com o PC.
+
+**A cada atualização que mexa no aplicativo, gere o APK de novo** e instale por
+cima. O ATUALIZAR troca o código desta máquina; o que está instalado no celular
+continua como estava.
 
 ### iPhone
 

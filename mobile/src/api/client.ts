@@ -18,6 +18,7 @@
 import Constants from 'expo-constants';
 
 import { cofre } from './cofre';
+import { marcarOffline, marcarOnline } from './conexao';
 import { isLocalHostUrl, normalizeServerUrl, withLanHost } from './serverUrl';
 import type { AuthToken } from './types';
 
@@ -96,9 +97,16 @@ async function request<T>(
       },
     });
   } catch {
-    // erro de rede nao tem status; a causa quase sempre e o endereco do servidor
+    // Erro de rede nao tem status. Status 0 e o sinal que o resto do aplicativo
+    // le como "o servidor nao respondeu": e ele que manda o lancamento para a
+    // fila em vez de perder o que foi digitado.
+    marcarOffline();
     throw new ApiError(0, `Nao consegui falar com o servidor em ${base}.`);
   }
+
+  // Respondeu - inclusive se respondeu erro. O que importa aqui e que houve
+  // conversa: um 404 prova que o servidor esta de pe tanto quanto um 200.
+  marcarOnline();
 
   if (response.status === 401) {
     await setToken(null);
@@ -118,6 +126,8 @@ export const api = {
     request<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
+  put: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   // `del` e nao `delete`: delete e palavra reservada em JavaScript
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };

@@ -96,9 +96,17 @@ export async function uploadStatement(
   return body as StatementImport;
 }
 
+/**
+ * Grava o que foi conferido.
+ *
+ * `categoriasEscolhidas` leva as trocas feitas na própria conferência — a
+ * categoria por linha, antes de existir lançamento. Sem isso só restaria gravar
+ * errado e corrigir depois, na lista de gastos, uma por uma.
+ */
 export async function confirmImport(
   importId: string,
   selectedIndexes: number[],
+  categoriasEscolhidas?: Record<number, string>,
 ): Promise<StatementImport> {
   const base = await getServerUrl();
   const token = await getToken();
@@ -109,7 +117,12 @@ export async function confirmImport(
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ selected_indexes: selectedIndexes }),
+    body: JSON.stringify({
+      selected_indexes: selectedIndexes,
+      ...(categoriasEscolhidas && Object.keys(categoriasEscolhidas).length > 0
+        ? { category_overrides: categoriasEscolhidas }
+        : {}),
+    }),
   });
 
   const body = await response.json().catch(() => ({}));

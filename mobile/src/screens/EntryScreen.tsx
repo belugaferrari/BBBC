@@ -19,7 +19,9 @@ import {
   useAccounts,
   useCategories,
   useCreateAccount,
-  useCreateTransaction,
+  useCreateDonor,
+  useDonors,
+  useLancar,
   useMe,
   useMembers,
 } from '@/api/queries';
@@ -42,21 +44,45 @@ interface Folha {
    * lançamento morreria num 422 que o usuário não teria como resolver na tela.
    */
   exigeNota: string | null;
+  /**
+   * A categoria é doação recebida: entra na conta, mas não é renda da família.
+   *
+   * Herdada como a exigência de explicação: uma subcategoria criada à mão dentro
+   * de "Doações recebidas" nasce sem a marca, e sem descer a herança o
+   * lançamento viraria renda em silêncio - que é justamente o erro que o
+   * controle de doação existe para evitar.
+   */
+  ehDoacao: boolean;
 }
 
 /** Achata a árvore guardando o caminho legível: "Casa › Mercado". */
-function folhas(categorias: Category[], prefixo: string[] = [], notaHerdada: string | null = null): Folha[] {
+export function folhas(
+  categorias: Category[],
+  prefixo: string[] = [],
+  notaHerdada: string | null = null,
+  doacaoHerdada = false,
+): Folha[] {
   return categorias.flatMap((categoria) => {
     const caminho = [...prefixo, categoria.name];
     const exigeNota = notaHerdada ?? (categoria.requires_note ? categoria.name : null);
-    const filhas = folhas(categoria.children, caminho, exigeNota);
+    const ehDoacao =
+      doacaoHerdada || (categoria.kind === 'RECEITA' && categoria.counts_as_income === false);
+    const filhas = folhas(categoria.children, caminho, exigeNota, ehDoacao);
     // o nó só é escolhível quando é ponta da árvore: o pai de "Mercado" e
     // "Padaria" é "Alimentação", e lançar em "Alimentação" solta é o que a gente
     // quer evitar
     return filhas.length > 0
       ? filhas
-      : [{ categoria, caminho: caminho.join(' › '), exigeNota }];
+      : [{ categoria, caminho: caminho.join(' › '), exigeNota, ehDoacao }];
   });
+}
+
+/** Os grupos de despesa, para dizer PARA QUE a doação foi dada. */
+export function gruposDeDespesa(categorias: Category[]): Category[] {
+  const despesas = categorias.filter((c) => c.kind === 'DESPESA');
+  // um nível abaixo da raiz: "Educação", não "Educação › Escola". A doação é dada
+  // para a escola das meninas, e o abatimento vale para a subárvore inteira.
+  return despesas.flatMap((raiz) => (raiz.children.length > 0 ? raiz.children : [raiz]));
 }
 
 function hojeISO(): string {
@@ -108,8 +134,10 @@ export function EntryScreen(): React.ReactElement {
   const { data: members } = useMembers();
   const { data: categories } = useCategories();
   const { data: eu } = useMe();
-  const lancar = useCreateTransaction();
+  const lancar = useLancar();
   const criarConta = useCreateAccount();
+  const { data: doadores } = useDonors();
+  const criarDoador = useCreateDonor();
 
   const [direcao, setDirecao] = useState<Direcao>('SAIDA');
   const [valor, setValor] = useState('');
@@ -121,6 +149,10 @@ export function EntryScreen(): React.ReactElement {
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
   const [buscaCategoria, setBuscaCategoria] = useState('');
   const [nota, setNota] = useState('');
+  const [doadorId, setDoadorId] = useState<string | null>(null);
+  const [destinoId, setDestinoId] = useState<string | null>(null);
+  const [novoDoador, setNovoDoador] = useState('');
+  const [pedindoDoador, setPedindoDoador] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [feito, setFeito] = useState<string | null>(null);
 
@@ -179,6 +211,8 @@ export function EntryScreen(): React.ReactElement {
   );
   const notaExigidaPor = categoriaEscolhida?.exigeNota ?? null;
   const exigeNota = notaExigidaPor !== null;
+  const ehDoacao = direcao === 'ENTRADA' && (categoriaEscolhida?.ehDoacao ?? false);
+  const destinos = useMemo(() => gruposDeDespesa(categories ?? []), [categories]);
 
   const quantia = paraValor(valor);
   const podeGravar =
@@ -214,7 +248,7 @@ export function EntryScreen(): React.ReactElement {
     setErro(null);
     setFeito(null);
     try {
-      await lancar.mutateAsync({
+      const resultado = await lancar.mutateAsync({
         client_key: chave.current,
         account_id: contaEscolhida,
         owner_member_id: quemEscolhido,
@@ -225,9 +259,23 @@ export function EntryScreen(): React.ReactElement {
         description: descricao.trim() || categoriaEscolhida?.categoria.name || 'Lançamento manual',
         ...(categoriaId ? { category_id: categoriaId } : {}),
         ...(nota.trim() ? { notes: nota.trim() } : {}),
+        // só vão quando a categoria é doação: num salário estes campos não
+        // querem dizer nada, e preenchê-los mentiria no relatório do ano
+        ...(ehDoacao && doadorId ? { donor_id: doadorId } : {}),
+        ...(ehDoacao && destinoId ? { donation_for_category_id: destinoId } : {}),
       });
+      const oQueFoi = ehDoacao
+        ? `Doação de ${money(quantia)} em ${paraBR(dataISO)}`
+        : `${direcao === 'SAIDA' ? 'Gasto' : 'Entrada'} de ${money(quantia)} em ${paraBR(dataISO)}`;
       setFeito(
-        `${direcao === 'SAIDA' ? 'Gasto' : 'Entrada'} de ${money(quantia)} em ${paraBR(dataISO)}.`,
+        resultado.enfileirado
+          ? // Sem servidor, o lançamento fica no aparelho. Dizer "gravado" aqui
+            // seria mentira pequena com consequência grande: ele ainda não está
+            // nas contas do mês, e quem não sabe disso não procura depois.
+            `${oQueFoi}, guardado aqui no celular. Sobe sozinho quando o PC voltar.`
+          : ehDoacao
+            ? `${oQueFoi}. Não entra na renda do mês.`
+            : `${oQueFoi}.`,
       );
       // só o que muda de um lançamento para o outro é limpo
       setValor('');
@@ -396,8 +444,8 @@ export function EntryScreen(): React.ReactElement {
               ) : null}
             </ScrollView>
             <Text style={styles.explica}>
-              Pode deixar em branco: o sistema tenta adivinhar pela descrição, e o que ele não
-              souber aparece em Gastos para você corrigir.
+              Pode deixar em branco: o sistema tenta adivinhar pela descrição e, quando não sabe,
+              guarda em “A definir” — que aparece no Resumo cobrando, até você dizer o que foi.
             </Text>
           </>
         )}
@@ -413,6 +461,86 @@ export function EntryScreen(): React.ReactElement {
           />
         ) : null}
       </Card>
+
+      {ehDoacao ? (
+        <>
+          <SectionTitle>Doação</SectionTitle>
+          <Card>
+            <Text style={styles.explica}>
+              Este dinheiro entra na conta, mas não conta como renda da família — e o gasto que
+              ele cobrir sai do consumo da casa. É a diferença entre a casa gastar e a casa
+              receber para gastar.
+            </Text>
+
+            <Text style={styles.rotulo}>Quem depositou</Text>
+            <View style={styles.opcoes}>
+              {(doadores ?? []).map((doador) => (
+                <Chip
+                  key={doador.id}
+                  active={doador.id === doadorId}
+                  onPress={() => setDoadorId(doador.id === doadorId ? null : doador.id)}
+                >
+                  {doador.name}
+                </Chip>
+              ))}
+              <Chip active={pedindoDoador} onPress={() => setPedindoDoador(!pedindoDoador)}>
+                ＋ Novo
+              </Chip>
+            </View>
+            {pedindoDoador ? (
+              <>
+                <Field
+                  label="Nome de quem doa"
+                  value={novoDoador}
+                  onChangeText={setNovoDoador}
+                  placeholder="Vera, José…"
+                />
+                <Botao
+                  tom="secundario"
+                  disabled={!novoDoador.trim() || criarDoador.isPending}
+                  onPress={async () => {
+                    setErro(null);
+                    try {
+                      const criado = await criarDoador.mutateAsync({ name: novoDoador.trim() });
+                      setDoadorId(criado.id);
+                      setNovoDoador('');
+                      setPedindoDoador(false);
+                    } catch (err) {
+                      setErro(err instanceof Error ? err.message : 'Nao consegui cadastrar.');
+                    }
+                  }}
+                >
+                  {criarDoador.isPending ? 'Cadastrando…' : 'Cadastrar quem doa'}
+                </Botao>
+              </>
+            ) : null}
+            {!doadorId ? (
+              <Text style={styles.explica}>
+                Sem dizer quem depositou, a doação entra no total do ano, mas fica sem dono — e o
+                limite de isenção do ITCMD é contado por doador.
+              </Text>
+            ) : null}
+
+            <Text style={styles.rotulo}>Para que foi dada</Text>
+            <View style={styles.opcoes}>
+              {destinos.map((destino) => (
+                <Chip
+                  key={destino.id}
+                  active={destino.id === destinoId}
+                  onPress={() => setDestinoId(destino.id === destinoId ? null : destino.id)}
+                >
+                  {destino.name}
+                </Chip>
+              ))}
+            </View>
+            <Text style={styles.explica}>
+              {destinoId
+                ? 'O gasto desta categoria sai do consumo da casa, até o valor doado no mês.'
+                : 'Opcional. Sem destino, a doação só deixa de ser renda — o gasto que ela pagou continua aparecendo como gasto da casa.'}
+            </Text>
+          </Card>
+        </>
+      ) : null}
 
       <Botao onPress={gravar} disabled={!podeGravar}>
         {lancar.isPending

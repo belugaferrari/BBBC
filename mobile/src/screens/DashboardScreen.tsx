@@ -30,6 +30,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useDashboard, useEvolucao } from '@/api/queries';
+import { AvisoDeConexao } from '@/components/AvisoDeConexao';
 import type { Scope } from '@/api/types';
 import { MonthPicker, mesAtualISO } from '@/components/MonthPicker';
 import {
@@ -62,7 +63,12 @@ export function DashboardScreen(): React.ReactElement {
   // ele dentro, um mes que ainda esta carregando - ou que nao carregou - deixava
   // a tela sem nenhuma forma de sair dali. Quem abrisse um mes vazio ficava
   // presos nele, sem botao nenhum. O seletor e o que da para fazer sempre.
-  const cabecalho = <MonthPicker value={month} onChange={setMonth} />;
+  const cabecalho = (
+    <>
+      <MonthPicker value={month} onChange={setMonth} />
+      <AvisoDeConexao />
+    </>
+  );
 
   if (isLoading) {
     return (
@@ -75,7 +81,12 @@ export function DashboardScreen(): React.ReactElement {
     );
   }
 
-  if (error || !data) {
+  // `error` sozinho nao manda mais na tela: com a copia local do aparelho, a
+  // consulta pode ter falhado AGORA e ainda haver numeros de antes para mostrar.
+  // Trocar esses numeros por uma tela de erro seria jogar fora a unica coisa util
+  // que o aplicativo tem offline - quem avisa que eles sao de antes, e de quando,
+  // e a faixa no cabecalho.
+  if (!data) {
     return (
       <ScrollView
         style={styles.screen}
@@ -87,16 +98,22 @@ export function DashboardScreen(): React.ReactElement {
         {cabecalho}
         <Card>
           <Text style={styles.error}>
-            Nao consegui carregar {monthLabel(month)}. Puxe a tela para baixo para
-            tentar de novo, ou escolha outro mes acima.
+            {error
+              ? `Nao consegui carregar ${monthLabel(month)}, e ainda nao tenho copia deste mes no aparelho. Puxe a tela para baixo para tentar de novo, ou escolha outro mes acima.`
+              : `Nao consegui carregar ${monthLabel(month)}. Puxe a tela para baixo para tentar de novo, ou escolha outro mes acima.`}
           </Text>
         </Card>
       </ScrollView>
     );
   }
 
-  const { cashflow, balances, budget_caps: caps, alerts } = data;
+  const { cashflow, balances, budget_caps: caps, alerts, pendentes } = data;
   const net = Number(cashflow.net);
+  // Doação recebida: entrou na conta, mas não é renda da família. Fica em linha
+  // separada - somada à renda, inflaria o mês e a taxa de poupança, e é o tipo
+  // de número que depois ninguém desconfia.
+  const doacoes = Number(cashflow.doacoes);
+  const cobriu = Number(cashflow.doacoes_aplicadas);
 
   return (
     <ScrollView
@@ -120,18 +137,30 @@ export function DashboardScreen(): React.ReactElement {
       </View>
 
       <View style={styles.tiles}>
-        <StatTile label="Entrou" value={money(cashflow.inflow)} />
+        <StatTile
+          label={doacoes > 0 ? 'Renda' : 'Entrou'}
+          value={money(doacoes > 0 ? cashflow.renda : cashflow.inflow)}
+          hint={doacoes > 0 ? `+ ${money(doacoes)} de doação` : undefined}
+        />
         <StatTile
           label="Gastou"
-          value={money(cashflow.consumo)}
+          value={money(cobriu > 0 ? cashflow.consumo_proprio : cashflow.consumo)}
           tone="alert"
           hint={
-            Number(cashflow.patrimonio) > 0
-              ? `+ ${money(cashflow.patrimonio)} viraram patrimônio`
-              : undefined
+            cobriu > 0
+              ? `${money(cobriu)} foram pagos com doação`
+              : Number(cashflow.patrimonio) > 0
+                ? `+ ${money(cashflow.patrimonio)} viraram patrimônio`
+                : undefined
           }
         />
       </View>
+      {doacoes > 0 ? (
+        <Text style={styles.avisoDoSaldo}>
+          A doação entrou na conta, mas não conta como renda — e o gasto que ela cobriu saiu do
+          que a casa gastou. Em Mais › Doações recebidas está a soma do ano, por quem deu.
+        </Text>
+      ) : null}
       <View style={styles.tiles}>
         <StatTile
           label={mesAtual ? 'Disponível' : 'Disponível hoje'}
@@ -149,6 +178,21 @@ export function DashboardScreen(): React.ReactElement {
           Estes dois são o saldo de hoje, e não o de {monthLabel(month)} — o saldo
           sai da conta no estado em que ela está agora, não de uma foto do passado.
         </Text>
+      ) : null}
+
+      {pendentes && pendentes.quantos > 0 ? (
+        <Card>
+          <Text style={styles.pendentesTitulo}>
+            {pendentes.quantos === 1
+              ? '1 lançamento esperando categoria'
+              : `${pendentes.quantos} lançamentos esperando categoria`}
+          </Text>
+          <Text style={styles.pendentesValor}>{money(pendentes.total)}</Text>
+          <Text style={styles.pendentesHint}>
+            Estão em “A definir”: contam no gasto do mês, mas ainda não dizem em quê. Na aba
+            Gastos, o filtro “só os pendentes” mostra só eles.
+          </Text>
+        </Card>
       ) : null}
 
       {mesAtual && alerts.length > 0 && (
@@ -208,6 +252,9 @@ export function DashboardScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  pendentesTitulo: { ...typography.body, color: colors.text, fontWeight: '700' },
+  pendentesValor: { ...typography.title, color: colors.red, marginTop: 2 },
+  pendentesHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, paddingBottom: spacing.xl, ...layout.coluna },
   center: {

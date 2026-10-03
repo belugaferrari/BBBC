@@ -20,10 +20,26 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 1.6 | Há **imóvel alugado**, pensão judicial, PGBL ou plano de previdência? | Categorias e regras existem, sem valores. PGBL limitado a 12% da renda tributável. |
 | 1.7 | **Confirmar a tabela oficial de 2026.** A regra nova (isenção ampliada + redutor progressivo) está implementada de forma parametrizada, mas as faixas de 2026 hoje são uma **cópia das de 2025** e o ano está marcado `PROVISORIO`. | Ver `db/migrations/0002_seed_catalog.sql`. Corrigir é um `INSERT`, sem deploy. |
 | 1.8 | Vocês têm **contador**? Ele deveria ter acesso de leitura (papel `CONTADOR` já existe no schema)? | Sem acesso criado. |
+| 1.9 | **Qual o estado e o limite anual de isenção do ITCMD** que vale para as doações da Vera e do José? | Nada preenchido, de propósito — ver abaixo. |
 
 > Sobre 1.7: o motor não chuta. Ano sem tabela cadastrada devolve erro explícito
 > em vez de calcular zero, e ano `PROVISORIO` volta com aviso na resposta da API.
 > Nada do que sai daqui substitui a conferência do contador.
+
+> **Sobre 1.9, porque são dois impostos e confundi-los é o erro comum.** No
+> **imposto de renda** (federal) doação recebida **não paga nada**: é declarada em
+> "Rendimentos Isentos e Não Tributáveis", e o sistema já leva para lá sozinho,
+> pela categoria. O limite de isenção de que você se lembrava é do **ITCMD**, que
+> é imposto **estadual** — a alíquota e o limite mudam de estado para estado e são
+> corrigidos todo ano, e não existe um número nacional. Por isso o campo nasce
+> **vazio** em Mais › Doações recebidas, e a tela avisa que ele está vazio em vez
+> de vir com um número pronto: um valor chutado tranquilizaria sobre um limite que
+> pode não ser o do seu estado, o que é pior que não dizer nada. Preenchido, o
+> sistema soma **por doador e por ano** (é assim que o limite conta) e avisa a
+> partir de 80% do teto. E a **escola continua dedutível** por quem a pagou e
+> declara a dependente — receber doação isenta não tira esse direito; se os avós
+> pagassem a escola direto, a dedução seria deles, e eles não declaram as meninas.
+> O sistema soma e avisa: não apura nem recolhe nada.
 
 ## 2. Família, contas e privacidade
 

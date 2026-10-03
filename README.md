@@ -94,6 +94,7 @@ docs/
   seguranca.md            o que está protegido e o que falta antes de dado real
   notificacoes.md         como os avisos chegam, e o que depende de você
   rodando-no-celular.md   como testar no seu aparelho pelo Expo Go
+  offline.md              o que funciona com o PC desligado, e o que não funciona
   perguntas-abertas.md    o que ainda precisa ser definido
 ```
 

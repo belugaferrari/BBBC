@@ -35,6 +35,10 @@ class CategoryOut(ORMModel):
     color: str | None = None
     requires_note: bool = False
     counts_as_expense: bool = True
+    # false na doacao recebida: entra na conta, mas nao e renda da familia. A
+    # tela usa isto para pedir quem doou e para que, em vez de tratar a entrada
+    # como salario.
+    counts_as_income: bool = True
 
 
 class CategoryNode(CategoryOut):
@@ -86,6 +90,12 @@ class TransactionCreate(BaseModel):
     ir_deduction_type_override: IRDeductionType | None = None
     ir_deduction_member_id: UUID | None = None
     ir_document_number: str | None = None
+    # Quem doou. O limite de isencao do ITCMD e por doador e por ano, entao a
+    # doacao sem dono nao da para medir contra limite nenhum.
+    donor_id: UUID | None = None
+    # Para que a doacao foi dada. Permite abater do consumo da familia o que ela
+    # cobriu - a escola paga pelos avos nao e gasto da casa.
+    donation_for_category_id: UUID | None = None
 
 
 class TransactionUpdate(BaseModel):
@@ -98,6 +108,8 @@ class TransactionUpdate(BaseModel):
     ir_deduction_type_override: IRDeductionType | None = None
     ir_deduction_member_id: UUID | None = None
     ir_document_number: str | None = None
+    donor_id: UUID | None = None
+    donation_for_category_id: UUID | None = None
     # dispara o aprendizado de regra de fornecedor
     learn_rule: bool = True
 
@@ -115,4 +127,6 @@ class TransactionOut(ORMModel):
     source: TxSource
     notes: str | None = None
     ir_deduction_member_id: UUID | None = None
+    donor_id: UUID | None = None
+    donation_for_category_id: UUID | None = None
     auto_confidence: Decimal | None = None
