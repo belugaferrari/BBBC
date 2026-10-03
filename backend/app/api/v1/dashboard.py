@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentMember, DbSession, scope_member_id
 from app.models import Alert
+from app.services.evolucao import evolucao_do_mes
 from app.services.projection import budget_status
 from app.services.queries import (
     consolidated_balances,
@@ -71,3 +72,21 @@ def dashboard(
             for a in alerts
         ],
     }
+
+
+@router.get("/evolucao")
+def evolucao(
+    current: CurrentMember,
+    db: DbSession,
+    month: date | None = None,
+    scope: str = Query("familia", pattern="^(familia|individual)$"),
+) -> dict:
+    """O gasto acumulado dia a dia, com o mes passado, o ano passado e a meta.
+
+    Responde a pergunta que se faz no dia 12 do mes - "estou gastando rapido
+    demais?" - que o total sozinho nao responde: ritmo so aparece comparado.
+    """
+    reference = (month or date.today()).replace(day=1)
+    return evolucao_do_mes(
+        db, current.family_id, reference, scope_member_id(current, scope)
+    )

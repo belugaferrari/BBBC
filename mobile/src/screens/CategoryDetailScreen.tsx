@@ -45,7 +45,13 @@ import {
   StatTile,
 } from '@/components/ui';
 import { colors, layout, spacing, typography } from '@/theme';
-import { money, percent } from '@/theme/format';
+import { money, monthLabel, percent } from '@/theme/format';
+
+/** "2026-09-30" -> "30/09/2026" */
+function paraDiaBR(iso: string): string {
+  const [ano, mes, dia] = iso.slice(0, 10).split('-');
+  return `${dia}/${mes}/${ano}`;
+}
 
 type Params = { Categoria: { id: string; nome: string; mes: string } };
 
@@ -104,10 +110,21 @@ export function CategoryDetailScreen(): React.ReactElement {
     }
     setErro(null);
     try {
-      await salvarMeta.mutateAsync({ category_id: params.id, amount: valor });
+      const fim = await salvarMeta.mutateAsync({
+        category_id: params.id,
+        amount: valor,
+        // o mês que está na tela, e não o de hoje: quem olha setembro e muda a
+        // meta está mudando a de setembro em diante
+        starts_on: mes,
+      });
       setEditandoMeta(false);
       setMeta('');
-      setRecado(`Meta de ${money(valor)} por mês guardada.`);
+      setRecado(
+        fim.versionou && fim.valia_antes && fim.ate
+          ? `Meta de ${money(valor)} a partir de ${monthLabel(mes)}. ` +
+            `Os meses até ${paraDiaBR(fim.ate)} continuam com ${money(fim.valia_antes)}.`
+          : `Meta de ${money(valor)} por mês guardada.`,
+      );
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Nao consegui guardar a meta.');
     }
@@ -117,8 +134,13 @@ export function CategoryDetailScreen(): React.ReactElement {
     if (!data?.cap) return;
     setErro(null);
     try {
-      await apagarMeta.mutateAsync(data.cap.id);
-      setRecado('Meta apagada. O gasto continua sendo contado.');
+      const fim = await apagarMeta.mutateAsync({ id: data.cap.id, month: mes });
+      setRecado(
+        fim.encerrada && fim.valeu_ate
+          ? `Sem meta a partir de ${monthLabel(mes)}. ` +
+            `Os meses até ${paraDiaBR(fim.valeu_ate)} continuam com a meta que tinham.`
+          : 'Meta apagada. O gasto continua sendo contado.',
+      );
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Nao consegui apagar a meta.');
     }
@@ -252,7 +274,7 @@ export function CategoryDetailScreen(): React.ReactElement {
               placeholder={valorMeta > 0 ? String(valorMeta).replace('.', ',') : '0,00'}
               keyboardType="decimal-pad"
               autoFocus
-              ajuda="A meta soma esta categoria e tudo o que está dentro dela."
+              ajuda={`Vale a partir de ${monthLabel(mes)}. Soma esta categoria e tudo o que está dentro dela — os meses já fechados continuam com a meta que tinham.`}
             />
             <Botao onPress={gravarMeta} disabled={salvarMeta.isPending}>
               {salvarMeta.isPending ? 'Guardando…' : 'Guardar meta'}

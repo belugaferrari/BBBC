@@ -10,6 +10,7 @@ import type {
   CardSummary,
   CategoryAnalysis,
   CategoryOverview,
+  Evolucao,
   BenchmarkEvolution,
   CardPrograms,
   Forecast,
@@ -51,6 +52,7 @@ export const queryKeys = {
   categoryAnalysis: (id: string, month: string) => ['category-analysis', id, month] as const,
   budgetCaps: (month: string) => ['budget-caps', month] as const,
   cardSummary: (month: string) => ['card-summary', month] as const,
+  evolucao: (month: string, scope: string) => ['evolucao', month, scope] as const,
   checklist: (month: string) => ['statement-checklist', month] as const,
 };
 
@@ -165,6 +167,14 @@ export function useCreateTransaction() {
       client.invalidateQueries({ queryKey: ['dashboard'] });
       client.invalidateQueries({ queryKey: ['forecast'] });
     },
+  });
+}
+
+/** O gasto acumulado dia a dia, com o mês passado, o ano passado e a meta. */
+export function useEvolucao(month: string, scope: Scope) {
+  return useQuery({
+    queryKey: queryKeys.evolucao(month, scope),
+    queryFn: () => api.get<Evolucao>('/dashboard/evolucao', { month, scope }),
   });
 }
 
@@ -350,20 +360,45 @@ export function useDeleteCategory() {
   });
 }
 
-/** Salvar a meta. Salvar de novo substitui a que havia, em vez de empilhar. */
+/**
+ * Salvar a meta A PARTIR do mês escolhido.
+ *
+ * O `starts_on` não é opcional na prática: sem ele o servidor assume o mês de
+ * hoje, e quem está olhando setembro acabaria mudando a meta de outubro. A tela
+ * manda sempre o mês que está na tela.
+ *
+ * Mudar o valor não reescreve o passado — a meta anterior é encerrada no fim do
+ * mês anterior e uma nova começa. A resposta diz se foi isso (`versionou`) e
+ * quanto valia antes, para a tela poder contar.
+ */
 export function useSaveBudgetCap() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { category_id: string; amount: number; member_id?: string }) =>
-      api.post<{ id: string; substituiu: boolean }>('/budget-caps', input),
+    mutationFn: (input: {
+      category_id: string;
+      amount: number;
+      starts_on: string;
+      member_id?: string;
+    }) =>
+      api.post<{
+        id: string;
+        substituiu: boolean;
+        versionou: boolean;
+        valia_antes?: string;
+        ate?: string;
+      }>('/budget-caps', input),
     onSuccess: () => invalidarCategorias(client),
   });
 }
 
+/** Tirar a meta a partir do mês escolhido — os meses anteriores ficam com ela. */
 export function useDeleteBudgetCap() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.del<{ apagada: boolean }>(`/budget-caps/${id}`),
+    mutationFn: (input: { id: string; month: string }) =>
+      api.del<{ apagada: boolean; encerrada: boolean; valeu_ate?: string }>(
+        `/budget-caps/${input.id}?month=${input.month}`,
+      ),
     onSuccess: () => invalidarCategorias(client),
   });
 }
