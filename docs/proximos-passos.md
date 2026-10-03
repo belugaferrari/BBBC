@@ -320,3 +320,40 @@ Metro na 8081, por socket, para não depender do nome de cmdlet de rede nenhum).
 Avisa logo que será preciso fechar e abrir, e no fim, em vez de oferecer abrir,
 dá os passos numerados conforme o que achou aberto. Nada de dado se perde em
 nenhum momento — o banco não mora na pasta.
+
+## A janela que abria e fechava
+
+Ele clicou no `ABRIR-BBBC`, a janela do sistema piscou e sumiu, e a janela de
+espera ficou enfileirando pontinhos. Dois defeitos, somados.
+
+### O caminho ia sem aspas
+
+O `abrir-tudo.ps1` abria a janela do sistema com
+`Start-Process powershell -ArgumentList @('-File', $caminho)`. O `-ArgumentList`
+junta a lista num único texto de linha de comando e **não põe aspas em nada** —
+então, com a pasta num caminho que tenha espaço, o PowerShell do outro lado
+recebe o caminho picado:
+
+```
+The argument 'C:\Users\...\OneDrive\Área' is not recognized as the
+name of a script file.
+```
+
+Ele imprime o modo de usar, sai com código 64, e numa janela recém-aberta isso
+aparece como um piscar. No Windows em português com OneDrive a Área de Trabalho
+tem dois espaços no caminho, então era quase garantido. Os `.bat` nunca sofreram
+disso porque o `cmd` passa `"%~dp0scripts\..."` entre aspas.
+
+### E a janela de espera não percebia
+
+Ela só olhava o relógio: quinze minutos de pontinhos para uma janela que já não
+existia. Agora guarda o processo (`-PassThru`) e para no instante em que ele
+morre — dois segundos, com uma mensagem que diz o que fazer. E, passados 45
+segundos sem resposta, manda olhar a outra janela na barra de tarefas, dizendo o
+que procurar lá (instalação correndo, pergunta parada, ou erro em vermelho).
+
+### Erro em janela que fecha é erro perdido
+
+Todos os `.bat` ganharam `pause` no fim. Sem ele, qualquer erro que mate o
+PowerShell antes de o script chegar ao próprio "aperte Enter" fecha a janela
+levando a mensagem junto — e o que se vê é só um piscar.
