@@ -9,7 +9,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 import { useTaxAssessment } from '@/api/queries';
 import type { TaxModelResult } from '@/api/types';
 import { Card, MoneyValue, SectionTitle, StatTile } from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, layout, radius, spacing, typography } from '@/theme';
 import { money, percent } from '@/theme/format';
 
 const DEDUCTION_LABELS: Record<string, string> = {
@@ -145,7 +145,7 @@ function Row({ label, value }: { label: string; value: string }): React.ReactEle
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: spacing.xl },
+  content: { padding: spacing.md, paddingBottom: spacing.xl, ...layout.coluna },
   center: {
     flex: 1,
     backgroundColor: colors.background,

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type {
   Account,
+  AccountCreate,
   BenchmarkEvolution,
   CardPrograms,
   Forecast,
@@ -22,9 +23,11 @@ import type {
   Scope,
   TaxAssessment,
   Transaction,
+  TransactionCreate,
 } from './types';
 
 export const queryKeys = {
+  me: ['me'] as const,
   dashboard: (month: string, scope: Scope) => ['dashboard', month, scope] as const,
   transactions: (params: object) => ['transactions', params] as const,
   categories: ['categories'] as const,
@@ -73,6 +76,15 @@ export function useStatementChecklist(month: string) {
   });
 }
 
+/** Quem está logado. Serve de padrão nos seletores de titular e responsável. */
+export function useMe() {
+  return useQuery({
+    queryKey: queryKeys.me,
+    queryFn: () => api.get<{ id: string; full_name: string; nickname: string | null }>('/auth/me'),
+    staleTime: 1000 * 60 * 60,
+  });
+}
+
 export function useMembers() {
   return useQuery({
     queryKey: queryKeys.members,
@@ -107,6 +119,44 @@ export function useAccounts() {
   return useQuery({
     queryKey: queryKeys.accounts,
     queryFn: () => api.get<Account[]>('/accounts'),
+  });
+}
+
+/**
+ * Cadastrar conta. Invalida o que depende da lista: a tela de importar escolhe
+ * a conta de destino daqui, e o painel soma saldos.
+ */
+export function useCreateAccount() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AccountCreate) => api.post<Account>('/accounts', input),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: queryKeys.accounts });
+      client.invalidateQueries({ queryKey: ['dashboard'] });
+      client.invalidateQueries({ queryKey: queryKeys.netWorth });
+      client.invalidateQueries({ queryKey: ['statement-checklist'] });
+    },
+  });
+}
+
+/**
+ * Lançamento manual - é por aqui que entra o gasto pago em dinheiro, que não
+ * aparece em extrato nenhum.
+ *
+ * `client_key` vai sempre preenchida: se a resposta se perder no caminho e o
+ * app tentar de novo, o servidor devolve o lançamento que já gravou em vez de
+ * duplicar o gasto.
+ */
+export function useCreateTransaction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TransactionCreate) => api.post<Transaction>('/transactions', input),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['transactions'] });
+      client.invalidateQueries({ queryKey: ['by-category'] });
+      client.invalidateQueries({ queryKey: ['dashboard'] });
+      client.invalidateQueries({ queryKey: ['forecast'] });
+    },
   });
 }
 
