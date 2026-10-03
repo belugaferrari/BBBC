@@ -1,6 +1,10 @@
 /**
  * Gastos: lista conciliada do Open Finance + manuais, com filtro individual /
  * familiar e recategorizacao (que alimenta o aprendizado de regras).
+ *
+ * O mes e escolhido, como no Resumo e nas Categorias. Aqui nao ha a armadilha do
+ * saldo: tudo nesta tela - a lista e a soma por categoria - sai de lancamentos
+ * datados, entao olhar agosto mostra agosto inteiro e nada mais.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -24,15 +28,20 @@ import {
   useTransactions,
 } from '@/api/queries';
 import type { Category, Scope, Transaction } from '@/api/types';
+import { MonthPicker, mesAtualISO } from '@/components/MonthPicker';
 import { Card, ProgressBar, ScopeToggle, SectionTitle } from '@/components/ui';
 import { colors, layout, radius, spacing, typography } from '@/theme';
 import { dayLabel, money, percent } from '@/theme/format';
 
-function monthRange(): { start: string; end: string } {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+/** Primeiro e ultimo dia do mes, a partir do primeiro-dia-do-mes em ISO. */
+function faixaDoMes(mesISO: string): { start: string; end: string } {
+  const [ano, mes] = mesISO.split('-').map(Number);
+  // dia 0 do mes seguinte e o ultimo dia deste - evita a tabela de 28/30/31
+  const ultimo = new Date(ano, mes, 0).getDate();
+  return {
+    start: `${mesISO.slice(0, 7)}-01`,
+    end: `${mesISO.slice(0, 7)}-${String(ultimo).padStart(2, '0')}`,
+  };
 }
 
 interface Opcao {
@@ -73,7 +82,8 @@ export function ExpensesScreen(): React.ReactElement {
   // 1 agrupa nos grandes blocos, 3 desce até a subcategoria
   const [nivel, setNivel] = useState(2);
 
-  const range = useMemo(monthRange, []);
+  const [mes, setMes] = useState(mesAtualISO);
+  const range = useMemo(() => faixaDoMes(mes), [mes]);
   const { data: transactions, isLoading } = useTransactions({
     ...range,
     scope,
@@ -104,6 +114,8 @@ export function ExpensesScreen(): React.ReactElement {
 
   return (
     <View style={styles.screen}>
+      <MonthPicker value={mes} onChange={setMes} />
+
       <View style={styles.toolbar}>
         <TextInput
           value={search}
