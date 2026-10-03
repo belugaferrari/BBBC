@@ -357,3 +357,17 @@ que procurar lá (instalação correndo, pergunta parada, ou erro em vermelho).
 Todos os `.bat` ganharam `pause` no fim. Sem ele, qualquer erro que mate o
 PowerShell antes de o script chegar ao próprio "aperte Enter" fecha a janela
 levando a mensagem junto — e o que se vê é só um piscar.
+
+## Duas pastas com o mesmo nome
+
+Atualizar pelo zip deixa duas pastas iguais na máquina: a instalada e a recém
+extraída, que só serviu de fonte. Mesmo nome, mesmos arquivos — e abrir a errada
+**não dá erro nenhum**: o sistema sobe, o banco é o mesmo (ele vive no
+PostgreSQL, não na pasta), e tudo parece normal. Só que o trabalho vai para a
+cópia que vai ser jogada fora.
+
+O `ATUALIZAR` passou a dizer, antes de tocar em qualquer coisa, **qual pasta** vai
+atualizar. E, quando não acha `backend\.venv` nem `mobile\node_modules` ali,
+avisa que aquilo não parece a instalação e pergunta se é para seguir — com "não"
+como padrão. Não dá para ter certeza só por isso (uma instalação nova também não
+os tem), mas dá para desconfiar em voz alta.

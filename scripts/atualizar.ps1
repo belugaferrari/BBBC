@@ -94,6 +94,39 @@ Write-Host "============================================"
 Write-Host "  BBBC - atualizar"
 Write-Host "============================================"
 Write-Host ""
+Write-Host "  Vou atualizar ESTA pasta:" -ForegroundColor White
+Write-Host "    $RAIZ" -ForegroundColor Cyan
+
+# Dizer em voz alta qual pasta e, antes de tocar em qualquer coisa.
+#
+# Quem atualiza pelo zip acaba com duas pastas iguais: a instalada e a recem
+# extraida, que so serviu de fonte. Elas tem o mesmo nome e os mesmos arquivos, e
+# abrir a errada nao da erro nenhum - o sistema sobe, o banco e o mesmo, e tudo
+# parece normal, so que o trabalho vai para a copia que sera jogada fora. A pasta
+# instalada tem .venv e node_modules dentro; a extraida, nao. Nao da para ter
+# certeza so por isso - uma instalacao nova tambem nao os tem - mas da para
+# desconfiar em voz alta.
+$pareceInstalada = (Test-Path (Join-Path $RAIZ 'backend\.venv')) -or
+                   (Test-Path (Join-Path $RAIZ 'mobile\node_modules'))
+if (-not $pareceInstalada) {
+    Write-Host ""
+    Aviso "Esta pasta nao parece a sua instalacao."
+    Write-Host "      Nao achei nem backend\.venv nem mobile\node_modules aqui, e e"
+    Write-Host "      neles que ficam as bibliotecas ja instaladas."
+    Write-Host ""
+    Write-Host "      Se voce extraiu um zip e esta rodando o ATUALIZAR de dentro"
+    Write-Host "      dele, feche isto e rode o da pasta onde o BBBC esta instalado"
+    Write-Host "      (a do Desktop, em geral). Atualizar a copia extraida nao"
+    Write-Host "      estraga nada, mas tambem nao serve para nada."
+    Write-Host ""
+    $segue = Read-Host "  Atualizar esta pasta mesmo assim? (s/n) [n]"
+    if (-not $segue -or $segue.ToLower() -ne 's') {
+        Write-Host "  Nada foi alterado."
+        Fim 0
+    }
+}
+
+Write-Host ""
 Write-Host "  Seus dados NAO estao nesta pasta - eles vivem no PostgreSQL." -ForegroundColor White
 Write-Host "  Atualizar troca o programa, e nao os lancamentos." -ForegroundColor White
 
