@@ -145,16 +145,36 @@ Write-Host "  Se a 1 falhar com 'Failed to download remote update', use a 2."
 Write-Host "  A 3 nao depende de rede: abre numa aba do navegador."
 Write-Host ""
 
-# Enter aceita a 1: o caminho normal nao deve exigir escolha.
-$modo = Read-Host "  Digite 1, 2 ou 3 e aperte Enter [1]"
-if ([string]::IsNullOrWhiteSpace($modo)) { $modo = '1' }
+# A escolha fica guardada: quem usa o navegador do PC usa o navegador do PC
+# todo dia, e responder a mesma pergunta a cada abertura e atrito puro. O
+# arquivo vive ao lado do codigo e nao vai para o repositorio.
+$arquivoDoModo = Join-Path (Get-Location) '.ultimo-modo'
+$padrao = '1'
+if (Test-Path $arquivoDoModo) {
+    $guardado = (Get-Content $arquivoDoModo -Raw -ErrorAction SilentlyContinue)
+    if ($guardado) {
+        $guardado = $guardado.Trim()
+        if ($guardado -in @('1', '2', '3')) { $padrao = $guardado }
+    }
+}
+
+# Enter aceita o padrao: o caminho normal nao deve exigir escolha.
+$modo = Read-Host "  Digite 1, 2 ou 3 e aperte Enter [$padrao]"
+if ([string]::IsNullOrWhiteSpace($modo)) { $modo = $padrao }
+if ($modo -notin @('1', '2', '3')) {
+    Aviso "Nao entendi '$modo'. Seguindo com a opcao $padrao."
+    $modo = $padrao
+}
+Set-Content -Path $arquivoDoModo -Value $modo -Encoding utf8 -ErrorAction SilentlyContinue
 
 Write-Host ""
-Write-Host "  Vai aparecer um QR code aqui embaixo."
-Write-Host ""
-Write-Host "  ANDROID: abra o aplicativo Expo Go e escaneie por dentro dele."
-Write-Host "  IPHONE:  escaneie com a camera normal do celular."
-Write-Host ""
+if ($modo -ne '3') {
+    Write-Host "  Vai aparecer um QR code aqui embaixo."
+    Write-Host ""
+    Write-Host "  ANDROID: abra o aplicativo Expo Go e escaneie por dentro dele."
+    Write-Host "  IPHONE:  escaneie com a camera normal do celular."
+    Write-Host ""
+}
 Write-Host "  Para parar, aperte Ctrl+C nesta janela."
 Write-Host ""
 

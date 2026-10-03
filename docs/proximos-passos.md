@@ -199,3 +199,26 @@ escreve o motivo em `ao-ligar.log` e desiste. Primeira instalação é sempre à
 - Expo Go no celular: a opção 2 (túnel) continua sem teste.
 - Os valores dos gastos fixos (financiamento, escola, plano, condomínio) e qual
   e-mail recebe os avisos.
+
+## Atualizar deixou de ser um ritual
+
+Antes, cada ajuste custava: baixar o zip, extrair, rodar a instalação inteira de
+novo, reler o QR code, apertar `w`. O caro ali nunca foi o download — foram os
+minutos reinstalando bibliotecas que na maior parte das vezes não mudaram.
+
+**`ATUALIZAR-windows.bat`** troca só o código. Ficam onde estão: o banco (que nem
+mora na pasta — vive no PostgreSQL), o `backend\.venv`, o `mobile\node_modules` e
+qualquer `.env`. Se a pasta for um clone do git, um `git pull` resolve; se for uma
+pasta baixada como zip, ele baixa o zip novo e copia por cima, sem apagar nada —
+o robocopy é chamado sem `/MIR`, então só adiciona e sobrescreve.
+
+Junto com a marca de instalação do lote anterior, o ciclo fica: um clique em
+ATUALIZAR, e o sistema sobe. As bibliotecas só são reinstaladas se a lista de
+dependências mudou.
+
+**O `w` e o QR code.** O `w` é do servidor do Expo, e existe porque ele não sabe
+se você quer o navegador ou o celular. Agora o launcher **lembra a última
+escolha**: quem escolheu a opção 3 (navegador) uma vez passa a só apertar Enter,
+e a aba abre sozinha. O QR code continua sendo necessário no celular enquanto o
+app roda pelo Expo Go — isso só desaparece com um APK instalado, que é outro
+assunto.
