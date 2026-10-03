@@ -194,7 +194,7 @@ def test_ir_separa_tributavel_de_isento_e_deduz_educacao(client, family, account
 
 def test_correcao_manual_ensina_o_motor_de_categorizacao(client, family, account):
     cats = family["categories"]
-    hobby = cats["despesas.marketplaces"]
+    hobby = cats["despesas.market_places"]
 
     criada = post_tx(
         client, family, amount="890.00", direction="SAIDA",

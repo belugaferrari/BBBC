@@ -258,8 +258,8 @@ def seed_default_rules(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
     """
     from app.services.default_rules import (
         CATALOG_RULE_CONFIDENCE,
-        CATALOG_RULE_PRIORITY,
         DEFAULT_MERCHANT_RULES,
+        prioridade_de,
     )
 
     caminhos = {
@@ -289,7 +289,7 @@ def seed_default_rules(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
                 "family_id": family_id,
                 "pattern": padrao,
                 "category_id": categoria,
-                "priority": CATALOG_RULE_PRIORITY,
+                "priority": prioridade_de(padrao),
                 "confidence": CATALOG_RULE_CONFIDENCE,
             },
         )
@@ -335,6 +335,41 @@ def clone_catalog(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
         {"family_id": family_id},
     )
     return inserted
+
+
+def sync_rules() -> dict:
+    """Refaz as regras de fornecedor de todas as familias, do catalogo atual.
+
+    Existe por causa de um problema que nao da sinal nenhum quando acontece. As
+    regras guardam o id da categoria, e nao o caminho dela. Quando a arvore muda
+    - foi o caso da 0009, que trocou a taxonomia pela do Felipe - as regras
+    antigas apontam para categorias que nao existem mais, e o unico sintoma e o
+    extrato importado chegando todo em branco. Nenhum erro, nenhum aviso: so a
+    sugestao deixando de aparecer.
+
+    As regras APRENDIDAS nao sao tocadas. Elas sao correcao feita a mao, valem
+    mais que o catalogo, e refaze-las apagaria o que o sistema aprendeu com o
+    usuario. Como so as de catalogo sao recriadas, rodar isto duas vezes da no
+    mesmo - e o lugar de rodar e a cada partida, junto com as migrations.
+    """
+    with SessionLocal.begin() as db:
+        familias = [
+            linha[0] for linha in db.execute(text("SELECT id FROM families"))
+        ]
+        apagadas = 0
+        criadas = 0
+        for family_id in familias:
+            apagadas += db.execute(
+                text(
+                    """
+                    DELETE FROM categorization_rules
+                     WHERE family_id = :f AND is_learned = false
+                    """
+                ),
+                {"f": family_id},
+            ).rowcount
+            criadas += seed_default_rules(db, family_id)
+    return {"familias": len(familias), "apagadas": apagadas, "criadas": criadas}
 
 
 def reset_categories(family_id: UUID | None = None) -> tuple[int, int]:
@@ -444,6 +479,11 @@ def main(argv: list[str] | None = None) -> int:
     reset.add_argument("--family", help="id da familia (padrao: a primeira)")
 
     sub.add_parser(
+        "sync-rules",
+        help="refaz as regras de sugestao do catalogo (mantem as aprendidas)",
+    )
+
+    sub.add_parser(
         "run-alerts",
         help="recalcula os avisos e envia as notificacoes pendentes",
     )
@@ -469,6 +509,14 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"envio: {envio['enviados']} enviados, {envio['falhas']} falhas, "
             f"{envio['sem_configuracao']} sem configuracao"
+        )
+        return 0
+
+    if args.command == "sync-rules":
+        resultado = sync_rules()
+        print(
+            f"{resultado['familias']} familia(s): {resultado['apagadas']} regras "
+            f"antigas fora, {resultado['criadas']} do catalogo atual"
         )
         return 0
 

@@ -35,6 +35,14 @@ _NON_WORD_RE = re.compile(r"[^a-z0-9 ]+")
 _SPACES_RE = re.compile(r"\s+")
 
 
+def _achatar(texto: str) -> str:
+    """minusculo, sem acento, sem pontuacao, sem espaco sobrando."""
+    achatado = unicodedata.normalize("NFKD", texto.lower())
+    achatado = "".join(c for c in achatado if not unicodedata.combining(c))
+    achatado = _NON_WORD_RE.sub(" ", achatado)
+    return _SPACES_RE.sub(" ", achatado).strip()
+
+
 def normalize(text: str) -> str:
     """minusculo, sem acento, sem ruido de extrato. Base de todo match."""
     lowered = unicodedata.normalize("NFKD", text.lower())
@@ -42,6 +50,26 @@ def normalize(text: str) -> str:
     lowered = _NOISE_RE.sub(" ", lowered)
     lowered = _NON_WORD_RE.sub(" ", lowered)
     return _SPACES_RE.sub(" ", lowered).strip()
+
+
+def textos_para_casar(descricao: str) -> tuple[str, str]:
+    """As duas leituras da descricao contra as quais uma regra e testada.
+
+    A primeira e a limpa (`normalize`), de onde o ruido de extrato saiu: e ela
+    que faz 'DROGARIA SAO PAULO 4471' casar com o fornecedor.
+
+    A segunda guarda o ruido, e existe por causa de um caso em que o ruido E a
+    informacao. "PAGAMENTO FATURA CARTAO" vira so "cartao" depois da limpeza,
+    porque 'pagamento de fatura' esta na lista de ruido - e esta com razao, do
+    ponto de vista de quem procura o fornecedor de uma compra. Mas e justamente
+    essa frase que diz que a linha NAO e uma compra, e sim a fatura sendo paga -
+    a unica linha do extrato que nao pode ser contada como gasto, ou cada compra
+    do cartao entra duas vezes.
+
+    Testar contra as duas nao afrouxa nada: uma regra que casava continua
+    casando, porque a leitura limpa continua sendo testada.
+    """
+    return normalize(descricao), _achatar(descricao)
 
 
 def merchant_key(description: str, max_tokens: int = 3) -> str:
@@ -118,7 +146,9 @@ def rule_matches(rule: Rule, tx: TransactionFacts) -> bool:
         return False
     if rule.max_amount is not None and tx.amount > rule.max_amount:
         return False
-    return _pattern_matches(rule, normalize(tx.description))
+    return any(
+        _pattern_matches(rule, leitura) for leitura in textos_para_casar(tx.description)
+    )
 
 
 def categorize(tx: TransactionFacts, rules: list[Rule]) -> Match | None:

@@ -107,3 +107,95 @@ honesto, e as categorias das duas pontas. Falta a **lista de pendências**
   marca apagada. Escolher "Únicos › Viagens" levava a um erro sem campo na tela
   para resolver. A herança agora desce no aplicativo também, nas duas telas que
   escolhem categoria.
+
+## Lote de 03/10/2026, segunda parte — as categorias dele
+
+### A árvore passou a ser a do Excel
+
+As quinze categorias da lista do Felipe, com os nomes dele e na ordem em que ele
+as escreveu: Gastos mensais, Condomínio, Financiamentos, Educação, Saúde,
+Transporte, Mercado, Restaurantes, Market places, Delivery de comida, Limpeza,
+Gastos anuais, Gastos únicos, Criação, Cla PJ.
+
+Quase tudo já existia, espalhado de outro jeito. "Combustível",
+"Estacionamento" e "Transportes" eram três categorias soltas de primeiro nível —
+agora são subcategorias de Transporte, junto com "Pedágio e tag", que faltava.
+"Assinaturas" desceu para dentro de Gastos mensais. "Faxina" virou "Limpeza" e
+"Aplicativo de comida" virou "Delivery de comida". "Cla PJ" é nova.
+
+O terceiro nível sobrevive onde ele citou exemplos ou onde a natureza fiscal
+difere entre as filhas: plano de saúde deduz e farmácia não, e isso tem de
+continuar separado ou a projeção de IR erra.
+
+### Criar, renomear, excluir — e a meta de cada uma
+
+Aba **Categorias** nova. Cada linha traz a meta do mês e o quanto já foi gasto,
+com a barra ficando laranja a 80% e vermelha quando estoura. A seta abre as
+subcategorias.
+
+Tocar numa categoria (ou numa subcategoria — a tela é a mesma) abre a leitura no
+tempo: o mês contra a meta, contra o mês anterior, contra o **mesmo mês do ano
+passado** e contra a **média dos doze meses**, com treze barras e a média
+marcada. Dali se define, muda ou apaga a meta, se renomeia, se cria subcategoria
+e se exclui.
+
+Excluir categoria que já tem lançamento **arquiva** em vez de apagar, e diz isso.
+Apagar de verdade transformaria gasto classificado em gasto solto, e o estrago só
+apareceria no fechamento do mês.
+
+### O cartão, e a conta que não pode ser contada duas vezes
+
+O cartão é o único lugar onde o mesmo dinheiro aparece em dois extratos: a compra
+no extrato do cartão, e semanas depois o pagamento da fatura no da conta
+corrente. A regra é que **a despesa é a compra, no dia dela** — o pagamento da
+fatura é bolso trocando de lugar.
+
+Duas coisas estavam erradas e foram corrigidas:
+
+1. A categoria "Pagamento de fatura" contava como gasto (`counts_as_expense`
+   estava `true` desde a 0004). Era a primeira coisa a estourar quando o extrato
+   da conta corrente chegasse.
+2. O reconhecimento da linha não funcionava. `normalize()` apaga "pagamento de
+   fatura" de propósito — é ruído quando se procura o fornecedor de uma compra.
+   Só que é justamente essa frase que diz que a linha **não** é compra. As regras
+   passaram a ser testadas contra as duas leituras da descrição.
+
+Em **Mais › Cartão de crédito**: quanto foi comprado no mês (por cartão, que é a
+base dos pontos), quanto saiu de fatura, e a lista das linhas que parecem fatura
+e estão contando como gasto — com o passo a passo para arrumar.
+
+### A sugestão pelo título do extrato
+
+As 188 regras de fornecedor apontavam todas para a árvore antiga; depois da 0009
+elas ficariam mudas, sem erro nenhum. Foram remapeadas e ampliadas (Sem Parar,
+ConectCar, 99Food, Cheeta, padaria, DARF, Ri Happy...).
+
+Um achado no caminho: o desempate entre regras é por tamanho do padrão, e
+"IFOOD *RESTAURANTE SAO JOSE" casava com `restaurante` (11 letras) antes de
+`ifood` (5) — o jantar entregue em casa entrava como refeição fora. Os padrões de
+**plataforma** passaram a ter prioridade melhor: quem paga a conta é o aplicativo,
+e é ele que define a natureza do gasto. Uma padaria pedida pelo iFood continua
+sendo delivery. Qualquer correção dele continua vencendo as duas.
+
+### Ligar junto com o Windows
+
+`LIGAR-COM-O-WINDOWS.bat`: põe (ou tira) um atalho na pasta Inicializar do
+usuário — o único caminho que não pede administrador. Sobe o **sistema**, não o
+aplicativo: o sistema precisa ficar de pé o dia inteiro para o celular consultar,
+e abrir uma aba de navegador a cada boot seria atrapalhar.
+
+No boot o script roda com `-AoLigar`: não pergunta nada, não abre navegador e não
+espera Enter (numa janela minimizada, uma pergunta é um travamento silencioso).
+Espera até dois minutos pelo serviço do PostgreSQL, e se o cadastro não existe
+escreve o motivo em `ao-ligar.log` e desiste. Primeira instalação é sempre à mão.
+
+## Ainda pendente
+
+- **Offline**: consultar e lançar com o PC desligado, com fila que sobe depois. O
+  lado do servidor está pronto (a `client_key` já impede duplicata); falta o
+  cache local, a trava por biometria e a fila no aplicativo.
+- A triagem do que é da empresa e do que é pessoal, com a lista de pendências
+  ("a empresa me deve").
+- Expo Go no celular: a opção 2 (túnel) continua sem teste.
+- Os valores dos gastos fixos (financiamento, escola, plano, condomínio) e qual
+  e-mail recebe os avisos.

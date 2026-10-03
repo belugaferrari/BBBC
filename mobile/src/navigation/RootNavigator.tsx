@@ -1,11 +1,16 @@
 /**
  * Navegação do app.
  *
- * Cinco abas embaixo, e não sete: com sete, cada uma fica com dois centímetros
- * de largura e um rótulo que ninguém lê. Embaixo fica o que se olha toda semana
- * - incluindo "Lançar", que é diário e por isso não podia estar escondido. O que
- * se usa uma vez por mês ou por ano vira uma tela empilhada, aberta pela aba
- * "Mais".
+ * Cinco abas embaixo, e não oito: com oito, cada uma fica com dois centímetros
+ * de largura e um rótulo que ninguém lê. Embaixo fica o que se olha toda semana:
+ * o resumo do mês, lançar à mão (que é diário, e por isso não podia estar
+ * escondido), as categorias contra as metas, a lista de gastos, e o índice do
+ * resto.
+ *
+ * O que se usa uma vez por mês (importar extrato, conferir o cartão), uma vez
+ * por ano (o IR) ou uma vez na vida (cadastrar a conta) é tela empilhada, aberta
+ * pela aba "Mais". Previsões saiu da barra pelo mesmo motivo: é leitura de
+ * planejamento, não de dia a dia.
  */
 
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -18,6 +23,9 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AccountsScreen } from '@/screens/AccountsScreen';
+import { CardsScreen } from '@/screens/CardsScreen';
+import { CategoriesScreen } from '@/screens/CategoriesScreen';
+import { CategoryDetailScreen } from '@/screens/CategoryDetailScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
 import { EntryScreen } from '@/screens/EntryScreen';
 import { ExpensesScreen } from '@/screens/ExpensesScreen';
@@ -34,6 +42,11 @@ type StackParams = {
   Importar: undefined;
   Investimentos: undefined;
   IR: undefined;
+  Cartoes: undefined;
+  Previsoes: undefined;
+  // a tela de categoria empilha sobre si mesma: de "Transporte" para
+  // "Gasolina" e de volta, com o mes escolhido vindo junto
+  Categoria: { id: string; nome: string; mes: string };
 };
 
 const Tab = createBottomTabNavigator();
@@ -103,18 +116,18 @@ function Abas(): React.ReactElement {
         }}
       />
       <Tab.Screen
+        name="Categorias"
+        component={CategoriesScreen}
+        options={{
+          title: 'Categorias e metas',
+          tabBarLabel: 'Categorias',
+          tabBarIcon: ({ focused }) => <TabIcon label="◫" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
         name="Gastos"
         component={ExpensesScreen}
         options={{ tabBarIcon: ({ focused }) => <TabIcon label="≡" focused={focused} /> }}
-      />
-      <Tab.Screen
-        name="Previsoes"
-        component={ForecastScreen}
-        options={{
-          title: 'Previsões',
-          tabBarLabel: 'Previsões',
-          tabBarIcon: ({ focused }) => <TabIcon label="◎" focused={focused} />,
-        }}
       />
       <Tab.Screen
         name="Mais"
@@ -148,7 +161,22 @@ export function RootNavigator(): React.ReactElement {
           component={ImportScreen}
           options={{ title: 'Importar extrato' }}
         />
+        <Stack.Screen
+          name="Cartoes"
+          component={CardsScreen}
+          options={{ title: 'Cartão de crédito' }}
+        />
+        <Stack.Screen
+          name="Categoria"
+          component={CategoryDetailScreen}
+          options={{ title: 'Categoria' }}
+        />
         <Stack.Screen name="Investimentos" component={InvestmentsScreen} />
+        <Stack.Screen
+          name="Previsoes"
+          component={ForecastScreen}
+          options={{ title: 'Previsões' }}
+        />
         <Stack.Screen name="IR" component={TaxScreen} options={{ title: 'Imposto de Renda' }} />
       </Stack.Navigator>
     </NavigationContainer>

@@ -145,7 +145,7 @@ def test_gastos_agrupados_por_categoria(client, familia):
            category_id=cat["despesas.educacao.escola"])
     lancar(client, familia, booked_on=hoje.isoformat(), amount="890.00",
            direction="SAIDA", description="Bambu Lab",
-           category_id=cat["despesas.marketplaces"])
+           category_id=cat["despesas.market_places"])
 
     resposta = client.get(
         "/api/v1/transactions/by-category",
@@ -185,7 +185,7 @@ def test_profundidade_muda_o_nivel_do_agrupamento(client, familia):
     # na arvore da familia, Mercado e Educacao ja sao filhos diretos de Despesas
     assert nomes(1) == {"Despesas"}
     assert nomes(2) == {"Mercado", "Educacao"}
-    assert nomes(3) == {"Mercado", "Escola (dedutivel)"}
+    assert nomes(3) == {"Mercado", "Escola"}
 
 
 def test_lancamento_sem_categoria_nao_some_do_agrupamento(client, familia):

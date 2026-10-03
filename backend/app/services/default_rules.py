@@ -2,48 +2,98 @@
 
 Sao um ponto de partida, nao verdade absoluta: a primeira vez que voce corrigir
 uma delas, a correcao vira uma regra aprendida com prioridade melhor e passa a
-mandar. O objetivo aqui e que o primeiro extrato importado ja chegue com a
-maior parte classificada, em vez de 200 linhas em branco.
+mandar. O objetivo aqui e que o primeiro extrato importado chegue com a maior
+parte ja preenchida, esperando um "ok", em vez de 200 linhas em branco.
 
 Os padroes sao casados contra a descricao normalizada (minuscula, sem acento,
 sem o ruido de extrato), entao 'pao de acucar' pega 'PAO DE ACUCAR 1234'.
+
+Entre duas regras que casam, ganha a de PADRAO MAIS LONGO - quem decide isso e o
+`categorize`, nao a ordem desta lista. E o que faz 'uber eats' vencer 'uber' e
+'pagamento de fatura' vencer 'fatura cartao'. A lista esta agrupada por assunto
+para ser lida, e nao para ser avaliada nesta ordem; mesmo assim o especifico vem
+escrito antes do geral, porque quem for mexer aqui vai ler de cima para baixo.
 """
 
 from __future__ import annotations
 
-# (padrao, caminho da categoria). Padroes mais especificos vem antes:
-# 'uber eats' precisa ser avaliado antes de 'uber'.
+# (padrao, caminho da categoria)
 DEFAULT_MERCHANT_RULES: list[tuple[str, str]] = [
-    # --- aplicativo de comida (antes de 'uber', de proposito) --------------
-    ("ifood", "despesas.aplicativo_comida"),
-    ("rappi", "despesas.aplicativo_comida"),
-    ("uber eats", "despesas.aplicativo_comida"),
-    ("aiqfome", "despesas.aplicativo_comida"),
-    ("zedelivery", "despesas.aplicativo_comida"),
+    # --- pagamento de fatura: PRIMEIRO de todos --------------------------------
+    # A compra no cartao ja foi lancada no dia dela. Quando a fatura e paga, o
+    # dinheiro sai da conta corrente - e se isso entrasse como gasto, cada compra
+    # seria contada duas vezes. A categoria de transferencia nao conta como
+    # consumo, e e ela que impede a duplicata.
+    ("pagamento de fatura", "transferencias.pagamento_cartao"),
+    ("pagamento fatura", "transferencias.pagamento_cartao"),
+    ("pag fatura", "transferencias.pagamento_cartao"),
+    ("pagto fatura", "transferencias.pagamento_cartao"),
+    ("pagamento cartao", "transferencias.pagamento_cartao"),
+    ("fatura cartao", "transferencias.pagamento_cartao"),
+    ("saldo fatura anterior", "transferencias.pagamento_cartao"),
+    ("transferencia entre contas", "transferencias.entre_contas"),
+    ("aplicacao automatica", "transferencias.entre_contas"),
+    ("resgate automatico", "transferencias.entre_contas"),
 
-    # --- transportes -------------------------------------------------------
-    ("uber", "despesas.transportes"),
-    ("99app", "despesas.transportes"),
-    ("99 tecnologia", "despesas.transportes"),
-    ("cabify", "despesas.transportes"),
-    ("taxi", "despesas.transportes"),
+    # --- delivery de comida (antes de 'uber', de proposito) -------------------
+    ("ifood", "despesas.delivery"),
+    ("rappi", "despesas.delivery"),
+    ("uber eats", "despesas.delivery"),
+    ("99food", "despesas.delivery"),
+    ("99 food", "despesas.delivery"),
+    ("cheeta", "despesas.delivery"),
+    ("aiqfome", "despesas.delivery"),
+    ("zedelivery", "despesas.delivery"),
+    ("ze delivery", "despesas.delivery"),
+    ("daki", "despesas.delivery"),
 
-    # --- combustivel -------------------------------------------------------
-    ("posto", "despesas.combustivel"),
-    ("ipiranga", "despesas.combustivel"),
-    ("shell", "despesas.combustivel"),
-    ("petrobras", "despesas.combustivel"),
-    ("br mania", "despesas.combustivel"),
-    ("ale combust", "despesas.combustivel"),
+    # --- transporte por aplicativo --------------------------------------------
+    ("uber", "despesas.transporte.aplicativo"),
+    ("99app", "despesas.transporte.aplicativo"),
+    ("99 tecnologia", "despesas.transporte.aplicativo"),
+    ("99pop", "despesas.transporte.aplicativo"),
+    ("cabify", "despesas.transporte.aplicativo"),
+    ("indriver", "despesas.transporte.aplicativo"),
+    ("taxi", "despesas.transporte.aplicativo"),
 
-    # --- estacionamento ----------------------------------------------------
-    ("estacionamento", "despesas.estacionamento"),
-    ("estapar", "despesas.estacionamento"),
-    ("multipark", "despesas.estacionamento"),
-    ("zona azul", "despesas.estacionamento"),
-    ("parking", "despesas.estacionamento"),
+    # --- gasolina -------------------------------------------------------------
+    ("posto", "despesas.transporte.gasolina"),
+    ("ipiranga", "despesas.transporte.gasolina"),
+    ("shell", "despesas.transporte.gasolina"),
+    ("petrobras", "despesas.transporte.gasolina"),
+    ("br mania", "despesas.transporte.gasolina"),
+    ("ale combust", "despesas.transporte.gasolina"),
+    ("combustivel", "despesas.transporte.gasolina"),
+    ("auto posto", "despesas.transporte.gasolina"),
 
-    # --- mercado -----------------------------------------------------------
+    # --- estacionamento -------------------------------------------------------
+    ("estacionamento", "despesas.transporte.estacionamento"),
+    ("estapar", "despesas.transporte.estacionamento"),
+    ("multipark", "despesas.transporte.estacionamento"),
+    ("zona azul", "despesas.transporte.estacionamento"),
+    ("parking", "despesas.transporte.estacionamento"),
+
+    # --- pedagio e tag --------------------------------------------------------
+    ("sem parar", "despesas.transporte.pedagio_tag"),
+    ("semparar", "despesas.transporte.pedagio_tag"),
+    ("conectcar", "despesas.transporte.pedagio_tag"),
+    ("veloe", "despesas.transporte.pedagio_tag"),
+    ("taggy", "despesas.transporte.pedagio_tag"),
+    ("move mais", "despesas.transporte.pedagio_tag"),
+    ("pedagio", "despesas.transporte.pedagio_tag"),
+    ("autoban", "despesas.transporte.pedagio_tag"),
+    ("ecovias", "despesas.transporte.pedagio_tag"),
+    ("ccr ", "despesas.transporte.pedagio_tag"),
+
+    # --- manutencao do carro --------------------------------------------------
+    ("oficina", "despesas.transporte.manutencao"),
+    ("autocenter", "despesas.transporte.manutencao"),
+    ("auto center", "despesas.transporte.manutencao"),
+    ("pneus", "despesas.transporte.manutencao"),
+    ("lava rapido", "despesas.transporte.manutencao"),
+    ("funilaria", "despesas.transporte.manutencao"),
+
+    # --- mercado --------------------------------------------------------------
     ("supermercado", "despesas.mercado"),
     ("mercado", "despesas.mercado"),
     ("assai", "despesas.mercado"),
@@ -53,38 +103,88 @@ DEFAULT_MERCHANT_RULES: list[tuple[str, str]] = [
     ("angeloni", "despesas.mercado"),
     ("zaffari", "despesas.mercado"),
     ("hortifruti", "despesas.mercado"),
+    ("sam s club", "despesas.mercado"),
+    ("tenda atacado", "despesas.mercado"),
 
-    # --- market places -----------------------------------------------------
-    ("mercadolivre", "despesas.marketplaces"),
-    ("mercado livre", "despesas.marketplaces"),
-    ("amazon", "despesas.marketplaces"),
-    ("shopee", "despesas.marketplaces"),
-    ("aliexpress", "despesas.marketplaces"),
-    ("magazine luiza", "despesas.marketplaces"),
-    ("magalu", "despesas.marketplaces"),
-    ("americanas", "despesas.marketplaces"),
+    # --- restaurantes ---------------------------------------------------------
+    ("padaria", "despesas.restaurantes.padaria"),
+    ("panificadora", "despesas.restaurantes.padaria"),
+    ("lanchonete", "despesas.restaurantes.padaria"),
+    ("starbucks", "despesas.restaurantes.cafe"),
+    ("cafeteria", "despesas.restaurantes.cafe"),
+    ("restaurante", "despesas.restaurantes.restaurante"),
+    ("churrascaria", "despesas.restaurantes.restaurante"),
+    ("pizzaria", "despesas.restaurantes.restaurante"),
+    ("outback", "despesas.restaurantes.restaurante"),
+    ("mcdonald", "despesas.restaurantes.restaurante"),
+    ("burger king", "despesas.restaurantes.restaurante"),
+    ("madero", "despesas.restaurantes.restaurante"),
+    ("subway", "despesas.restaurantes.restaurante"),
+    ("habib", "despesas.restaurantes.restaurante"),
 
-    # --- assinaturas -------------------------------------------------------
-    ("netflix", "despesas.assinaturas.streaming"),
-    ("spotify", "despesas.assinaturas.streaming"),
-    ("disney", "despesas.assinaturas.streaming"),
-    ("hbo", "despesas.assinaturas.streaming"),
-    ("globoplay", "despesas.assinaturas.streaming"),
-    ("youtube premium", "despesas.assinaturas.streaming"),
-    ("prime video", "despesas.assinaturas.streaming"),
-    ("openai", "despesas.assinaturas.ia_software"),
-    ("chatgpt", "despesas.assinaturas.ia_software"),
-    ("anthropic", "despesas.assinaturas.ia_software"),
-    ("claude", "despesas.assinaturas.ia_software"),
-    ("github", "despesas.assinaturas.ia_software"),
-    ("adobe", "despesas.assinaturas.ia_software"),
-    ("microsoft", "despesas.assinaturas.ia_software"),
-    ("google one", "despesas.assinaturas.ia_software"),
-    ("icloud", "despesas.assinaturas.ia_software"),
-    ("kindle", "despesas.assinaturas.livros"),
-    ("livraria", "despesas.assinaturas.livros"),
+    # --- market places --------------------------------------------------------
+    ("mercadolivre", "despesas.market_places"),
+    ("mercado livre", "despesas.market_places"),
+    ("mercadopago", "despesas.market_places"),
+    ("amazon", "despesas.market_places"),
+    ("shopee", "despesas.market_places"),
+    ("aliexpress", "despesas.market_places"),
+    ("shein", "despesas.market_places"),
+    ("magazine luiza", "despesas.market_places"),
+    ("magalu", "despesas.market_places"),
+    ("americanas", "despesas.market_places"),
+    ("casas bahia", "despesas.market_places"),
 
-    # --- saude (farmacia separada: remedio nao e dedutivel) ----------------
+    # --- assinaturas (dentro de gastos mensais) -------------------------------
+    ("netflix", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("spotify", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("disney", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("hbo", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("max.com", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("globoplay", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("youtube premium", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("prime video", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("deezer", "despesas.gastos_mensais.assinaturas.streaming"),
+    ("openai", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("chatgpt", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("anthropic", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("claude", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("github", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("adobe", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("microsoft", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("google one", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("icloud", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("apple.com", "despesas.gastos_mensais.assinaturas.softwares"),
+    ("kindle", "despesas.gastos_mensais.assinaturas.livros"),
+    ("livraria", "despesas.gastos_mensais.assinaturas.livros"),
+
+    # --- gastos mensais: as contas da casa ------------------------------------
+    ("sabesp", "despesas.gastos_mensais.agua"),
+    ("copasa", "despesas.gastos_mensais.agua"),
+    ("casan", "despesas.gastos_mensais.agua"),
+    ("saneamento", "despesas.gastos_mensais.agua"),
+    ("enel", "despesas.gastos_mensais.luz"),
+    ("cemig", "despesas.gastos_mensais.luz"),
+    ("cpfl", "despesas.gastos_mensais.luz"),
+    ("celesc", "despesas.gastos_mensais.luz"),
+    ("coelba", "despesas.gastos_mensais.luz"),
+    ("light servicos", "despesas.gastos_mensais.luz"),
+    ("energia eletrica", "despesas.gastos_mensais.luz"),
+    ("comgas", "despesas.gastos_mensais.gas"),
+    ("ultragaz", "despesas.gastos_mensais.gas"),
+    ("liquigas", "despesas.gastos_mensais.gas"),
+    ("vivo", "despesas.gastos_mensais.telefone"),
+    ("claro", "despesas.gastos_mensais.telefone"),
+    ("tim ", "despesas.gastos_mensais.telefone"),
+    ("oi movel", "despesas.gastos_mensais.telefone"),
+    ("net servicos", "despesas.gastos_mensais.internet"),
+    ("internet", "despesas.gastos_mensais.internet"),
+    ("fibra", "despesas.gastos_mensais.internet"),
+
+    # --- condominio -----------------------------------------------------------
+    ("condominio", "despesas.condominio"),
+
+    # --- saude (farmacia separada: remedio nao e dedutivel) -------------------
     ("drogaria", "despesas.saude.farmacia"),
     ("drogasil", "despesas.saude.farmacia"),
     ("droga raia", "despesas.saude.farmacia"),
@@ -98,51 +198,57 @@ DEFAULT_MERCHANT_RULES: list[tuple[str, str]] = [
     ("sulamerica", "despesas.saude.plano_de_saude"),
     ("hapvida", "despesas.saude.plano_de_saude"),
     ("bradesco saude", "despesas.saude.plano_de_saude"),
+    ("plano de saude", "despesas.saude.plano_de_saude"),
     ("laboratorio", "despesas.saude.consultas_exames"),
     ("clinica", "despesas.saude.consultas_exames"),
+    ("hospital", "despesas.saude.consultas_exames"),
     ("odonto", "despesas.saude.odontologia"),
+    ("psicolog", "despesas.saude.terapias"),
+    ("fisioterap", "despesas.saude.terapias"),
 
-    # --- educacao ----------------------------------------------------------
+    # --- educacao -------------------------------------------------------------
     ("colegio", "despesas.educacao.escola"),
     ("escola", "despesas.educacao.escola"),
     ("mensalidade escolar", "despesas.educacao.escola"),
     ("faculdade", "despesas.educacao.faculdade"),
     ("universidade", "despesas.educacao.faculdade"),
+    ("material escolar", "despesas.educacao.materiais"),
+    ("papelaria", "despesas.educacao.materiais"),
 
-    # --- mensais fixos -----------------------------------------------------
-    ("sabesp", "despesas.mensais_fixos.agua"),
-    ("copasa", "despesas.mensais_fixos.agua"),
-    ("casan", "despesas.mensais_fixos.agua"),
-    ("enel", "despesas.mensais_fixos.luz"),
-    ("cemig", "despesas.mensais_fixos.luz"),
-    ("cpfl", "despesas.mensais_fixos.luz"),
-    ("celesc", "despesas.mensais_fixos.luz"),
-    ("coelba", "despesas.mensais_fixos.luz"),
-    ("light servicos", "despesas.mensais_fixos.luz"),
-    ("comgas", "despesas.mensais_fixos.gas"),
-    ("ultragaz", "despesas.mensais_fixos.gas"),
-    ("vivo", "despesas.mensais_fixos.telefone"),
-    ("claro", "despesas.mensais_fixos.telefone"),
-    ("tim ", "despesas.mensais_fixos.telefone"),
-    ("net servicos", "despesas.mensais_fixos.internet"),
-    ("internet", "despesas.mensais_fixos.internet"),
+    # --- limpeza --------------------------------------------------------------
+    ("faxina", "despesas.limpeza.diarista"),
+    ("diarista", "despesas.limpeza.diarista"),
 
-    # --- condominio e anuais ----------------------------------------------
-    ("condominio", "despesas.condominio_manutencao"),
-    ("ipva", "despesas.anuais.ipva"),
-    ("iptu", "despesas.anuais.iptu"),
-    ("licenciamento", "despesas.anuais.licenciamento"),
-    ("seguro", "despesas.anuais.seguros"),
-    ("anuidade", "despesas.anuais.anuidades"),
-    ("multa", "despesas.unicos.multas"),
-    ("juros financiamento", "despesas.financiamento.juros"),
-    ("amortizacao", "despesas.financiamento.amortizacao"),
+    # --- criacao --------------------------------------------------------------
+    ("ri happy", "despesas.criacao.brinquedos"),
+    ("pbkids", "despesas.criacao.brinquedos"),
+    ("brinquedo", "despesas.criacao.brinquedos"),
 
-    # --- faxina ------------------------------------------------------------
-    ("faxina", "despesas.faxina"),
-    ("diarista", "despesas.faxina"),
+    # --- gastos anuais --------------------------------------------------------
+    ("ipva", "despesas.gastos_anuais.ipva"),
+    ("iptu", "despesas.gastos_anuais.iptu"),
+    ("licenciamento", "despesas.gastos_anuais.licenciamento"),
+    ("seguro auto", "despesas.gastos_anuais.seguro_carro"),
+    ("seguro", "despesas.gastos_anuais.seguro_carro"),
+    ("anuidade", "despesas.gastos_anuais.anuidades"),
 
-    # --- receitas ----------------------------------------------------------
+    # --- financiamentos -------------------------------------------------------
+    ("juros financiamento", "despesas.financiamentos.juros"),
+    ("amortizacao", "despesas.financiamentos.amortizacao"),
+    ("prestacao financiamento", "despesas.financiamentos.juros"),
+
+    # --- Cla PJ ---------------------------------------------------------------
+    # Custo de manter a empresa da Clarissa de pe.
+    ("darf", "despesas.cla_pj.darf"),
+    ("das simples", "despesas.cla_pj.darf"),
+    ("contabilidade", "despesas.cla_pj.contabilidade"),
+    ("contador", "despesas.cla_pj.contabilidade"),
+    ("nota fiscal", "despesas.cla_pj.nota_fiscal"),
+
+    # --- gastos unicos --------------------------------------------------------
+    ("multa", "despesas.gastos_unicos.multas"),
+
+    # --- receitas -------------------------------------------------------------
     ("pro labore", "receitas.ativa_fixa.pro_labore"),
     ("pro-labore", "receitas.ativa_fixa.pro_labore"),
     ("distribuicao de lucros", "receitas.ativa_variavel.lucros"),
@@ -155,3 +261,33 @@ DEFAULT_MERCHANT_RULES: list[tuple[str, str]] = [
 # qualquer regra aprendida com a correcao do usuario (prioridade 50) vença.
 CATALOG_RULE_PRIORITY = 90
 CATALOG_RULE_CONFIDENCE = "0.600"
+
+# ---------------------------------------------------------------------------
+# Padroes que falam da PLATAFORMA, e nao do estabelecimento
+# ---------------------------------------------------------------------------
+# O desempate normal e por tamanho do padrao, e isso erra num caso concreto:
+# "IFOOD *RESTAURANTE SAO JOSE" casa com 'ifood' (5 letras) e com 'restaurante'
+# (11), e o mais longo ganha - o jantar entregue em casa entrava como refeicao
+# fora. O nome do estabelecimento vem de brinde na descricao; quem paga a conta
+# e o aplicativo, e e ele que define a natureza do gasto. Uma padaria pedida pelo
+# iFood continua sendo delivery.
+#
+# Estes padroes recebem prioridade melhor que o resto do catalogo, e continuam
+# atras de qualquer regra aprendida com uma correcao do usuario (prioridade 50) -
+# se ele discordar uma vez, a correcao dele e que passa a valer.
+PRIORIDADE_PLATAFORMA = 80
+
+PADROES_DE_PLATAFORMA = frozenset({
+    # aplicativos de entrega: o nome do restaurante vem na descricao
+    "ifood", "rappi", "uber eats", "99food", "99 food", "cheeta", "aiqfome",
+    "zedelivery", "ze delivery", "daki",
+    # pagamento de fatura: "PAGAMENTO FATURA CARTAO MERCADO PAGO" nao e compra
+    # em market place, e contar a fatura como gasto dobraria o mes
+    "pagamento de fatura", "pagamento fatura", "pag fatura", "pagto fatura",
+    "pagamento cartao", "fatura cartao", "saldo fatura anterior",
+})
+
+
+def prioridade_de(padrao: str) -> int:
+    """Prioridade da regra de catalogo para este padrao."""
+    return PRIORIDADE_PLATAFORMA if padrao in PADROES_DE_PLATAFORMA else CATALOG_RULE_PRIORITY
