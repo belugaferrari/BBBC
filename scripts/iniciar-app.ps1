@@ -126,8 +126,40 @@ if (-not (Test-Path 'node_modules')) {
 # -------------------------------------------------------------- Endereco ---
 Titulo "3. Descobrindo o endereco deste computador na rede"
 $ip = Descobrir-IpDaRede
+
+# O endereco de ontem fica guardado, e a razao e o atalho do Expo Go.
+#
+# O Expo Go guarda os servidores abertos recentemente e deixa reabrir com um
+# toque, sem escanear o QR de novo - o atalho e o endereco, exp://IP:8081. Como o
+# roteador entrega o endereco por emprestimo, um dia ele muda, e ai o atalho
+# aponta para uma maquina que nao existe mais. O sintoma no celular e uma tela de
+# erro de rede que nao diz nada sobre IP; sem este aviso, o caminho e ficar
+# tentando o atalho achando que o sistema quebrou.
+$arquivoDoIp = Join-Path (Get-Location) '.ultimo-ip'
+$ipDeAntes = $null
+if (Test-Path $arquivoDoIp) {
+    $lido = (Get-Content $arquivoDoIp -Raw -ErrorAction SilentlyContinue)
+    if ($lido) { $ipDeAntes = $lido.Trim() }
+}
+
 if ($ip) {
     Ok "Este computador e o $ip"
+    if ($ipDeAntes -and $ipDeAntes -ne $ip) {
+        Write-Host ""
+        Aviso "O endereco deste computador MUDOU (era $ipDeAntes)."
+        Write-Host "      O atalho guardado no Expo Go aponta para o endereco velho e"
+        Write-Host "      nao vai abrir. Escaneie o QR code de novo desta vez - depois"
+        Write-Host "      o atalho novo volta a servir."
+        Write-Host ""
+        Write-Host "      Para isto nao se repetir, o roteador pode reservar um"
+        Write-Host "      endereco fixo para este computador (nas configuracoes dele,"
+        Write-Host "      procure por 'DHCP reservation' ou 'IP fixo')."
+        Write-Host ""
+    } elseif ($ipDeAntes -and $ipDeAntes -eq $ip) {
+        Write-Host "      Mesmo endereco da ultima vez: o atalho do Expo Go ainda serve," -ForegroundColor Green
+        Write-Host "      nao precisa escanear o QR code de novo." -ForegroundColor Green
+    }
+    Set-Content -Path $arquivoDoIp -Value $ip -Encoding utf8 -ErrorAction SilentlyContinue
 } else {
     Aviso "Nao consegui descobrir o endereco desta maquina na rede."
     Write-Host "      O modo Wi-Fi provavelmente nao vai funcionar. Use a opcao 2."
