@@ -143,7 +143,30 @@ somar tudo num balde só não responde à pergunta que o imposto faz. O limite e
 fica em `families.itcmd_annual_exemption`, **nulo por padrão** — ver o aviso em
 `docs/perguntas-abertas.md`, item 1.9.
 
-## 11. O que ficou de fora de propósito
+## 11. Offline: duas peças com propósitos diferentes
+
+O servidor mora no computador da casa, então "sem rede" aqui quer dizer "sem o
+PC" — e as duas coisas que o aplicativo precisa fazer nesse estado não têm o mesmo
+peso.
+
+A **cópia local** (`api/cache.ts`) é conveniência: dá para viver uma hora sem ver
+o painel. Ela é o cache de consultas desidratado, lido antes da primeira tela, e o
+que ela não pode fazer é mentir — por isso a tela sempre diz **de quando** são os
+números. Número velho sem data é pior que número ausente, porque ninguém desconfia
+dele.
+
+A **fila** (`api/fila.ts`) é o que importa: o gasto em dinheiro só existe se for
+lançado na hora. Ela guarda o lançamento no aparelho, e nada sai dali sem o
+servidor confirmar — nem o que ele recusa, que fica com o motivo para a tela
+mostrar. A `client_key`, que já existia no servidor, é o que torna a subida segura:
+reenviar não cobra duas vezes.
+
+E o estado da conexão (`api/conexao.ts`) **não vem do indicador de internet do
+sistema**. O servidor não está na internet: 5G perfeito com o PC desligado é
+offline, e provedor caído com o PC ligado é online. O único sinal honesto é se a
+última requisição obteve resposta — então é o cliente HTTP que alimenta o estado.
+
+## 12. O que ficou de fora de propósito
 
 - **Alembic**: as migrations são SQL puro numerado enquanto não há dados em
   produção. Na primeira mudança de schema com dados reais, migrar para Alembic.

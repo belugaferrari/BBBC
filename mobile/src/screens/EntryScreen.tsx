@@ -20,8 +20,8 @@ import {
   useCategories,
   useCreateAccount,
   useCreateDonor,
-  useCreateTransaction,
   useDonors,
+  useLancar,
   useMe,
   useMembers,
 } from '@/api/queries';
@@ -134,7 +134,7 @@ export function EntryScreen(): React.ReactElement {
   const { data: members } = useMembers();
   const { data: categories } = useCategories();
   const { data: eu } = useMe();
-  const lancar = useCreateTransaction();
+  const lancar = useLancar();
   const criarConta = useCreateAccount();
   const { data: doadores } = useDonors();
   const criarDoador = useCreateDonor();
@@ -248,7 +248,7 @@ export function EntryScreen(): React.ReactElement {
     setErro(null);
     setFeito(null);
     try {
-      await lancar.mutateAsync({
+      const resultado = await lancar.mutateAsync({
         client_key: chave.current,
         account_id: contaEscolhida,
         owner_member_id: quemEscolhido,
@@ -264,10 +264,18 @@ export function EntryScreen(): React.ReactElement {
         ...(ehDoacao && doadorId ? { donor_id: doadorId } : {}),
         ...(ehDoacao && destinoId ? { donation_for_category_id: destinoId } : {}),
       });
+      const oQueFoi = ehDoacao
+        ? `Doação de ${money(quantia)} em ${paraBR(dataISO)}`
+        : `${direcao === 'SAIDA' ? 'Gasto' : 'Entrada'} de ${money(quantia)} em ${paraBR(dataISO)}`;
       setFeito(
-        ehDoacao
-          ? `Doação de ${money(quantia)} em ${paraBR(dataISO)}. Não entra na renda do mês.`
-          : `${direcao === 'SAIDA' ? 'Gasto' : 'Entrada'} de ${money(quantia)} em ${paraBR(dataISO)}.`,
+        resultado.enfileirado
+          ? // Sem servidor, o lançamento fica no aparelho. Dizer "gravado" aqui
+            // seria mentira pequena com consequência grande: ele ainda não está
+            // nas contas do mês, e quem não sabe disso não procura depois.
+            `${oQueFoi}, guardado aqui no celular. Sobe sozinho quando o PC voltar.`
+          : ehDoacao
+            ? `${oQueFoi}. Não entra na renda do mês.`
+            : `${oQueFoi}.`,
       );
       // só o que muda de um lançamento para o outro é limpo
       setValor('');

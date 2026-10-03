@@ -1,8 +1,12 @@
 /** Hooks de dados. Uma chave por recurso, para o cache invalidar certo. */
 
+import { useEffect, useState } from 'react';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from './client';
+import { ApiError, api } from './client';
+import { assinarFila, descartar, enfileirar, listarFila, subirFila } from './fila';
+import type { ItemDaFila, ResultadoDaSubida } from './fila';
 import type {
   Account,
   AccountCreate,
@@ -149,27 +153,6 @@ export function useCreateAccount() {
       client.invalidateQueries({ queryKey: ['dashboard'] });
       client.invalidateQueries({ queryKey: queryKeys.netWorth });
       client.invalidateQueries({ queryKey: ['statement-checklist'] });
-    },
-  });
-}
-
-/**
- * Lançamento manual - é por aqui que entra o gasto pago em dinheiro, que não
- * aparece em extrato nenhum.
- *
- * `client_key` vai sempre preenchida: se a resposta se perder no caminho e o
- * app tentar de novo, o servidor devolve o lançamento que já gravou em vez de
- * duplicar o gasto.
- */
-export function useCreateTransaction() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (input: TransactionCreate) => api.post<Transaction>('/transactions', input),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ['transactions'] });
-      client.invalidateQueries({ queryKey: ['by-category'] });
-      client.invalidateQueries({ queryKey: ['dashboard'] });
-      client.invalidateQueries({ queryKey: ['forecast'] });
     },
   });
 }
@@ -515,4 +498,95 @@ export function useSetDonor() {
       client.invalidateQueries({ queryKey: ['transactions'] });
     },
   });
+}
+
+// ------------------------------------------------------- fila offline ---
+// O gasto em dinheiro só existe se for lançado na hora. "Lanço quando chegar em
+// casa" é o mesmo que não lançar — então, sem servidor, o lançamento é guardado
+// no aparelho e sobe depois, com a mesma `client_key`, que é o que impede o gasto
+// de ser contado duas vezes.
+
+export interface ResultadoDoLancamento {
+  /** ficou guardado no aparelho em vez de ir para o servidor */
+  enfileirado: boolean;
+  transacao?: Transaction;
+}
+
+/**
+ * Lançar à mão — é por aqui que entra o gasto pago em dinheiro, que não aparece
+ * em extrato nenhum. É o único caminho de lançamento do aplicativo, e de
+ * propósito: um atalho que falasse direto com o servidor perderia o que foi
+ * digitado justamente nas horas em que ele não responde.
+ *
+ * `client_key` vai sempre preenchida, e nasce com o rascunho na tela: se a
+ * resposta se perder no caminho — ou se o lançamento subir pela fila depois — o
+ * servidor devolve o que já gravou em vez de cobrar o gasto duas vezes.
+ *
+ * Só cai na fila o que falhou por falta de servidor (status 0). Recusa do
+ * servidor — categoria que exige comentário, valor inválido — volta como erro
+ * para a tela, porque guardar na fila um lançamento que já se sabe que não
+ * entra seria empurrar o problema para depois, longe de quem pode resolver.
+ */
+export function useLancar() {
+  const client = useQueryClient();
+  return useMutation<ResultadoDoLancamento, Error, TransactionCreate>({
+    mutationFn: async (input) => {
+      if (!input.client_key) throw new Error('Lancamento sem chave de idempotencia.');
+      try {
+        const transacao = await api.post<Transaction>('/transactions', input);
+        return { enfileirado: false, transacao };
+      } catch (erro) {
+        if (erro instanceof ApiError && erro.status === 0) {
+          await enfileirar(input);
+          return { enfileirado: true };
+        }
+        throw erro;
+      }
+    },
+    onSuccess: (resultado) => {
+      if (resultado.enfileirado) return;
+      client.invalidateQueries({ queryKey: ['transactions'] });
+      client.invalidateQueries({ queryKey: ['by-category'] });
+      client.invalidateQueries({ queryKey: ['dashboard'] });
+      client.invalidateQueries({ queryKey: ['forecast'] });
+      client.invalidateQueries({ queryKey: ['category-overview'] });
+    },
+  });
+}
+
+/** O que está esperando para subir, e o botão de tentar agora. */
+export function useFila() {
+  const client = useQueryClient();
+  const [itens, setItens] = useState<ItemDaFila[]>([]);
+  const [subindo, setSubindo] = useState(false);
+
+  useEffect(() => assinarFila(setItens), []);
+
+  async function subir(): Promise<ResultadoDaSubida> {
+    setSubindo(true);
+    try {
+      const resultado = await subirFila();
+      if (resultado.enviados > 0) {
+        client.invalidateQueries({ queryKey: ['transactions'] });
+        client.invalidateQueries({ queryKey: ['by-category'] });
+        client.invalidateQueries({ queryKey: ['dashboard'] });
+        client.invalidateQueries({ queryKey: ['forecast'] });
+        client.invalidateQueries({ queryKey: ['category-overview'] });
+      }
+      setItens(await listarFila());
+      return resultado;
+    } finally {
+      setSubindo(false);
+    }
+  }
+
+  return {
+    itens,
+    subindo,
+    subir,
+    descartar: async (id: string) => {
+      await descartar(id);
+      setItens(await listarFila());
+    },
+  };
 }

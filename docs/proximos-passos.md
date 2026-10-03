@@ -191,9 +191,15 @@ escreve o motivo em `ao-ligar.log` e desiste. Primeira instalação é sempre à
 
 ## Ainda pendente
 
-- **Offline**: consultar e lançar com o PC desligado, com fila que sobe depois. O
-  lado do servidor está pronto (a `client_key` já impede duplicata); falta o
-  cache local, a trava por biometria e a fila no aplicativo.
+- **Trava por biometria** ao abrir o aplicativo. Com a cópia local dos dados no
+  aparelho, ela passou a valer mais do que valia: hoje quem desbloqueia o celular
+  vê os números (mascarados) da última sincronização. É o que falta do offline —
+  o resto está feito, ver [`offline.md`](offline.md).
+- **Abrir o aplicativo longe de casa** exige o APK instalado: no Expo Go o código
+  vem do PC a cada abertura, então com o PC desligado o aplicativo não sobe (a
+  cópia local e a fila estão dentro de um aplicativo que não subiu). O build é um
+  comando e está no Caminho 2 de [`rodando-no-celular.md`](rodando-no-celular.md);
+  falta rodar.
 - A triagem do que é da empresa e do que é pessoal, com a lista de pendências
   ("a empresa me deve").
 - Expo Go no celular: a opção 2 (túnel) continua sem teste.

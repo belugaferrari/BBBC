@@ -16,6 +16,7 @@ import {
 import { colors, layout, radius, severityColor, spacing, toque, typography } from '@/theme';
 import { money, percent } from '@/theme/format';
 import type { Scope } from '@/api/types';
+import { AvisoDeConexao } from './AvisoDeConexao';
 
 /**
  * Moldura de tela que rola.
@@ -23,6 +24,10 @@ import type { Scope } from '@/api/types';
  * Centraliza a coluna de conteudo e limita a largura - ver `layout.coluna`.
  * Telas que precisam de rodape fixo montam o ScrollView na mao e usam
  * `layout.coluna` direto; as outras usam isto.
+ *
+ * O aviso de conexao entra aqui, e nao em cada tela: so assim a tela em que o
+ * usuario estiver quando o PC desligar avisa sozinha. Ele nao desenha nada
+ * quando esta tudo normal.
  */
 export function Screen({
   children,
@@ -38,6 +43,7 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       refreshControl={refreshControl}
     >
+      <AvisoDeConexao />
       {children}
     </ScrollView>
   );

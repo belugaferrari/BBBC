@@ -30,6 +30,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useDashboard, useEvolucao } from '@/api/queries';
+import { AvisoDeConexao } from '@/components/AvisoDeConexao';
 import type { Scope } from '@/api/types';
 import { MonthPicker, mesAtualISO } from '@/components/MonthPicker';
 import {
@@ -62,7 +63,12 @@ export function DashboardScreen(): React.ReactElement {
   // ele dentro, um mes que ainda esta carregando - ou que nao carregou - deixava
   // a tela sem nenhuma forma de sair dali. Quem abrisse um mes vazio ficava
   // presos nele, sem botao nenhum. O seletor e o que da para fazer sempre.
-  const cabecalho = <MonthPicker value={month} onChange={setMonth} />;
+  const cabecalho = (
+    <>
+      <MonthPicker value={month} onChange={setMonth} />
+      <AvisoDeConexao />
+    </>
+  );
 
   if (isLoading) {
     return (
@@ -75,7 +81,12 @@ export function DashboardScreen(): React.ReactElement {
     );
   }
 
-  if (error || !data) {
+  // `error` sozinho nao manda mais na tela: com a copia local do aparelho, a
+  // consulta pode ter falhado AGORA e ainda haver numeros de antes para mostrar.
+  // Trocar esses numeros por uma tela de erro seria jogar fora a unica coisa util
+  // que o aplicativo tem offline - quem avisa que eles sao de antes, e de quando,
+  // e a faixa no cabecalho.
+  if (!data) {
     return (
       <ScrollView
         style={styles.screen}
@@ -87,8 +98,9 @@ export function DashboardScreen(): React.ReactElement {
         {cabecalho}
         <Card>
           <Text style={styles.error}>
-            Nao consegui carregar {monthLabel(month)}. Puxe a tela para baixo para
-            tentar de novo, ou escolha outro mes acima.
+            {error
+              ? `Nao consegui carregar ${monthLabel(month)}, e ainda nao tenho copia deste mes no aparelho. Puxe a tela para baixo para tentar de novo, ou escolha outro mes acima.`
+              : `Nao consegui carregar ${monthLabel(month)}. Puxe a tela para baixo para tentar de novo, ou escolha outro mes acima.`}
           </Text>
         </Card>
       </ScrollView>
