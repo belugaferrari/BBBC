@@ -1,6 +1,6 @@
 """Previsoes: tetos por categoria e simulador de metas."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -95,22 +95,11 @@ def list_budget_caps(
     ]
 
 
-@router.post("/budget-caps", status_code=status.HTTP_201_CREATED)
-def create_budget_cap(payload: BudgetCapIn, current: CurrentMember, db: DbSession) -> dict:
-    """Define a meta da categoria. Definir de novo SUBSTITUI, nao empilha.
-
-    Sem isso, tocar duas vezes em "salvar meta" deixaria duas metas vivas para
-    Mercado, e o painel escolheria uma delas sem dizer qual - o tipo de numero
-    que faz a pessoa perder a confianca na tela inteira. A meta de um mes vale
-    para um (categoria, pessoa, periodo) por vez.
-    """
-    owned_category(db, payload.category_id, current)
-    if payload.member_id:
-        owned_member(db, payload.member_id, current)
-
-    comeco = payload.starts_on or date.today().replace(day=1)
-
-    anterior = db.scalar(
+def _vigente_em(
+    db: DbSession, current: CurrentMember, payload: BudgetCapIn, mes: date
+) -> BudgetCap | None:
+    """A meta que valia naquele mes para (categoria, pessoa, periodo)."""
+    return db.scalar(
         select(BudgetCap).where(
             BudgetCap.family_id == current.family_id,
             BudgetCap.category_id == payload.category_id,
@@ -118,31 +107,78 @@ def create_budget_cap(payload: BudgetCapIn, current: CurrentMember, db: DbSessio
             if payload.member_id is None
             else BudgetCap.member_id == payload.member_id,
             BudgetCap.period == payload.period,
-            BudgetCap.starts_on <= comeco,
-            (BudgetCap.ends_on.is_(None)) | (BudgetCap.ends_on >= comeco),
+            BudgetCap.starts_on <= mes,
+            (BudgetCap.ends_on.is_(None)) | (BudgetCap.ends_on >= mes),
         )
     )
-    if anterior is not None:
-        # A meta antiga e atualizada no lugar, e nao encerrada e recriada: o
-        # historico de quanto foi o teto em marco nao e informacao que alguem
-        # tenha pedido, e manter duas linhas por categoria complica a leitura de
-        # tudo o que olha teto.
+
+
+@router.post("/budget-caps", status_code=status.HTTP_201_CREATED)
+def create_budget_cap(payload: BudgetCapIn, current: CurrentMember, db: DbSession) -> dict:
+    """Define a meta da categoria A PARTIR do mes escolhido, sem reescrever o passado.
+
+    Esta rota ja substituiu a meta no lugar, e estava errada. Mudar o teto de
+    Mercado de 2.500 para 2.800 em outubro reescrevia tambem setembro, agosto e
+    todos os meses ja fechados: o grafico de setembro passava a ser julgado por
+    uma meta que nao existia quando setembro aconteceu. Numero que muda sozinho
+    no passado destroi a confianca na tela inteira, e e pior que numero ausente.
+
+    Agora a meta e versionada. Mudar o valor ENCERRA a meta anterior no ultimo dia
+    do mes anterior e abre uma nova a partir do mes escolhido - o passado fica
+    exatamente como estava, e quem olha setembro ve a meta de setembro.
+
+    Com uma excecao, que e correcao e nao mudanca: se a meta vigente ja COMECOU
+    neste mes, nao ha passado dela para preservar, e o valor e corrigido no lugar.
+    E o caso de digitar 280 em vez de 2.800 e arrumar em seguida.
+    """
+    owned_category(db, payload.category_id, current)
+    if payload.member_id:
+        owned_member(db, payload.member_id, current)
+
+    comeco = (payload.starts_on or date.today()).replace(day=1)
+    anterior = _vigente_em(db, current, payload, comeco)
+
+    if anterior is None:
+        cap = BudgetCap(
+            family_id=current.family_id,
+            **payload.model_dump(exclude={"starts_on"}),
+            starts_on=comeco,
+        )
+        db.add(cap)
+        db.flush()
+        return {"id": cap.id, "substituiu": False, "versionou": False}
+
+    mesma_coisa = (
+        anterior.amount == payload.amount
+        and anterior.alert_at_pct == payload.alert_at_pct
+        and anterior.includes_descendants == payload.includes_descendants
+    )
+    if mesma_coisa:
+        return {"id": anterior.id, "substituiu": True, "versionou": False}
+
+    if anterior.starts_on >= comeco:
+        # Nasceu neste mes: corrigir no lugar nao apaga historico nenhum.
         anterior.amount = payload.amount
         anterior.alert_at_pct = payload.alert_at_pct
         anterior.includes_descendants = payload.includes_descendants
-        anterior.starts_on = min(anterior.starts_on, comeco)
-        anterior.ends_on = None
         db.flush()
-        return {"id": anterior.id, "substituiu": True}
+        return {"id": anterior.id, "substituiu": True, "versionou": False}
 
-    cap = BudgetCap(
+    anterior.ends_on = comeco - timedelta(days=1)
+    nova = BudgetCap(
         family_id=current.family_id,
-        starts_on=comeco,
         **payload.model_dump(exclude={"starts_on"}),
+        starts_on=comeco,
     )
-    db.add(cap)
+    db.add(nova)
     db.flush()
-    return {"id": cap.id, "substituiu": False}
+    return {
+        "id": nova.id,
+        "substituiu": True,
+        "versionou": True,
+        "valia_antes": anterior.amount,
+        "ate": anterior.ends_on,
+    }
 
 
 @router.patch("/budget-caps/{cap_id}")
@@ -157,12 +193,27 @@ def update_budget_cap(
 
 
 @router.delete("/budget-caps/{cap_id}")
-def delete_budget_cap(cap_id: UUID, current: CurrentMember, db: DbSession) -> dict:
-    """Apaga a meta. O gasto continua onde esta - so o teto deixa de existir."""
+def delete_budget_cap(
+    cap_id: UUID, current: CurrentMember, db: DbSession, month: date | None = None
+) -> dict:
+    """Tira a meta A PARTIR do mes escolhido. O gasto continua onde esta.
+
+    Apagar a linha inteira seria reescrever o passado pelo outro lado: os meses
+    em que a meta existiu de verdade passariam a ser mostrados sem meta nenhuma.
+    Entao a meta que vem de antes e ENCERRADA no fim do mes anterior; so a que
+    nasceu neste mes some de vez, porque dela nao ha passado.
+    """
     cap = _cap_proprio(db, cap_id, current)
-    db.delete(cap)
+    comeco = (month or date.today()).replace(day=1)
+
+    if cap.starts_on >= comeco:
+        db.delete(cap)
+        db.flush()
+        return {"apagada": True, "encerrada": False}
+
+    cap.ends_on = comeco - timedelta(days=1)
     db.flush()
-    return {"apagada": True}
+    return {"apagada": False, "encerrada": True, "valeu_ate": cap.ends_on}
 
 
 @router.get("/goals")

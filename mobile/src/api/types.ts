@@ -547,3 +547,34 @@ export interface CardSummary {
   }[];
   aviso: string | null;
 }
+
+// ------------------------------------------------- evolucao do mes ---
+
+export interface DiaAcumulado {
+  day: number;
+  /** o acumulado do mês até aquele dia, não o gasto do dia */
+  total: string;
+}
+
+export interface MesDaEvolucao {
+  month: string;
+  total: string;
+  series: DiaAcumulado[];
+  /**
+   * A meta que valia NAQUELE mês, pela vigência — não a de hoje.
+   *
+   * É o que impede o gráfico de setembro de mudar quando a meta de outubro
+   * muda. `null` quando não havia meta naquela época.
+   */
+  cap: string | null;
+}
+
+export interface Evolucao {
+  month: string;
+  days_in_month: number;
+  /** até que dia a curva deste mês é real; null em mês já fechado */
+  today: number | null;
+  current: MesDaEvolucao;
+  previous_month: MesDaEvolucao;
+  same_month_last_year: MesDaEvolucao;
+}

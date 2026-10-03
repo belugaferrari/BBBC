@@ -1,10 +1,11 @@
 /**
- * Visão geral do mês: fluxo de caixa, saldos, Sankey, metas e alertas.
+ * Visão geral do mês: como o mês está correndo, fluxo de caixa, saldos, metas
+ * e alertas.
  *
  * O mês é escolhido, e não fixo no atual. Isso traz uma armadilha que a tela
  * precisa resolver na cara: o que vem do servidor NÃO é todo do mês escolhido.
  *
- *   * o fluxo (entrou, gastou, sobrou), o Sankey e as metas são do mês - olhar
+ *   * o fluxo (entrou, gastou, sobrou), o gráfico e as metas são do mês - olhar
  *     agosto mostra agosto;
  *   * os saldos (disponível, patrimônio, investido, fatura) são de HOJE, porque
  *     saem do saldo atual de cada conta, não de uma foto do passado.
@@ -28,7 +29,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { useDashboard } from '@/api/queries';
+import { useDashboard, useEvolucao } from '@/api/queries';
 import type { Scope } from '@/api/types';
 import { MonthPicker, mesAtualISO } from '@/components/MonthPicker';
 import {
@@ -40,7 +41,7 @@ import {
   SectionTitle,
   StatTile,
 } from '@/components/ui';
-import { SankeyChart } from '@/components/SankeyChart';
+import { EvolucaoChart } from '@/components/EvolucaoChart';
 import { colors, layout, severityColor, spacing, typography } from '@/theme';
 import { money, monthLabel, percent } from '@/theme/format';
 
@@ -55,24 +56,46 @@ export function DashboardScreen(): React.ReactElement {
   // o grafico nao pode ser mais largo que a coluna de conteudo
   const width = Math.min(larguraDaTela, layout.maxWidth);
   const { data, isLoading, refetch, isRefetching, error } = useDashboard(month, scope);
+  const { data: evolucao } = useEvolucao(month, scope);
+
+  // O seletor de mes fica FORA do if de carregamento, e isso nao e detalhe: com
+  // ele dentro, um mes que ainda esta carregando - ou que nao carregou - deixava
+  // a tela sem nenhuma forma de sair dali. Quem abrisse um mes vazio ficava
+  // presos nele, sem botao nenhum. O seletor e o que da para fazer sempre.
+  const cabecalho = <MonthPicker value={month} onChange={setMonth} />;
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.red} />
-      </View>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        {cabecalho}
+        <View style={styles.carregando}>
+          <ActivityIndicator color={colors.red} />
+        </View>
+      </ScrollView>
     );
   }
 
   if (error || !data) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.error}>Nao consegui carregar o mes. Puxe para tentar de novo.</Text>
-      </View>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.red} />
+        }
+      >
+        {cabecalho}
+        <Card>
+          <Text style={styles.error}>
+            Nao consegui carregar {monthLabel(month)}. Puxe a tela para baixo para
+            tentar de novo, ou escolha outro mes acima.
+          </Text>
+        </Card>
+      </ScrollView>
     );
   }
 
-  const { cashflow, balances, sankey, budget_caps: caps, alerts } = data;
+  const { cashflow, balances, budget_caps: caps, alerts } = data;
   const net = Number(cashflow.net);
 
   return (
@@ -83,7 +106,7 @@ export function DashboardScreen(): React.ReactElement {
         <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.red} />
       }
     >
-      <MonthPicker value={month} onChange={setMonth} />
+      {cabecalho}
 
       <View style={styles.header}>
         <View style={styles.headerMain}>
@@ -144,8 +167,12 @@ export function DashboardScreen(): React.ReactElement {
       )}
 
       <Card>
-        <SectionTitle>Para onde foi o dinheiro</SectionTitle>
-        <SankeyChart data={sankey} width={width} />
+        <SectionTitle>Como o mês está correndo</SectionTitle>
+        {evolucao ? (
+          <EvolucaoChart dados={evolucao} width={width - spacing.md * 4} />
+        ) : (
+          <ActivityIndicator color={colors.red} />
+        )}
       </Card>
 
       {caps.length > 0 ? (
@@ -190,7 +217,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.lg,
   },
-  error: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
+  error: { ...typography.body, color: colors.textMuted },
+  carregando: { paddingVertical: spacing.xl * 2, alignItems: 'center' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',

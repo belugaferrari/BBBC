@@ -410,3 +410,61 @@ movimentação (`PIX QRS`, `PIX AUT`, `TED`, `DOC`). O padrão aprendido virou
 Conferido de ponta a ponta contra a API: PIX de setembro chega sem categoria, ele
 corrige para Diarista, e o PIX de **outubro** para a mesma pessoa já chega
 classificado.
+
+## O Resumo: seletor preso, Sankey fora, metas com história
+
+### O seletor de mês sumia quando mais fazia falta
+
+Ele não achou o seletor no celular. O seletor existia — mas a tela saía **antes**
+dele quando o mês estava carregando ou não tinha carregado:
+
+```tsx
+if (isLoading) return <Spinner/>;        // sem seletor
+if (error) return <Erro/>;               // sem seletor
+return (<ScrollView><MonthPicker/>…      // só aqui
+```
+
+Quem abrisse um mês vazio ficava preso nele, sem botão nenhum para sair. O
+seletor passou para fora dos dois: é a única coisa que sempre dá para fazer.
+
+### O Sankey saiu; entrou a curva do mês
+
+O Sankey é bonito e responde "para onde foi o dinheiro" — pergunta que a aba
+Categorias responde melhor, com números em vez de fitas. O que ele não respondia
+é a que se faz no dia 12: **estou gastando rápido demais?**
+
+No lugar dele, o gasto **acumulado** dia a dia, com três referências:
+
+| | forma | por quê |
+|---|---|---|
+| Meta do mês | reta | é um teto |
+| Mês passado | curva | mudou alguma coisa agora? |
+| Mesmo mês do ano passado | curva tracejada | é mudança ou sazonalidade? |
+
+As duas últimas vêm como **curva**, e não como reta no total delas. A reta diria
+só "no fim do mês passado deu R$ 2.450"; a curva diz "no dia 12 do mês passado
+você estava em R$ 980, e hoje está em R$ 1.900" — que é a leitura que faz alguém
+mudar de comportamento no meio do mês, enquanto ainda dá. O total continua
+legível: é onde a curva termina.
+
+No mês corrente a curva para em hoje. Desenhá-la reta até o dia 31 faria o mês
+parecer estagnado, quando ele apenas ainda não aconteceu.
+
+### As metas passaram a ter história
+
+Pedido dele, e estava errado antes: *"se eu mudar os valores das metas, a
+informação não pode retroagir nos gráficos de meses anteriores"*.
+
+A rota fazia o contrário — substituía a meta no lugar **e ainda puxava o
+`starts_on` para trás**, então mudar o teto hoje reescrevia todos os meses
+fechados. Setembro passava a ser julgado por uma meta criada em outubro. Eu
+tinha até escrito um comentário justificando: *"o histórico de quanto foi o teto
+em março não é informação que alguém tenha pedido"*.
+
+Agora a meta é versionada: mudar o valor **encerra** a anterior no último dia do
+mês anterior e abre uma nova. Com uma exceção que é correção e não mudança — se
+a meta vigente já começou neste mês, não há passado dela para preservar, e o
+valor é corrigido no lugar (digitar 280 em vez de 2.800 e arrumar em seguida).
+
+Apagar também não reescreve o passado pelo outro lado: a meta que vem de antes é
+encerrada no fim do mês anterior; só a que nasceu neste mês some de vez.
