@@ -16,7 +16,9 @@ import { Card, MenuRow, Screen, SectionTitle } from '@/components/ui';
 import { colors, spacing, typography } from '@/theme';
 
 export interface MoreScreenProps {
-  aoEscolher: (destino: 'Contas' | 'Importar' | 'Investimentos' | 'IR') => void;
+  aoEscolher: (
+    destino: 'Contas' | 'Importar' | 'Cartoes' | 'Previsoes' | 'Investimentos' | 'IR',
+  ) => void;
 }
 
 export function MoreScreen({ aoEscolher }: MoreScreenProps): React.ReactElement {
@@ -52,6 +54,22 @@ export function MoreScreen({ aoEscolher }: MoreScreenProps): React.ReactElement 
           title="Importar extrato"
           subtitle="Mandar OFX, CSV ou PDF e conferir linha a linha"
           onPress={() => aoEscolher('Importar')}
+        />
+      </Card>
+
+      <SectionTitle>No mês</SectionTitle>
+      <Card>
+        <MenuRow
+          icon="▭"
+          title="Cartão de crédito"
+          subtitle="Quanto foi comprado no cartão, e o que pode estar contado em dobro"
+          onPress={() => aoEscolher('Cartoes')}
+        />
+        <MenuRow
+          icon="◎"
+          title="Previsões"
+          subtitle="Como ficam os próximos meses, com o que já está combinado"
+          onPress={() => aoEscolher('Previsoes')}
         />
       </Card>
 

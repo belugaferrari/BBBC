@@ -7,17 +7,39 @@
 #
 # Em troca, sao dois programas a instalar uma vez. O INICIAR-windows.bat, com
 # Docker, continua valendo para quem preferir.
+#
+# -AoLigar: modo "o Windows acabou de ligar". Nao pergunta NADA, nao abre
+# navegador e nao espera ninguem apertar Enter - numa janela minimizada no boot, uma pergunta e um
+# travamento silencioso. Em troca, ele desiste em vez de improvisar: se o
+# PostgreSQL ainda nao subiu, espera; se o cadastro nao existe, escreve o motivo
+# no relato e sai. Primeira instalacao e sempre a mao.
+
+param([switch]$AoLigar)
 
 $ErrorActionPreference = 'Continue'
 $RAIZ = Split-Path -Parent $PSScriptRoot
 Set-Location (Join-Path $RAIZ 'backend')
 
-function Titulo($t) { Write-Host "`n$t" -ForegroundColor White }
-function Ok($t)     { Write-Host "  [ok] $t" -ForegroundColor Green }
-function Erro($t)   { Write-Host "`n[x] $t" -ForegroundColor Red }
-function Aviso($t)  { Write-Host "  [!] $t" -ForegroundColor Yellow }
+# No modo automatico ninguem esta olhando a janela, entao tudo o que seria dito
+# na tela tambem vai para um arquivo - e o unico lugar onde procurar quando o
+# sistema "nao estava no ar" de manha.
+$script:Relato = if ($AoLigar) { Join-Path $RAIZ 'ao-ligar.log' } else { $null }
+function Anotar($texto) {
+    if ($script:Relato) {
+        "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $texto" |
+            Add-Content -Path $script:Relato -Encoding utf8
+    }
+}
+
+function Titulo($t) { Write-Host "`n$t" -ForegroundColor White; Anotar $t }
+function Ok($t)     { Write-Host "  [ok] $t" -ForegroundColor Green; Anotar "ok: $t" }
+function Erro($t)   { Write-Host "`n[x] $t" -ForegroundColor Red; Anotar "ERRO: $t" }
+function Aviso($t)  { Write-Host "  [!] $t" -ForegroundColor Yellow; Anotar "aviso: $t" }
 
 function Fim($codigo) {
+    # Esperar Enter numa janela que ninguem abriu deixaria o processo de pe para
+    # sempre, parecendo que o sistema esta rodando.
+    if ($AoLigar) { exit $codigo }
     Write-Host "`nPode fechar esta janela." -ForegroundColor White
     Read-Host "Aperte Enter para sair"
     exit $codigo
@@ -121,7 +143,7 @@ if (-not $py) {
     Write-Host "  'Add python.exe to PATH' antes de clicar em Install." -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  Depois feche esta janela e rode este arquivo de novo."
-    Start-Process "https://www.python.org/downloads/"
+    if (-not $AoLigar) { Start-Process "https://www.python.org/downloads/" }
     Fim 1
 }
 Ok "Python $($py.versao) (via $($py.exe) $($py.args))"
@@ -140,7 +162,7 @@ if (-not $psql) {
     Write-Host "    - aceite o resto como vem, inclusive a porta 5432."
     Write-Host ""
     Write-Host "  Depois feche esta janela e rode este arquivo de novo."
-    Start-Process "https://www.postgresql.org/download/windows/"
+    if (-not $AoLigar) { Start-Process "https://www.postgresql.org/download/windows/" }
     Fim 1
 }
 Ok "PostgreSQL encontrado"
@@ -152,8 +174,26 @@ $env:PGPASSWORD = $BANCO_SENHA
 & $psql -U $BANCO_USUARIO -h localhost -d $BANCO_NOME -c 'SELECT 1' *> $null
 $jaExiste = ($LASTEXITCODE -eq 0)
 
+# No boot, o servico do PostgreSQL pode ainda estar subindo quando este script
+# comeca - os dois sao iniciados pelo Windows mais ou menos ao mesmo tempo.
+# Desistir no primeiro "nao" transformaria uma corrida de poucos segundos num
+# "o sistema nao liga sozinho".
+if ($AoLigar -and -not $jaExiste) {
+    Write-Host "  Esperando o PostgreSQL subir..."
+    $limite = (Get-Date).AddSeconds(120)
+    while (-not $jaExiste -and (Get-Date) -lt $limite) {
+        Start-Sleep -Seconds 3
+        & $psql -U $BANCO_USUARIO -h localhost -d $BANCO_NOME -c 'SELECT 1' *> $null
+        $jaExiste = ($LASTEXITCODE -eq 0)
+    }
+}
+
 if ($jaExiste) {
     Ok "Banco ja preparado"
+} elseif ($AoLigar) {
+    Erro "O banco nao respondeu. Abra o ABRIR-BBBC-windows.bat uma vez, a mao."
+    Anotar "o modo automatico nao cria banco nem pede senha - isso e feito na instalacao"
+    Fim 1
 } else {
     Write-Host "  Preciso criar o banco. Para isso uso a senha do 'postgres'"
     Write-Host "  que voce escolheu ao instalar o PostgreSQL."
@@ -267,6 +307,16 @@ Titulo "5. Criando as tabelas"
 if ($LASTEXITCODE -ne 0) { Erro "Nao consegui criar as tabelas."; Fim 1 }
 Ok "Tabelas prontas"
 
+# As regras de sugestao guardam o ID da categoria, nao o caminho. Quando a arvore
+# muda - a 0009 trocou a taxonomia pela do Felipe - as regras antigas apontam
+# para categorias que nao existem mais, e o unico sintoma e o extrato importado
+# chegando todo em branco: nenhum erro, nenhum aviso, so a sugestao deixando de
+# aparecer. Refazer as regras do catalogo a cada partida custa menos de um
+# segundo e fecha esse buraco. As regras aprendidas com as correcoes dele nao
+# sao tocadas.
+& $pyVenv -m app.cli sync-rules 2>$null | ForEach-Object { "  $_" }
+if ($LASTEXITCODE -ne 0) { Aviso "As regras de sugestao nao foram atualizadas." }
+
 # ------------------------------------------------------------- Cadastro ---
 Titulo "6. Conferindo o seu cadastro"
 
@@ -302,6 +352,12 @@ if ($precisa -eq 2) {
 }
 
 $primeiraVez = ($precisa -eq 0)
+
+if ($primeiraVez -and $AoLigar) {
+    Erro "Nao ha cadastro ainda. Abra o ABRIR-BBBC-windows.bat uma vez, a mao."
+    Anotar "o cadastro pede e-mail e senha, e isso nao da para perguntar no boot"
+    Fim 1
+}
 
 if ($primeiraVez) {
     Write-Host ""
@@ -351,7 +407,8 @@ Write-Host ""
 # A aba do /docs abre so na estreia. Ela serve para provar que o servidor subiu,
 # e isso se prova uma vez; depois e uma aba a mais para fechar toda manha - e
 # quem abre o BBBC quer o aplicativo, nao a documentacao da API.
-if ($primeiraVez) { Start-Process "http://localhost:8000/docs" }
+if ($primeiraVez -and -not $AoLigar) { Start-Process "http://localhost:8000/docs" }
+Anotar "servidor subindo em http://localhost:8000"
 
 # 0.0.0.0 e nao localhost: o celular precisa alcancar esta maquina pela rede.
 & $pyVenv -m uvicorn app.main:app --host 0.0.0.0 --port 8000

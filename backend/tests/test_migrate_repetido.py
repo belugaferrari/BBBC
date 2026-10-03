@@ -127,4 +127,11 @@ def test_lista_de_adocao_bate_com_as_migrations_que_existiam():
     """
     from app.cli import MIGRATIONS_ANTES_DO_REGISTRO
 
-    assert set(MIGRATIONS_ANTES_DO_REGISTRO) <= _no_disco()
+    nomes = {nome for nome, _ in MIGRATIONS_ANTES_DO_REGISTRO}
+    assert nomes <= _no_disco()
+
+    # cada uma tem de trazer a pergunta que diz se ela ja esta no banco: sem a
+    # pergunta, a adocao voltaria a marcar tudo como aplicado e as migrations que
+    # faltassem nunca mais rodariam
+    for nome, pergunta in MIGRATIONS_ANTES_DO_REGISTRO:
+        assert pergunta.strip().upper().startswith("SELECT"), nome

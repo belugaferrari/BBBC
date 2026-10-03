@@ -3,6 +3,12 @@
 Estes testes olham para o catalogo como ele e usado de verdade: um extrato
 brasileiro chegando com nomes de fornecedor reais, e as marcacoes de IR que
 decidem quanto imposto se paga.
+
+A arvore conferida aqui e a do Felipe, a que ele usa no Excel ha anos - as
+quinze categorias da lista dele, com os nomes dele. A 0009 trocou a taxonomia
+que eu havia proposto por essa, e estes testes trocaram junto: um teste que
+afirma a arvore errada e pior que teste nenhum, porque da a impressao de que
+alguem conferiu.
 """
 
 from __future__ import annotations
@@ -92,13 +98,47 @@ def test_a_arvore_tem_as_categorias_que_a_familia_pediu(client, familia):
     despesas = next(n for n in arvore if n["name"] == "Despesas")
     nomes = {filho["name"] for filho in despesas["children"]}
 
-    esperadas = {
-        "Financiamento", "Condominio e manutencao", "Mensais fixos", "Educacao",
-        "Saude", "Mercado", "Faxina", "Criacao", "Combustivel", "Estacionamento",
-        "Transportes", "Restaurantes", "Aplicativo de comida", "Market places",
-        "Assinaturas", "Anuais", "Unicos",
-    }
-    assert esperadas <= nomes, f"faltando: {esperadas - nomes}"
+    # As quinze da lista dele, com os nomes dele. A ordem tambem e a dele: a
+    # arvore volta na sequencia em que ele escreveu as categorias.
+    esperadas = [
+        "Gastos mensais", "Condominio", "Financiamentos", "Educacao", "Saude",
+        "Transporte", "Mercado", "Restaurantes", "Market places",
+        "Delivery de comida", "Limpeza", "Gastos anuais", "Gastos unicos",
+        "Criacao", "Cla PJ",
+    ]
+    assert set(esperadas) <= nomes, f"faltando: {set(esperadas) - nomes}"
+    assert [f["name"] for f in despesas["children"]] == esperadas
+
+
+def test_transporte_guarda_as_subcategorias_que_ele_citou(client, familia):
+    """"as subcategorias de transporte: Transporte por aplicativo; Gasolina;
+    Estacionamento" - palavras dele. Antes eram tres categorias soltas de
+    primeiro nivel, e a meta nao tinha onde morar: ele poe o teto em Transporte
+    e quer ver o detalhe por dentro."""
+    arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
+    despesas = next(n for n in arvore if n["name"] == "Despesas")
+    transporte = next(f for f in despesas["children"] if f["name"] == "Transporte")
+
+    nomes = {f["name"] for f in transporte["children"]}
+    assert {"Transporte por aplicativo", "Gasolina", "Estacionamento"} <= nomes
+    # a tag do Sem Parar, que ele citou e nao existia
+    assert "Pedagio e tag" in nomes
+
+    # as tres sairam do primeiro nivel: no primeiro nivel elas duplicariam o
+    # gasto de Transporte na soma da tela de categorias
+    primeiro_nivel = {f["name"] for f in despesas["children"]}
+    assert not {"Combustivel", "Estacionamento", "Transportes"} & primeiro_nivel
+
+
+def test_pagamento_de_fatura_nao_conta_como_gasto(client, familia):
+    """A compra no cartao JA e a despesa, lancada no dia dela. Se o pagamento da
+    fatura tambem contasse, cada compra entraria duas vezes e o mes dobraria."""
+    arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
+    transferencias = next(n for n in arvore if n["name"] == "Transferencias")
+
+    assert transferencias["counts_as_expense"] is False
+    for filha in transferencias["children"]:
+        assert filha["counts_as_expense"] is False, filha["name"]
 
 
 def test_investimento_nao_e_despesa(client, familia):
@@ -121,8 +161,8 @@ def test_farmacia_fica_dentro_de_saude_mas_nao_e_dedutivel(client, familia):
     saude = next(f for f in despesas["children"] if f["name"] == "Saude")
 
     por_nome = {f["name"]: f for f in saude["children"]}
-    assert por_nome["Farmacia (nao dedutivel)"]["ir_deduction_type"] == "NENHUMA"
-    assert por_nome["Plano de saude (dedutivel)"]["ir_deduction_type"] == "SAUDE"
+    assert por_nome["Farmacia"]["ir_deduction_type"] == "NENHUMA"
+    assert por_nome["Plano de saude"]["ir_deduction_type"] == "SAUDE"
 
 
 def test_material_escolar_nao_e_dedutivel_mas_a_mensalidade_e(client, familia):
@@ -131,8 +171,8 @@ def test_material_escolar_nao_e_dedutivel_mas_a_mensalidade_e(client, familia):
     educacao = next(f for f in despesas["children"] if f["name"] == "Educacao")
 
     por_nome = {f["name"]: f for f in educacao["children"]}
-    assert por_nome["Materiais (nao dedutivel)"]["ir_deduction_type"] == "NENHUMA"
-    assert por_nome["Escola (dedutivel)"]["ir_deduction_type"] == "EDUCACAO"
+    assert por_nome["Materiais"]["ir_deduction_type"] == "NENHUMA"
+    assert por_nome["Escola"]["ir_deduction_type"] == "EDUCACAO"
 
 
 def test_o_ir_separa_o_que_e_dedutivel_do_que_nao_e(client, familia):
@@ -172,7 +212,7 @@ def test_unicos_exige_comentario(client, familia):
     resposta = lancar(
         client, familia, booked_on=date.today().isoformat(), amount="3400.00",
         direction="SAIDA", description="Compra avulsa",
-        category_id=familia["cat"]["despesas.unicos"],
+        category_id=familia["cat"]["despesas.gastos_unicos"],
     )
     assert resposta.status_code == 422
     assert "comentario" in resposta.json()["detail"].lower()
@@ -182,7 +222,7 @@ def test_unicos_passa_com_comentario(client, familia):
     resposta = lancar(
         client, familia, booked_on=date.today().isoformat(), amount="3400.00",
         direction="SAIDA", description="Compra avulsa",
-        category_id=familia["cat"]["despesas.unicos"],
+        category_id=familia["cat"]["despesas.gastos_unicos"],
         notes="Conserto do telhado depois do temporal de agosto",
     )
     assert resposta.status_code == 201
@@ -193,7 +233,7 @@ def test_o_app_sabe_quando_pedir_o_comentario(client, familia):
     despesas = next(n for n in arvore if n["name"] == "Despesas")
     por_nome = {f["name"]: f for f in despesas["children"]}
 
-    assert por_nome["Unicos"]["requires_note"] is True
+    assert por_nome["Gastos unicos"]["requires_note"] is True
     assert por_nome["Mercado"]["requires_note"] is False
 
 
@@ -201,22 +241,26 @@ def test_o_app_sabe_quando_pedir_o_comentario(client, familia):
 @pytest.mark.parametrize(
     ("descricao", "categoria_esperada"),
     [
-        ("IFOOD *PEDIDO 4821", "Aplicativo de comida"),
-        ("UBER   *TRIP HELP.UBER.COM", "Transportes"),
-        ("POSTO IPIRANGA LTDA", "Combustivel"),
+        ("IFOOD *PEDIDO 4821", "Delivery de comida"),
+        ("UBER   *TRIP HELP.UBER.COM", "Transporte por aplicativo"),
+        ("POSTO IPIRANGA LTDA", "Gasolina"),
         ("ESTAPAR ESTACIONAMENTO", "Estacionamento"),
+        ("SEM PARAR MENSALIDADE", "Pedagio e tag"),
         ("SUPERMERCADO ANGELONI 023", "Mercado"),
+        ("PADARIA SAO JOSE", "Padaria e lanchonete"),
         ("MERCADOLIVRE*COMPRA", "Market places"),
         ("AMAZON BR SERVICOS", "Market places"),
         ("NETFLIX.COM", "Streaming"),
         ("OPENAI *CHATGPT SUBSCR", "IA e softwares"),
-        ("DROGARIA SAO PAULO", "Farmacia (nao dedutivel)"),
-        ("UNIMED SEGUROS SAUDE", "Plano de saude (dedutivel)"),
-        ("COLEGIO SAO JOSE MENSALIDADE", "Escola (dedutivel)"),
+        ("DROGARIA SAO PAULO", "Farmacia"),
+        ("UNIMED SEGUROS SAUDE", "Plano de saude"),
+        ("COLEGIO SAO JOSE MENSALIDADE", "Escola"),
         ("ENEL DISTRIBUICAO SP", "Luz"),
         ("COMGAS SP", "Gas"),
-        ("CONDOMINIO EDIFICIO", "Condominio e manutencao"),
+        ("CONDOMINIO EDIFICIO", "Condominio"),
         ("IPVA 2026 DETRAN", "IPVA"),
+        ("RI HAPPY BRINQUEDOS", "Brinquedos"),
+        ("DARF SIMPLES NACIONAL", "DARF e impostos"),
     ],
 )
 def test_extrato_real_chega_ja_categorizado(client, familia, descricao, categoria_esperada):
@@ -243,26 +287,72 @@ def test_extrato_real_chega_ja_categorizado(client, familia, descricao, categori
 
 
 def test_uber_eats_nao_vira_transporte(client, familia):
-    """A regra mais especifica tem que ser avaliada antes da generica."""
+    """A regra mais especifica tem que vencer a generica."""
     tx = lancar(
         client, familia, booked_on=date.today().isoformat(), amount="70.00",
         direction="SAIDA", description="UBER EATS PEDIDO",
     ).json()
 
-    arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
-    despesas = next(n for n in arvore if n["name"] == "Despesas")
-    comida = next(f for f in despesas["children"] if f["name"] == "Aplicativo de comida")
-    assert tx["category_id"] == comida["id"]
+    assert tx["category_id"] == familia["cat"]["despesas.delivery"]
+
+
+@pytest.mark.parametrize(
+    "descricao",
+    [
+        "IFOOD *RESTAURANTE SAO JOSE",
+        "IFOOD *PADARIA DO ZE",
+        "UBER EATS *BURGER KING",
+        "99FOOD PEDIDO 123",
+    ],
+)
+def test_o_aplicativo_de_entrega_vence_o_nome_do_estabelecimento(
+    client, familia, descricao
+):
+    """O nome do restaurante vem de brinde na descricao do iFood.
+
+    O desempate normal e por tamanho do padrao, e isso errava aqui: 'restaurante'
+    tem 11 letras e 'ifood' tem 5, entao o jantar entregue em casa entrava como
+    refeicao fora. Quem paga a conta e o aplicativo, e e ele que define a
+    natureza do gasto - uma padaria pedida pelo iFood continua sendo delivery.
+    """
+    tx = lancar(
+        client, familia, booked_on=date.today().isoformat(), amount="70.00",
+        direction="SAIDA", description=descricao,
+    ).json()
+
+    assert tx["category_id"] == familia["cat"]["despesas.delivery"], descricao
+
+
+def test_pagamento_de_fatura_e_reconhecido_no_extrato(client, familia):
+    """A linha que, contada como gasto, dobraria todo o cartao do mes.
+
+    `normalize` apaga 'pagamento de fatura' de proposito - e ruido quando se
+    procura o fornecedor de uma compra. So que e justamente essa frase que diz
+    que a linha NAO e uma compra. Por isso a regra e testada tambem contra a
+    descricao com o ruido preservado.
+    """
+    tx = lancar(
+        client, familia, booked_on=date.today().isoformat(), amount="4300.00",
+        direction="SAIDA", description="PAGAMENTO FATURA CARTAO MERCADO PAGO",
+    ).json()
+
+    assert tx["category_id"] == familia["cat"]["transferencias.pagamento_cartao"]
 
 
 def test_a_correcao_do_usuario_vence_a_regra_do_catalogo(client, familia):
-    """As regras que vem prontas sao ponto de partida, nao verdade absoluta."""
+    """As regras que vem prontas sao ponto de partida, nao verdade absoluta.
+
+    O fornecedor usado aqui so aparece neste teste de proposito: a regra
+    aprendida fica gravada na familia, que e compartilhada pelo modulo, e
+    ensinar algo sobre um fornecedor que outro teste tambem usa faria um
+    depender da ordem do outro.
+    """
     cat = familia["cat"]
     tx = lancar(
         client, familia, booked_on=date.today().isoformat(), amount="220.00",
-        direction="SAIDA", description="MERCADO MUNICIPAL RESTAURANTE",
+        direction="SAIDA", description="HORTIFRUTI DA ESQUINA",
     ).json()
-    assert tx["category_id"] == cat["despesas.mercado"]  # a regra 'mercado' pegou
+    assert tx["category_id"] == cat["despesas.mercado"]  # a regra 'hortifruti' pegou
 
     client.patch(
         f"/api/v1/transactions/{tx['id']}",
@@ -272,7 +362,32 @@ def test_a_correcao_do_usuario_vence_a_regra_do_catalogo(client, familia):
 
     seguinte = lancar(
         client, familia, booked_on=date.today().isoformat(), amount="180.00",
-        direction="SAIDA", description="MERCADO MUNICIPAL RESTAURANTE",
+        direction="SAIDA", description="HORTIFRUTI DA ESQUINA",
+    ).json()
+    assert seguinte["category_id"] == cat["despesas.restaurantes"]
+
+
+def test_a_correcao_do_usuario_vence_ate_a_regra_de_plataforma(client, familia):
+    """A prioridade da plataforma esta acima do catalogo e abaixo do usuario.
+
+    Se fosse acima dele, o Felipe perderia a palavra final sobre o proprio
+    extrato - e a regra de plataforma e uma heuristica minha, nao um fato."""
+    cat = familia["cat"]
+    tx = lancar(
+        client, familia, booked_on=date.today().isoformat(), amount="90.00",
+        direction="SAIDA", description="AIQFOME PEDIDO NOTURNO",
+    ).json()
+    assert tx["category_id"] == cat["despesas.delivery"]
+
+    client.patch(
+        f"/api/v1/transactions/{tx['id']}",
+        json={"category_id": cat["despesas.restaurantes"], "learn_rule": True},
+        headers=familia["headers"],
+    )
+
+    seguinte = lancar(
+        client, familia, booked_on=date.today().isoformat(), amount="90.00",
+        direction="SAIDA", description="AIQFOME PEDIDO NOTURNO",
     ).json()
     assert seguinte["category_id"] == cat["despesas.restaurantes"]
 
@@ -300,10 +415,10 @@ def test_amortizacao_sai_da_conta_mas_nao_e_gasto(client, familia):
 
     lancar(client, familia, booked_on=hoje.isoformat(), amount="1800.00",
            direction="SAIDA", description="Amortizacao do financiamento",
-           category_id=cat["despesas.financiamento.amortizacao"])
+           category_id=cat["despesas.financiamentos.amortizacao"])
     lancar(client, familia, booked_on=hoje.isoformat(), amount="700.00",
            direction="SAIDA", description="Juros do financiamento",
-           category_id=cat["despesas.financiamento.juros"])
+           category_id=cat["despesas.financiamentos.juros"])
 
     painel = client.get(
         "/api/v1/dashboard", params={"month": hoje.replace(day=1).isoformat()},
@@ -351,7 +466,7 @@ def test_patrimonio_nao_polui_o_gasto_por_categoria(client, familia):
     nomes = {g["name"] for g in resposta["categories"]}
     assert "Amortizacao" not in nomes
     assert "Aporte" not in nomes
-    assert "Financiamento" in nomes   # os juros continuam la
+    assert "Financiamentos" in nomes   # os juros continuam la
 
 
 # --------------------------------- comentario herdado pelos filhos ----------
@@ -360,17 +475,17 @@ def test_filho_de_unicos_herda_a_exigencia_de_comentario(client, familia):
     resposta = lancar(
         client, familia, booked_on=date.today().isoformat(), amount="2200.00",
         direction="SAIDA", description="Geladeira nova",
-        category_id=familia["cat"]["despesas.unicos.moveis_eletro"],
+        category_id=familia["cat"]["despesas.gastos_unicos.moveis_eletro"],
     )
     assert resposta.status_code == 422
-    assert "Unicos" in resposta.json()["detail"]
+    assert "Gastos unicos" in resposta.json()["detail"]
 
 
 def test_filho_de_unicos_passa_com_comentario(client, familia):
     resposta = lancar(
         client, familia, booked_on=date.today().isoformat(), amount="2200.00",
         direction="SAIDA", description="Geladeira nova",
-        category_id=familia["cat"]["despesas.unicos.moveis_eletro"],
+        category_id=familia["cat"]["despesas.gastos_unicos.moveis_eletro"],
         notes="A antiga parou de gelar depois de 11 anos",
     )
     assert resposta.status_code == 201
@@ -389,16 +504,18 @@ def test_categoria_normal_nao_pede_comentario(client, familia):
 def test_anuais_agora_distingue_o_que_tem_dentro(client, familia):
     arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
     despesas = next(n for n in arvore if n["name"] == "Despesas")
-    anuais = next(f for f in despesas["children"] if f["name"] == "Anuais")
+    anuais = next(f for f in despesas["children"] if f["name"] == "Gastos anuais")
 
     nomes = {f["name"] for f in anuais["children"]}
-    assert {"IPVA", "IPTU", "Licenciamento", "Seguros"} <= nomes
+    assert {"IPVA", "IPTU", "Licenciamento", "Seguro do carro"} <= nomes
 
 
 def test_financiamento_separa_juros_de_amortizacao(client, familia):
     arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
     despesas = next(n for n in arvore if n["name"] == "Despesas")
-    financiamento = next(f for f in despesas["children"] if f["name"] == "Financiamento")
+    financiamento = next(
+        f for f in despesas["children"] if f["name"] == "Financiamentos"
+    )
 
     por_nome = {f["name"]: f for f in financiamento["children"]}
     assert por_nome["Juros"]["counts_as_expense"] is True

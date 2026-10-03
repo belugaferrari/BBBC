@@ -6,6 +6,10 @@ import { api } from './client';
 import type {
   Account,
   AccountCreate,
+  BudgetCapRow,
+  CardSummary,
+  CategoryAnalysis,
+  CategoryOverview,
   BenchmarkEvolution,
   CardPrograms,
   Forecast,
@@ -43,6 +47,10 @@ export const queryKeys = {
   netWorth: ['net-worth'] as const,
   holdings: (kind?: HoldingKind) => ['holdings', kind ?? 'todos'] as const,
   cardPrograms: ['card-programs'] as const,
+  categoryOverview: (month: string) => ['category-overview', month] as const,
+  categoryAnalysis: (id: string, month: string) => ['category-analysis', id, month] as const,
+  budgetCaps: (month: string) => ['budget-caps', month] as const,
+  cardSummary: (month: string) => ['card-summary', month] as const,
   checklist: (month: string) => ['statement-checklist', month] as const,
 };
 
@@ -256,5 +264,116 @@ export function useDeductionSimulation(year: number) {
   return useMutation({
     mutationFn: (input: { deduction_type: string; amount: number; member_id?: string }) =>
       api.post(`/tax/${year}/simulate-deduction`, input),
+  });
+}
+
+// ------------------------------------------------- categorias e metas ---
+
+/** Tudo o que a tela de categorias mostra, numa chamada. */
+export function useCategoryOverview(month: string) {
+  return useQuery({
+    queryKey: queryKeys.categoryOverview(month),
+    queryFn: () => api.get<CategoryOverview>('/categories/resumo', { month, depth: 2 }),
+  });
+}
+
+/**
+ * A leitura de uma categoria no tempo. Serve para qualquer nível: a mesma rota
+ * responde por "Transporte" e por "Gasolina".
+ */
+export function useCategoryAnalysis(categoryId: string | null, month: string) {
+  return useQuery({
+    queryKey: queryKeys.categoryAnalysis(categoryId ?? '', month),
+    queryFn: () => api.get<CategoryAnalysis>(`/categories/${categoryId}/analise`, { month }),
+    enabled: Boolean(categoryId),
+  });
+}
+
+export function useBudgetCaps(month: string) {
+  return useQuery({
+    queryKey: queryKeys.budgetCaps(month),
+    queryFn: () => api.get<BudgetCapRow[]>('/budget-caps', { month }),
+  });
+}
+
+/** Tudo o que mexe em categoria ou meta invalida as mesmas telas. */
+function invalidarCategorias(client: ReturnType<typeof useQueryClient>): void {
+  client.invalidateQueries({ queryKey: ['category-overview'] });
+  client.invalidateQueries({ queryKey: ['category-analysis'] });
+  client.invalidateQueries({ queryKey: ['budget-caps'] });
+  client.invalidateQueries({ queryKey: queryKeys.categories });
+  client.invalidateQueries({ queryKey: ['dashboard'] });
+}
+
+export function useCreateCategory() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      parent_id?: string;
+      kind?: 'DESPESA' | 'RECEITA';
+      expense_nature?: string;
+    }) => api.post<Category>('/categories', { kind: 'DESPESA', ...input }),
+    onSuccess: () => invalidarCategorias(client),
+  });
+}
+
+export function useUpdateCategory() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; name?: string; icon?: string }) =>
+      api.patch<Category>(`/categories/${input.id}`, {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.icon !== undefined ? { icon: input.icon } : {}),
+      }),
+    onSuccess: () => invalidarCategorias(client),
+  });
+}
+
+/**
+ * Excluir categoria. O servidor decide entre apagar e arquivar: com histórico em
+ * cima, apagar transformaria gasto classificado em gasto solto. A resposta diz
+ * qual dos dois aconteceu, para a tela poder contar a verdade.
+ */
+export function useDeleteCategory() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.del<{
+        arquivada: boolean;
+        nome: string;
+        subcategorias: number;
+        lancamentos: number;
+        aviso?: string;
+      }>(`/categories/${id}`),
+    onSuccess: () => invalidarCategorias(client),
+  });
+}
+
+/** Salvar a meta. Salvar de novo substitui a que havia, em vez de empilhar. */
+export function useSaveBudgetCap() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { category_id: string; amount: number; member_id?: string }) =>
+      api.post<{ id: string; substituiu: boolean }>('/budget-caps', input),
+    onSuccess: () => invalidarCategorias(client),
+  });
+}
+
+export function useDeleteBudgetCap() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ apagada: boolean }>(`/budget-caps/${id}`),
+    onSuccess: () => invalidarCategorias(client),
+  });
+}
+
+// ------------------------------------------------------------ cartoes ---
+
+/** Gasto no cartão e as linhas que podem estar contadas em dobro. */
+export function useCardSummary(month: string) {
+  return useQuery({
+    queryKey: queryKeys.cardSummary(month),
+    queryFn: () => api.get<CardSummary>('/cards/summary', { month }),
   });
 }

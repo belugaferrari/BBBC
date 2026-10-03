@@ -11,9 +11,20 @@ import {
   View,
 } from 'react-native';
 
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 import { useDashboard } from '@/api/queries';
 import type { Scope } from '@/api/types';
-import { BudgetRow, Card, MoneyValue, ScopeToggle, SectionTitle, StatTile } from '@/components/ui';
+import {
+  Botao,
+  BudgetRow,
+  Card,
+  MoneyValue,
+  ScopeToggle,
+  SectionTitle,
+  StatTile,
+} from '@/components/ui';
 import { SankeyChart } from '@/components/SankeyChart';
 import { colors, layout, severityColor, spacing, typography } from '@/theme';
 import { money, monthLabel, percent } from '@/theme/format';
@@ -24,6 +35,9 @@ function currentMonth(): string {
 }
 
 export function DashboardScreen(): React.ReactElement {
+  const navigation = useNavigation<
+    NativeStackNavigationProp<{ Cartoes: undefined }>
+  >();
   const [scope, setScope] = useState<Scope>('familia');
   const month = currentMonth();
   const { width: larguraDaTela } = useWindowDimensions();
@@ -116,9 +130,9 @@ export function DashboardScreen(): React.ReactElement {
         <SankeyChart data={sankey} width={width} />
       </Card>
 
-      {caps.length > 0 && (
+      {caps.length > 0 ? (
         <Card>
-          <SectionTitle>Tetos do mes</SectionTitle>
+          <SectionTitle>Metas do mes</SectionTitle>
           {caps.map((cap) => (
             <BudgetRow
               key={cap.category_id}
@@ -131,7 +145,19 @@ export function DashboardScreen(): React.ReactElement {
             />
           ))}
         </Card>
+      ) : (
+        <Card>
+          <SectionTitle>Metas do mes</SectionTitle>
+          <Text style={styles.semMeta}>
+            Nenhuma meta definida. Na aba Categorias, abra uma categoria e diga
+            quanto pode gastar nela por mês.
+          </Text>
+        </Card>
       )}
+
+      <Botao tom="secundario" onPress={() => navigation.navigate('Cartoes')}>
+        Ver o cartão de crédito do mês
+      </Botao>
     </ScrollView>
   );
 }
@@ -161,4 +187,5 @@ const styles = StyleSheet.create({
   alertBody: { flex: 1 },
   alertTitle: { ...typography.body, color: colors.text },
   alertText: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  semMeta: { ...typography.caption, color: colors.textMuted },
 });

@@ -417,3 +417,133 @@ export interface StatementChecklist {
   pending_list: { account_id: string; name: string; expected_day: number | null }[];
   late_list: { account_id: string; name: string; days_late: number | null }[];
 }
+
+// ---------------------------------------------------------------- categorias ---
+
+/**
+ * Uma linha da tela de categorias.
+ *
+ * `spent` já inclui a subárvore — "Transporte" traz "Gasolina" dentro. Por isso
+ * as linhas NÃO podem ser somadas entre si: somar contaria Gasolina duas vezes.
+ * O total que fecha é o `total_spent` que vem junto.
+ */
+export interface CategoryOverviewRow {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  path: string;
+  /** 0 = raiz ("Despesas"), 1 = as quinze, 2 = as subcategorias */
+  depth: number;
+  kind: 'RECEITA' | 'DESPESA' | 'TRANSFERENCIA' | 'INVESTIMENTO';
+  icon: string | null;
+  counts_as_expense: boolean;
+  spent: string;
+  transactions: number;
+  cap_id: string | null;
+  cap: string | null;
+}
+
+export interface CategoryOverview {
+  month: string;
+  total_spent: string;
+  total_cap: string;
+  categories: CategoryOverviewRow[];
+}
+
+export interface BudgetCap {
+  id: string;
+  amount: string;
+  alert_at_pct: string;
+  includes_descendants: boolean;
+  member_id: string | null;
+  period: string;
+  starts_on: string;
+  ends_on: string | null;
+}
+
+export interface MonthPoint {
+  month: string;
+  total: string;
+  transactions: number;
+}
+
+/** O mesmo recorte serve para a categoria e para a subcategoria. */
+export interface CategoryAnalysis {
+  category: {
+    id: string;
+    name: string;
+    path: string;
+    depth: number;
+    kind: string;
+    icon: string | null;
+    requires_note: boolean;
+    counts_as_expense: boolean;
+  };
+  month: string;
+  spent: string;
+  transactions: number;
+  cap: BudgetCap | null;
+  remaining: string | null;
+  used_pct: string | null;
+  previous_month: string;
+  same_month_last_year: string;
+  /** null quando não havia base de comparação: variação contra zero não é número */
+  vs_last_year_pct: string | null;
+  last_12_months: string;
+  monthly_average: string;
+  vs_average_pct: string | null;
+  /** treze pontos: o mês escolhido e os doze que o antecedem */
+  series: MonthPoint[];
+  children: {
+    id: string;
+    name: string;
+    icon: string | null;
+    spent: string;
+    transactions: number;
+    cap: BudgetCap | null;
+    used_pct: string | null;
+    same_month_last_year: string;
+    monthly_average: string;
+  }[];
+}
+
+export interface BudgetCapRow {
+  cap_id: string;
+  category_id: string;
+  category_name: string;
+  member_id: string | null;
+  cap: string;
+  spent: string;
+  remaining: string;
+  used_pct: string | null;
+  path: string;
+}
+
+// ------------------------------------------------------------------ cartoes ---
+
+export interface CardSummary {
+  month: string;
+  total_spent: string;
+  cards: {
+    id: string;
+    name: string;
+    credit_limit: string | null;
+    statement_close_day: number | null;
+    statement_due_day: number | null;
+    spent: string;
+    transactions: number;
+    points_base: string;
+  }[];
+  /** quanto saiu da conta para pagar fatura — não é gasto, é bolso trocando */
+  bill_paid: string;
+  /** linhas que parecem fatura e estão contando como gasto */
+  possible_duplicates: {
+    id: string;
+    booked_on: string;
+    amount: string;
+    description: string;
+    account_name: string;
+    category_name: string | null;
+  }[];
+  aviso: string | null;
+}
