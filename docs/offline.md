@@ -36,19 +36,24 @@ aberto**: PC que dorme, Wi-Fi que some, servidor reiniciando, você saindo de ca
 com a tela ligada.
 
 Para abrir de verdade longe de casa, o aplicativo precisa estar **instalado** no
-aparelho. O caminho está em [`rodando-no-celular.md`](rodando-no-celular.md),
-Caminho 2 — em resumo:
+aparelho. No Android é um duplo clique em **`GERAR-APK-windows.bat`**, que conduz
+o processo inteiro; o passo a passo e as três armadilhas já tratadas estão no
+Caminho 2 de [`rodando-no-celular.md`](rodando-no-celular.md).
 
-```bash
-npm install -g eas-cli
-eas login                                        # conta gratuita
-eas build --platform android --profile preview   # devolve um link de .apk
-```
+Antes de gerar, rode o **ATUALIZAR**: o APK é feito a partir do código que está
+na máquina, e gerar antes de atualizar produz um aplicativo sem as novidades.
 
 Instalado, o aplicativo abre sem o PC: mostra a última cópia dos números (datada)
-e aceita lançamento, que fica guardado até você chegar em casa. No iPhone não há
-caminho gratuito para instalar fora da App Store (a Apple cobra US$ 99/ano), e lá
-o Expo Go continua sendo o caminho — com a limitação acima.
+e aceita lançamento, que fica guardado até você chegar em casa. Duas coisas que
+não são óbvias:
+
+- **abra o aplicativo em casa uma vez antes de precisar dele na rua** — a cópia
+  local só existe depois da primeira conversa com o PC;
+- **a cada atualização que mexa no aplicativo, gere o APK de novo** — o ATUALIZAR
+  troca o código da máquina, não o que já está instalado no celular.
+
+No iPhone não há caminho gratuito para instalar fora da App Store (a Apple cobra
+US$ 99/ano), e lá o Expo Go continua sendo o caminho — com a limitação acima.
 
 E o servidor em si: ele só responde com o **PC ligado e o sistema no ar**. Para
 não depender de alguém lembrar de ligar, use:

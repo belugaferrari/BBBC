@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { getServerUrl, login, setServerUrl } from '@/api/client';
+import { isLocalHostUrl } from '@/api/serverUrl';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.ReactElement {
@@ -22,11 +23,28 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // No aplicativo INSTALADO (o APK), nao existe servidor do Expo de onde deduzir
+  // o endereco - o padrao vira `localhost`, que no celular e o proprio aparelho.
+  // Entao o campo abre sozinho, vazio, com a explicacao: sem isso, a primeira
+  // tentativa de entrar morre num "falha na requisicao" que nao diz o que fazer.
+  const noCelular = Platform.OS !== 'web';
+
   useEffect(() => {
-    getServerUrl().then(setServer);
-  }, []);
+    getServerUrl().then((guardado) => {
+      setServer(noCelular && isLocalHostUrl(guardado) ? '' : guardado);
+    });
+  }, [noCelular]);
+
+  const faltaOEndereco = noCelular && (!server.trim() || isLocalHostUrl(server));
 
   async function submit(): Promise<void> {
+    if (faltaOEndereco) {
+      // Deixar passar gravaria `localhost` e o erro seguinte seria sobre rede,
+      // longe da causa, que e um campo em branco nesta tela.
+      setError('Diga o endereco do computador onde o sistema esta rodando.');
+      setShowServer(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -73,7 +91,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
         style={styles.input}
       />
 
-      {showServer ? (
+      {showServer || faltaOEndereco ? (
         <>
           <TextInput
             value={server}
@@ -86,7 +104,9 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
             style={styles.input}
           />
           <Text style={styles.serverHint}>
-            Endereço do servidor na sua rede. O app completa `http://` e `/api/v1`.
+            {faltaOEndereco
+              ? 'Endereço do computador onde o sistema está rodando. A janela do ABRIR mostra esse número no passo 3 (“Este computador e o …”). Digite o endereço e a porta 8000 — o app completa o resto. Fica guardado; você não digita de novo.'
+              : 'Endereço do servidor na sua rede. O app completa `http://` e `/api/v1`.'}
           </Text>
         </>
       ) : (
