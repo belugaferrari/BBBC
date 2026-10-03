@@ -21,6 +21,14 @@
 #   2. se for uma pasta baixada como zip (o caso de quem clicou em "Download
 #      ZIP"), baixa o zip novo e copia por cima, pulando o que nao deve ser
 #      tocado.
+#
+# UMA COISA QUE ESTE ARQUIVO NAO FAZ: reiniciar o que ja esta rodando. Trocar os
+# arquivos nao troca o programa que esta de pe - o Python leu o codigo quando
+# subiu e continua com a versao velha na memoria. Sem fechar e abrir, o resultado
+# e um sistema meio atualizado: tela nova conversando com servidor velho, que e
+# pior que nao ter atualizado, porque parece que deu certo. Por isso o script
+# detecta o que esta ligado e, quando ha algo, termina mandando fechar em vez de
+# abrir por cima.
 
 $ErrorActionPreference = 'Continue'
 $RAIZ = Split-Path -Parent $PSScriptRoot
@@ -38,6 +46,32 @@ function Fim($codigo) {
 }
 
 $REPO_ZIP = 'https://github.com/belugaferrari/BBBC/archive/refs/heads/main.zip'
+
+function SistemaNoAr {
+    try {
+        Invoke-WebRequest -Uri 'http://localhost:8000/health' -UseBasicParsing -TimeoutSec 2 |
+            Out-Null
+        return $true
+    } catch { return $false }
+}
+
+function AplicativoNoAr {
+    # O Metro, do Expo, escuta na 8081. Aberto a socket na mao em vez de cmdlet de
+    # rede: os nomes dos cmdlets de rede variam entre versoes do Windows, e um
+    # nome errado aqui daria "nao esta aberto" para um aplicativo que esta - o
+    # erro silencioso que este script existe para evitar. Porta fechada em
+    # localhost recusa na hora, entao nao ha espera.
+    $cliente = $null
+    try {
+        $cliente = New-Object Net.Sockets.TcpClient
+        $cliente.Connect('127.0.0.1', 8081)
+        return $cliente.Connected
+    } catch {
+        return $false
+    } finally {
+        if ($cliente) { $cliente.Dispose() }
+    }
+}
 
 # O que a copia por cima nao deve tocar.
 #
@@ -62,6 +96,20 @@ Write-Host "============================================"
 Write-Host ""
 Write-Host "  Seus dados NAO estao nesta pasta - eles vivem no PostgreSQL." -ForegroundColor White
 Write-Host "  Atualizar troca o programa, e nao os lancamentos." -ForegroundColor White
+
+# Conferido ANTES de mexer em arquivo: e o que decide a mensagem do fim.
+$sistemaEstavaNoAr = SistemaNoAr
+$appEstavaNoAr = AplicativoNoAr
+
+if ($sistemaEstavaNoAr -or $appEstavaNoAr) {
+    Write-Host ""
+    Aviso "O BBBC esta aberto agora, em outra janela."
+    Write-Host "      Pode deixar aberto: a troca dos arquivos nao estraga nada."
+    Write-Host "      Mas o programa que esta de pe continua com a versao velha na"
+    Write-Host "      memoria, entao no fim vou pedir para fechar e abrir de novo -"
+    Write-Host "      e so assim a atualizacao passa a valer."
+    Write-Host ""
+}
 
 # ---------------------------------------------------------------- 1. git ---
 $temGit = (Test-Path (Join-Path $RAIZ '.git')) -and
@@ -161,8 +209,37 @@ Write-Host "  O que acontece agora:"
 Write-Host "    - as bibliotecas so sao reinstaladas se a lista mudou;"
 Write-Host "    - as tabelas novas do banco sao criadas na proxima partida;"
 Write-Host "    - os seus dados continuam todos la."
-Write-Host ""
 
+if ($sistemaEstavaNoAr -or $appEstavaNoAr) {
+    # Oferecer "abrir agora" aqui seria uma armadilha: o abrir-tudo veria o
+    # servidor velho respondendo, concluiria "ja estava no ar" e abriria so a
+    # tela. Tela nova com servidor velho e o estado mais confuso possivel.
+    Write-Host ""
+    Write-Host "  FALTA UM PASSO, e so voce pode dar:" -ForegroundColor Yellow
+    Write-Host ""
+    $n = 1
+    if ($sistemaEstavaNoAr) {
+        Write-Host "    $n. feche a janela do SISTEMA (a que diz 'ESTA JANELA PRECISA" -ForegroundColor Yellow
+        Write-Host "       FICAR ABERTA'). Ctrl+C nela, ou o X." -ForegroundColor Yellow
+        $n++
+    }
+    if ($appEstavaNoAr) {
+        Write-Host "    $n. feche a janela do APLICATIVO (a do QR code). Ctrl+C, ou o X." -ForegroundColor Yellow
+        $n++
+    }
+    Write-Host "    $n. abra o ABRIR-BBBC-windows.bat." -ForegroundColor Yellow
+    Write-Host ""
+    if ($sistemaEstavaNoAr) {
+        Write-Host "  Enquanto nao fizer isso, o sistema continua rodando a versao de"
+        Write-Host "  antes - a tela pode ate parecer nova, mas quem responde e o velho."
+    } else {
+        Write-Host "  Enquanto nao fizer isso, a tela continua montada com a versao de"
+        Write-Host "  antes, guardada na memoria de quem a serve."
+    }
+    Fim 0
+}
+
+Write-Host ""
 $r = Read-Host "  Abrir o BBBC agora? (s/n) [s]"
 if ($r -and $r.ToLower() -ne 's') {
     Write-Host "  Quando quiser: ABRIR-BBBC-windows.bat"

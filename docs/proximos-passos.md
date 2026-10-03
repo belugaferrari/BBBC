@@ -283,3 +283,40 @@ Sete arquivos no formato de Itaú, BB, Nubank, Santander (OFX 2.x), um por linha
 com BOM e em UTF-16 passam pela API e chegam com a categoria sugerida certa —
 inclusive `PAGAMENTO FATURA CARTAO` caindo em "Pagamento de fatura", que é o que
 impede a duplicata do cartão.
+
+## Olhar os meses anteriores
+
+O Resumo e a lista de Gastos estavam presos ao mês atual. Agora têm o mesmo
+seletor de mês das Categorias e do Cartão — `‹ setembro de 2026 ›`, com atalho
+para voltar a hoje e a seta de avançar desligada no mês corrente.
+
+### Um cuidado que o Resumo precisou ter
+
+O que o servidor devolve não é todo do mês escolhido:
+
+- o **fluxo** (entrou, gastou, sobrou), o **Sankey** e as **metas** são do mês —
+  olhar agosto mostra agosto;
+- os **saldos** (disponível, patrimônio, investido, fatura) são de **hoje**,
+  porque saem do saldo atual de cada conta, não de uma foto do passado.
+
+Mostrar o saldo de hoje embaixo do título "agosto" seria um número errado em
+silêncio — o pior tipo. Em mês que não é o atual, esses quatro passaram a dizer
+"hoje" no próprio rótulo, com uma linha explicando por quê. Os alertas, que
+também são do agora, saem da tela nos meses passados.
+
+## Atualizar com o sistema aberto
+
+Ele clicou no `ATUALIZAR` com as duas janelas do BBBC abertas, e um terceiro
+terminal apareceu. A pergunta era justa, e a resposta era um problema do script.
+
+Trocar os arquivos não troca o programa que está de pé: o Python leu o código
+quando subiu e segue com a versão velha na memória. Pior, no fim o atualizador
+oferecia abrir o BBBC — e o `abrir-tudo` via o servidor **velho** respondendo,
+concluía "já estava no ar" e abria só a tela. Tela nova conversando com servidor
+velho é o estado mais confuso possível, e parece que deu certo.
+
+Agora o atualizador detecta, no começo, o que está ligado (a API na 8000 e o
+Metro na 8081, por socket, para não depender do nome de cmdlet de rede nenhum).
+Avisa logo que será preciso fechar e abrir, e no fim, em vez de oferecer abrir,
+dá os passos numerados conforme o que achou aberto. Nada de dado se perde em
+nenhum momento — o banco não mora na pasta.
