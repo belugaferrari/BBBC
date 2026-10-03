@@ -199,21 +199,63 @@ if (-not (Test-Path $pyVenv)) {
     if (-not (Test-Path $pyVenv)) { Erro "Nao consegui criar o ambiente do Python."; Fim 1 }
 }
 
-$logPip = Join-Path (Get-Location) 'instalacao.log'
-& $pyVenv -m pip install --upgrade pip --quiet 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $logPip | Out-Host
-# -e (vinculado a pasta) e nao copia: o cli.py localiza as migrations a partir
-# de onde ele proprio esta. Copiado para dentro do Python, procuraria db\migrations
-# ao lado da copia, onde nao ha nada, e "criar as tabelas" falharia.
-& $pyVenv -m pip install -e . 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $logPip -Append | Out-Host
-if ($LASTEXITCODE -ne 0) {
-    Erro "Nao consegui instalar as bibliotecas."
-    Write-Host ""
-    Get-Content $logPip -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" }
-    Write-Host ""
-    Write-Host "  O relato inteiro esta em: $logPip"
-    Fim 1
+# A instalacao so roda quando ha o que instalar.
+#
+# Antes ela rodava sempre, e era a razao de o sistema levar um minuto e meio para
+# abrir mesmo sem nada ter mudado: o pip reconsulta o PyPI por cada uma das vinte
+# dependencias, reconstroi o pacote local, e no fim conclui que estava tudo no
+# lugar. A conta do que o ambiente deveria ter cabe numa linha de texto - e
+# comparar duas linhas e instantaneo.
+#
+# A marca guarda a lista de dependencias (nao o arquivo inteiro: mexer num
+# comentario do pyproject nao e motivo para reinstalar) e a versao do Python,
+# porque o ambiente de um 3.11 nao serve para um 3.13.
+$marca = Join-Path $venv '.bbbc-instalado'
+$assinatura = $null
+try {
+    $dependencias = (Select-String -Path (Join-Path (Get-Location) 'pyproject.toml') `
+                         -Pattern '^\s*"[a-zA-Z0-9_.\-]+' -AllMatches |
+                     ForEach-Object { $_.Line.Trim() }) -join ';'
+    $assinatura = "py$($py.versao)|$dependencias"
+} catch { }
+
+$precisaInstalar = $true
+if ($assinatura -and (Test-Path $marca)) {
+    $anotado = (Get-Content $marca -Raw -ErrorAction SilentlyContinue)
+    if ($anotado -and $anotado.Trim() -eq $assinatura) {
+        # A marca diz o que foi PEDIDO. Antes de confiar nela, conferir que o que
+        # importa ainda importa de verdade - instalacao interrompida no meio, ou
+        # pasta do ambiente mexida a mao, deixam a marca intacta e o ambiente
+        # quebrado. Esse teste custa menos de um segundo.
+        & $pyVenv -c "import app, fastapi, uvicorn, psycopg" *> $null
+        if ($LASTEXITCODE -eq 0) { $precisaInstalar = $false }
+    }
 }
-Ok "Bibliotecas instaladas"
+
+if (-not $precisaInstalar) {
+    Ok "Bibliotecas ja instaladas (nada mudou)"
+} else {
+    Write-Host "  (isto demora alguns minutos; nas proximas vezes sera instantaneo)"
+    Write-Host ""
+    $logPip = Join-Path (Get-Location) 'instalacao.log'
+    & $pyVenv -m pip install --upgrade pip --quiet 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $logPip | Out-Host
+    # -e (vinculado a pasta) e nao copia: o cli.py localiza as migrations a partir
+    # de onde ele proprio esta. Copiado para dentro do Python, procuraria db\migrations
+    # ao lado da copia, onde nao ha nada, e "criar as tabelas" falharia.
+    & $pyVenv -m pip install -e . 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $logPip -Append | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        Erro "Nao consegui instalar as bibliotecas."
+        Write-Host ""
+        Get-Content $logPip -Tail 20 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "    $_" }
+        Write-Host ""
+        Write-Host "  O relato inteiro esta em: $logPip"
+        Fim 1
+    }
+    # Gravada so depois do sucesso: marca escrita antes faria a tentativa
+    # seguinte pular uma instalacao que nunca terminou.
+    if ($assinatura) { Set-Content -Path $marca -Value $assinatura -Encoding utf8 }
+    Ok "Bibliotecas instaladas"
+}
 
 # -------------------------------------------------------------- Tabelas ---
 $env:DATABASE_URL = "postgresql+psycopg://${BANCO_USUARIO}:${BANCO_SENHA}@localhost:5432/${BANCO_NOME}"
@@ -259,7 +301,9 @@ if ($precisa -eq 2) {
     Fim 1
 }
 
-if ($precisa -eq 0) {
+$primeiraVez = ($precisa -eq 0)
+
+if ($primeiraVez) {
     Write-Host ""
     Write-Host "  Primeira vez por aqui. Vou criar o seu acesso."
     Write-Host "  (e so apertar Enter para aceitar o que esta entre colchetes)"
@@ -297,15 +341,17 @@ Write-Host ""
 Write-Host "  Vou ligar o sistema agora. ESTA JANELA PRECISA FICAR ABERTA" -ForegroundColor Yellow
 Write-Host "  enquanto voce usar o aplicativo - e ela que segura tudo." -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  Para ver no navegador:  http://localhost:8000/docs"
-Write-Host "  Para ver no celular:    abra o INICIAR-APP-windows.bat"
-Write-Host "                          (em OUTRA janela, deixando esta aqui)"
+Write-Host "  Para abrir o aplicativo: o INICIAR-APP-windows.bat"
+Write-Host "                           (em OUTRA janela, deixando esta aqui)"
+Write-Host "  Para espiar o servidor:  http://localhost:8000/docs"
 Write-Host ""
 Write-Host "  Para desligar: aperte Ctrl+C aqui, ou feche a janela."
 Write-Host ""
 
-Start-Sleep -Seconds 2
-Start-Process "http://localhost:8000/docs"
+# A aba do /docs abre so na estreia. Ela serve para provar que o servidor subiu,
+# e isso se prova uma vez; depois e uma aba a mais para fechar toda manha - e
+# quem abre o BBBC quer o aplicativo, nao a documentacao da API.
+if ($primeiraVez) { Start-Process "http://localhost:8000/docs" }
 
 # 0.0.0.0 e nao localhost: o celular precisa alcancar esta maquina pela rede.
 & $pyVenv -m uvicorn app.main:app --host 0.0.0.0 --port 8000

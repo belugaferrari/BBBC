@@ -17,13 +17,14 @@ import { api } from '@/api/client';
 import type { Goal, GoalProjection } from '@/api/types';
 import { Card, MoneyValue, ProgressBar, SectionTitle } from '@/components/ui';
 import { ForecastChart } from '@/components/ForecastChart';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, layout, radius, spacing, typography } from '@/theme';
 import { money, monthLabel } from '@/theme/format';
 
 export function ForecastScreen(): React.ReactElement {
   const { data: goals, isLoading, refetch } = useGoals();
   const [meses, setMeses] = useState(6);
-  const { width } = useWindowDimensions();
+  const { width: larguraDaTela } = useWindowDimensions();
+  const width = Math.min(larguraDaTela, layout.maxWidth);
   const previsao = useForecast(meses, 'familia');
 
   if (isLoading) {
@@ -231,7 +232,7 @@ function Metric({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: spacing.xl },
+  content: { padding: spacing.md, paddingBottom: spacing.xl, ...layout.coluna },
   center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   empty: { ...typography.body, color: colors.textFaint },
   horizons: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },

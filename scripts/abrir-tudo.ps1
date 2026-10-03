@@ -49,7 +49,10 @@ if (ApiNoAr) {
     while ((Get-Date) -lt $limite) {
         if (ApiNoAr) { $pronto = $true; break }
         Write-Host -NoNewline "."
-        Start-Sleep -Seconds 3
+        # Um segundo, e nao tres: numa partida em que nada mudou o servidor sobe
+        # em poucos segundos, e esperar tres a mais depois de ele estar de pe e
+        # tempo jogado fora todo dia.
+        Start-Sleep -Seconds 1
     }
     Write-Host ""
 

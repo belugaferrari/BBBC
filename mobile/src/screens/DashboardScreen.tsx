@@ -15,7 +15,7 @@ import { useDashboard } from '@/api/queries';
 import type { Scope } from '@/api/types';
 import { BudgetRow, Card, MoneyValue, ScopeToggle, SectionTitle, StatTile } from '@/components/ui';
 import { SankeyChart } from '@/components/SankeyChart';
-import { colors, severityColor, spacing, typography } from '@/theme';
+import { colors, layout, severityColor, spacing, typography } from '@/theme';
 import { money, monthLabel, percent } from '@/theme/format';
 
 function currentMonth(): string {
@@ -26,7 +26,9 @@ function currentMonth(): string {
 export function DashboardScreen(): React.ReactElement {
   const [scope, setScope] = useState<Scope>('familia');
   const month = currentMonth();
-  const { width } = useWindowDimensions();
+  const { width: larguraDaTela } = useWindowDimensions();
+  // o grafico nao pode ser mais largo que a coluna de conteudo
+  const width = Math.min(larguraDaTela, layout.maxWidth);
   const { data, isLoading, refetch, isRefetching, error } = useDashboard(month, scope);
 
   if (isLoading) {
@@ -136,7 +138,7 @@ export function DashboardScreen(): React.ReactElement {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: spacing.xl },
+  content: { padding: spacing.md, paddingBottom: spacing.xl, ...layout.coluna },
   center: {
     flex: 1,
     backgroundColor: colors.background,

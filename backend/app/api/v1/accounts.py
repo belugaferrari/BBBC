@@ -19,8 +19,17 @@ from app.services.mascara import sem_digitos_sensiveis
 
 
 class AccountIn(BaseModel):
-    name: str
-    type: AccountType
+    """Cadastro de conta. Exige o nome; o resto tem padrao.
+
+    So o nome e obrigatorio de proposito. Enquanto o sistema nao puxa dados de
+    banco nenhum sozinho, obrigar agencia, conta e saldo no cadastro seria pedir
+    ao usuario que digitasse informacao sensivel sem nada em troca. Sem titular
+    informado, a conta fica com quem a cadastrou; sem tipo, vale conta corrente,
+    que e o caso da grande maioria.
+    """
+
+    name: str = Field(min_length=1)
+    type: AccountType = AccountType.CONTA_CORRENTE
     current_balance: Decimal = Decimal("0")
     credit_limit: Decimal | None = None
     statement_close_day: int | None = Field(default=None, ge=1, le=31)
@@ -28,6 +37,20 @@ class AccountIn(BaseModel):
     is_shared: bool = False
     is_business: bool = False
     owner_member_id: UUID | None = None
+
+    @field_validator("name", mode="after")
+    @classmethod
+    def _sem_agencia_nem_conta(cls, valor: str) -> str:
+        """Tira o numero antes de gravar, e nao so na hora de mostrar.
+
+        E comum digitar o numero junto do nome ("Itau 1234-5"). A saida ja
+        mascara, mas o que nao e gravado nao pode vazar depois - e o numero da
+        conta nao serve para nada aqui, porque o sistema nao fala com o banco.
+        """
+        limpo = sem_digitos_sensiveis(valor).strip()
+        if not limpo:
+            raise ValueError("Diga o nome do banco.")
+        return limpo
 
 
 class AccountOut(ORMModel):

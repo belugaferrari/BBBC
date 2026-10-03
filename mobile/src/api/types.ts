@@ -226,13 +226,57 @@ export interface StatementImport {
   created_at: string;
 }
 
+export type AccountType =
+  | 'CONTA_CORRENTE'
+  | 'POUPANCA'
+  | 'CARTAO_CREDITO'
+  | 'INVESTIMENTO'
+  | 'DINHEIRO'
+  | 'PJ'
+  | 'OUTRO';
+
 export interface Account {
   id: string;
   name: string;
-  type: string;
+  type: AccountType;
   owner_member_id: string;
   current_balance: string;
+  credit_limit: string | null;
   is_shared: boolean;
+  /** conta da empresa: o saldo nao entra no patrimonio da familia */
+  is_business: boolean;
+  is_archived: boolean;
+}
+
+/**
+ * Cadastro de conta. Só `name` é exigido - o resto o servidor completa.
+ *
+ * Enquanto o sistema não puxa dados de banco nenhum sozinho, preencher agência,
+ * conta e saldo seria expor informação sem ganhar nada em troca.
+ */
+export interface AccountCreate {
+  name: string;
+  type?: AccountType;
+  owner_member_id?: string;
+  current_balance?: number;
+  credit_limit?: number;
+  statement_close_day?: number;
+  statement_due_day?: number;
+  is_shared?: boolean;
+  is_business?: boolean;
+}
+
+export interface TransactionCreate {
+  /** nasce no aparelho: reenviar a mesma chave não cria lançamento repetido */
+  client_key?: string;
+  account_id: string;
+  owner_member_id?: string;
+  booked_on: string;
+  amount: number;
+  direction: 'ENTRADA' | 'SAIDA';
+  description: string;
+  category_id?: string;
+  notes?: string;
 }
 
 export interface Member {

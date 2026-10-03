@@ -74,3 +74,36 @@ A separação pessoal/empresa está pronta no servidor — a conta marcada como 
 empresa, a triagem linha a linha na importação, o par que mantém o caixa
 honesto, e as categorias das duas pontas. Falta a **lista de pendências**
 ("a empresa me deve") e as telas no aplicativo.
+
+## Lote de 03/10/2026 — o que entrou
+
+- **Abrir mais rápido.** O `pip install` deixou de rodar a cada partida: uma
+  marca dentro do `.venv` guarda a lista de dependências e a versão do Python, e
+  a instalação só acontece quando essa linha muda (ou quando o ambiente não
+  importa de verdade). Era um minuto e meio por partida, a troco de nada. A aba
+  do `/docs` passou a abrir só na estreia, e a espera do sistema olha de segundo
+  em segundo em vez de de três em três.
+- **Lançar à mão.** Aba nova, "Lançar", para o gasto pago em dinheiro. Se não
+  houver conta nenhuma, ela oferece criar a carteira "Dinheiro" num toque.
+- **Contas.** Tela de cadastro em Mais › Contas e cartões. Só o nome do banco e o
+  titular são pedidos; o resto fica atrás de "mais detalhes". O número de conta
+  que vier grudado no nome é apagado antes de gravar, não só na hora de mostrar.
+- **Leitura.** Corpo de texto em 17 e legenda em 14 (eram 15 e 12), e uma coluna
+  de largura máxima centralizada — no navegador do PC o conteúdo esticava de
+  borda a borda e o rótulo ficava a um palmo do valor.
+- **Cinco abas** em vez de seis: Resumo, Lançar, Gastos, Previsões, Mais. O que
+  se usa uma vez por mês (importar) ou por ano (IR) passou para dentro de Mais.
+
+## Dois achados do caminho
+
+- **Migrations.** A adoção de banco antigo marcava as seis primeiras migrations
+  como aplicadas sempre que a tabela `families` existisse. Num banco parado no
+  meio da lista isso era pior que não marcar nada: as que faltavam nunca mais
+  rodariam. Agora cada uma tem uma pergunta que responde "isto está no banco?",
+  e a adoção para na primeira que responde "não". Um banco de teste meio-migrado
+  foi recuperado por esse caminho.
+- **Comentário obrigatório herdado.** "Únicos" exige explicação, e o servidor
+  herda a exigência para as filhas — mas as filhas chegam ao aplicativo com a
+  marca apagada. Escolher "Únicos › Viagens" levava a um erro sem campo na tela
+  para resolver. A herança agora desce no aplicativo também, nas duas telas que
+  escolhem categoria.

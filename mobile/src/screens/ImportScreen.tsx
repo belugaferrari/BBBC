@@ -6,6 +6,8 @@
  * Linhas ja existentes vem desmarcadas, com o motivo escrito.
  */
 
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as DocumentPicker from 'expo-document-picker';
 import React, { useMemo, useState } from 'react';
 import {
@@ -20,8 +22,8 @@ import {
 import { useAccounts, useStatementChecklist } from '@/api/queries';
 import { confirmImport, uploadStatement } from '@/api/imports';
 import type { ImportPreviewRow, StatementImport } from '@/api/types';
-import { Card, MoneyValue, SectionTitle } from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/theme';
+import { Botao, Card, MoneyValue, SectionTitle } from '@/components/ui';
+import { colors, layout, radius, spacing, typography } from '@/theme';
 import { dayLabel, money } from '@/theme/format';
 
 type Phase = 'escolha' | 'lendo' | 'conferencia' | 'gravando' | 'pronto';
@@ -41,6 +43,7 @@ function mesAtual(): string {
 }
 
 export function ImportScreen(): React.ReactElement {
+  const navigation = useNavigation<NativeStackNavigationProp<{ Contas: undefined }>>();
   const { data: accounts } = useAccounts();
   const { data: checklist } = useStatementChecklist(mesAtual());
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -68,7 +71,7 @@ export function ImportScreen(): React.ReactElement {
 
   async function escolherArquivo(): Promise<void> {
     if (!conta) {
-      setError('Cadastre uma conta antes de importar.');
+      setError('Cadastre uma conta antes de importar — o botão acima leva até lá.');
       return;
     }
     const picked = await DocumentPicker.getDocumentAsync({
@@ -188,6 +191,16 @@ export function ImportScreen(): React.ReactElement {
         ) : null}
 
         <SectionTitle>Conta de destino</SectionTitle>
+        {(accounts ?? []).length === 0 ? (
+          <Card>
+            <Text style={styles.explain}>
+              O extrato precisa de uma conta para onde ir — é ela que diz de qual banco vieram os
+              lançamentos. Cadastre uma e volte aqui; leva meio minuto, só o nome do banco é
+              obrigatório.
+            </Text>
+            <Botao onPress={() => navigation.navigate('Contas')}>Cadastrar conta</Botao>
+          </Card>
+        ) : null}
         <View style={styles.accounts}>
           {(accounts ?? []).map((account) => {
             const ativa = account.id === conta;
@@ -220,6 +233,12 @@ export function ImportScreen(): React.ReactElement {
             <Text style={styles.buttonText}>Escolher arquivo</Text>
           </Pressable>
         </Card>
+
+        {(accounts ?? []).length > 0 ? (
+          <Botao tom="secundario" onPress={() => navigation.navigate('Contas')}>
+            Cadastrar outra conta
+          </Botao>
+        ) : null}
       </ScrollView>
     );
   }
@@ -305,7 +324,7 @@ function PreviewRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: spacing.xl },
+  content: { padding: spacing.md, paddingBottom: spacing.xl, ...layout.coluna },
   center: {
     flex: 1,
     backgroundColor: colors.background,
@@ -377,6 +396,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
+    ...layout.coluna,
   },
   footerLabel: { ...typography.caption, color: colors.textMuted },
   footerTotals: { ...typography.body, color: colors.text, marginTop: 2 },

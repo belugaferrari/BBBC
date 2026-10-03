@@ -25,7 +25,7 @@ import {
 } from '@/api/queries';
 import type { Category, Scope, Transaction } from '@/api/types';
 import { Card, ProgressBar, ScopeToggle, SectionTitle } from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, layout, radius, spacing, typography } from '@/theme';
 import { dayLabel, money, percent } from '@/theme/format';
 
 function monthRange(): { start: string; end: string } {
@@ -35,12 +35,29 @@ function monthRange(): { start: string; end: string } {
   return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
 }
 
+interface Opcao {
+  category: Category;
+  depth: number;
+  /**
+   * Nome do antepassado que exige explicacao, se houver.
+   *
+   * A exigencia e herdada no servidor: "Unicos" marcada vale para "Unicos >
+   * Viagens", e a filha chega da API com a marca apagada. Sem descer a heranca
+   * aqui, escolher a filha pularia o pedido de comentario e a correcao morreria
+   * num 422 sem campo na tela para resolver.
+   */
+  exigeNota: string | null;
+}
+
 /** Achata a arvore para o seletor, preservando a hierarquia na indentacao. */
-function flatten(categories: Category[], depth = 0): { category: Category; depth: number }[] {
-  return categories.flatMap((category) => [
-    { category, depth },
-    ...flatten(category.children, depth + 1),
-  ]);
+function flatten(categories: Category[], depth = 0, notaHerdada: string | null = null): Opcao[] {
+  return categories.flatMap((category) => {
+    const exigeNota = notaHerdada ?? (category.requires_note ? category.name : null);
+    return [
+      { category, depth, exigeNota },
+      ...flatten(category.children, depth + 1, exigeNota),
+    ];
+  });
 }
 
 export function ExpensesScreen(): React.ReactElement {
@@ -50,7 +67,7 @@ export function ExpensesScreen(): React.ReactElement {
   const [editing, setEditing] = useState<Transaction | null>(null);
   // categoria que exige explicação (ex.: 'Únicos'): guarda a escolha até o
   // comentário ser escrito, em vez de gravar um gasto que ninguém vai lembrar
-  const [pedindoNota, setPedindoNota] = useState<Category | null>(null);
+  const [pedindoNota, setPedindoNota] = useState<Opcao | null>(null);
   const [nota, setNota] = useState('');
   const [modo, setModo] = useState<'lista' | 'categorias'>('lista');
   // 1 agrupa nos grandes blocos, 3 desce até a subcategoria
@@ -256,10 +273,11 @@ export function ExpensesScreen(): React.ReactElement {
             </View>
             {pedindoNota ? (
               <View style={styles.noteBox}>
-                <Text style={styles.noteTitle}>{pedindoNota.name}</Text>
+                <Text style={styles.noteTitle}>{pedindoNota.category.name}</Text>
                 <Text style={styles.modalHint}>
-                  Escreva o que foi este gasto. Daqui a seis meses, esta frase é
-                  a única coisa que vai explicar o lançamento.
+                  {pedindoNota.exigeNota === pedindoNota.category.name
+                    ? 'Escreva o que foi este gasto. Daqui a seis meses, esta frase é a única coisa que vai explicar o lançamento.'
+                    : `“${pedindoNota.exigeNota}” pede uma explicação, e isso vale para as categorias dentro dela. Escreva o que foi este gasto.`}
                 </Text>
                 <TextInput
                   value={nota}
@@ -276,7 +294,7 @@ export function ExpensesScreen(): React.ReactElement {
                     if (!editing || !pedindoNota) return;
                     recategorize.mutate({
                       id: editing.id,
-                      category_id: pedindoNota.id,
+                      category_id: pedindoNota.category.id,
                       notes: nota.trim(),
                     });
                     setPedindoNota(null);
@@ -297,8 +315,8 @@ export function ExpensesScreen(): React.ReactElement {
                   style={[styles.option, { paddingLeft: spacing.md + item.depth * spacing.md }]}
                   onPress={() => {
                     if (!editing) return;
-                    if (item.category.requires_note) {
-                      setPedindoNota(item.category);
+                    if (item.exigeNota) {
+                      setPedindoNota(item);
                       setNota('');
                       return;
                     }
@@ -308,7 +326,7 @@ export function ExpensesScreen(): React.ReactElement {
                 >
                   <Text style={styles.optionText}>
                     {item.category.name}
-                    {item.category.requires_note ? (
+                    {item.exigeNota ? (
                       <Text style={styles.needsNote}>  pede comentário</Text>
                     ) : null}
                   </Text>
@@ -332,7 +350,7 @@ export function ExpensesScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, padding: spacing.md },
+  screen: { flex: 1, backgroundColor: colors.background, padding: spacing.md, ...layout.coluna },
   toolbar: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   search: {
     flex: 1,

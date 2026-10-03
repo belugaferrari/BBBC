@@ -22,18 +22,35 @@ from app.db.session import SessionLocal, engine
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parent.parent / "db" / "migrations"
 
 
-# Migrations que a versao sem registro aplicava. Ela rodava tudo dentro de um
-# unico `engine.begin()`, entao um banco criado por ela tem exatamente estas e
-# nenhuma outra: nao ha meio-termo entre todas e nenhuma. A lista e fixa de
-# proposito - adotar "todos os arquivos presentes" marcaria como aplicada uma
-# migration nova que o banco antigo nunca viu.
+# Migrations que a versao sem registro aplicava, cada uma com uma pergunta que
+# responde "esta no banco?".
+#
+# A versao anterior nao anotava nada, entao a unica forma de saber o que um banco
+# antigo ja tem e olhar o schema. Nao da para presumir que tem as seis: quem
+# baixou o sistema numa segunda-feira e abriu de novo num mes em que havia duas
+# migrations novas tem um banco parado no meio da lista. Marcar as seis em cima
+# de um banco desses e pior que nao marcar nada - as migrations que faltam nunca
+# mais rodariam, e o erro apareceria muito depois, como "coluna nao existe" no
+# meio de uma tela qualquer.
+#
+# A ordem importa: a primeira pergunta que responder "nao" encerra a adocao, e o
+# resto da lista roda normalmente. Por isso cada pergunta pode contar com o que a
+# anterior garantiu (a de 0002 so e feita se a tabela de 0001 existir).
 MIGRATIONS_ANTES_DO_REGISTRO = (
-    "0001_init.sql",
-    "0002_seed_catalog.sql",
-    "0003_statement_imports.sql",
-    "0004_taxonomia_bbbc.sql",
-    "0005_filhos_e_amortizacao.sql",
-    "0006_patrimonio_avisos_pontos.sql",
+    ("0001_init.sql", "SELECT to_regclass('public.families') IS NOT NULL"),
+    ("0002_seed_catalog.sql", "SELECT EXISTS (SELECT 1 FROM categories WHERE is_system)"),
+    ("0003_statement_imports.sql", "SELECT to_regclass('public.statement_imports') IS NOT NULL"),
+    (
+        "0004_taxonomia_bbbc.sql",
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns"
+        " WHERE table_name = 'categories' AND column_name = 'requires_note')",
+    ),
+    (
+        "0005_filhos_e_amortizacao.sql",
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns"
+        " WHERE table_name = 'categories' AND column_name = 'counts_as_expense')",
+    ),
+    ("0006_patrimonio_avisos_pontos.sql", "SELECT to_regclass('public.holdings') IS NOT NULL"),
 )
 
 _TRACKING_DDL = """
@@ -67,15 +84,19 @@ def migrate() -> None:
         conn.execute(text(_TRACKING_DDL))
 
         if sem_registro and tem_schema:
-            # Banco criado pela versao anterior: o schema esta de pe, so falta
-            # dizer isso. Registrar sem reexecutar - reexecutar e justamente o
-            # que quebrava.
-            for nome in MIGRATIONS_ANTES_DO_REGISTRO:
+            # Banco criado pela versao anterior: parte do schema esta de pe, so
+            # falta dizer quais partes. Registrar sem reexecutar - reexecutar e
+            # justamente o que quebrava.
+            adotadas = 0
+            for nome, pergunta in MIGRATIONS_ANTES_DO_REGISTRO:
+                if not conn.execute(text(pergunta)).scalar():
+                    break
                 conn.execute(
                     text("INSERT INTO schema_migrations (filename) VALUES (:f)"),
                     {"f": nome},
                 )
-            print(f"banco existente adotado ({len(MIGRATIONS_ANTES_DO_REGISTRO)} migrations)")
+                adotadas += 1
+            print(f"banco existente adotado ({adotadas} migrations)")
 
         aplicadas = {
             linha[0] for linha in conn.execute(text("SELECT filename FROM schema_migrations"))

@@ -11,7 +11,7 @@ import {
   usePortfolio,
 } from '@/api/queries';
 import { Card, MoneyValue, ProgressBar, SectionTitle, StatTile } from '@/components/ui';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, layout, radius, spacing, typography } from '@/theme';
 import { dayLabel, money, percent } from '@/theme/format';
 
 const BENCHMARKS = ['CDI', 'IPCA', 'IBOV'] as const;
@@ -280,7 +280,7 @@ function formatClass(assetClass: string): string {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: spacing.xl },
+  content: { padding: spacing.md, paddingBottom: spacing.xl, ...layout.coluna },
   center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   label: { ...typography.caption, color: colors.textFaint },
   netWorth: { marginBottom: spacing.md },
