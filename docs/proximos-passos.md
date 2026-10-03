@@ -222,3 +222,20 @@ escolha**: quem escolheu a opção 3 (navegador) uma vez passa a só apertar Ent
 e a aba abre sozinha. O QR code continua sendo necessário no celular enquanto o
 app roda pelo Expo Go — isso só desaparece com um APK instalado, que é outro
 assunto.
+
+## O atalho do Expo Go, e quando ele deixa de servir
+
+O Expo Go guarda os servidores abertos recentemente e deixa reabrir com um toque,
+sem escanear o QR de novo — o atalho **é** o endereço, `exp://IP:8081`. Como o
+roteador entrega o endereço por empréstimo, um dia ele muda, e aí o atalho aponta
+para uma máquina que não existe mais. O sintoma no celular é um erro de rede que
+não diz nada sobre IP.
+
+O launcher passou a guardar o endereço da última vez e a comparar:
+
+- mesmo endereço → diz que o atalho ainda serve, não precisa escanear;
+- endereço diferente → avisa qual era, diz para escanear uma vez, e explica como
+  pedir ao roteador um endereço fixo para o PC (`DHCP reservation`).
+
+Falha na detecção não apaga o endereço guardado — senão a próxima partida
+acusaria mudança sem ter havido nenhuma.
