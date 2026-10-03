@@ -308,11 +308,11 @@ def clone_catalog(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
             """
             INSERT INTO categories (family_id, slug, name, kind, path, income_nature,
                                     expense_nature, ir_treatment, ir_deduction_type,
-                                    requires_note, counts_as_expense, icon, color,
-                                    is_system, sort_order)
+                                    requires_note, counts_as_expense, counts_as_income,
+                                    icon, color, is_system, sort_order)
             SELECT :family_id, slug, name, kind, path, income_nature, expense_nature,
                    ir_treatment, ir_deduction_type, requires_note, counts_as_expense,
-                   icon, color, is_system, sort_order
+                   counts_as_income, icon, color, is_system, sort_order
               FROM categories
              WHERE family_id IS NULL
             """

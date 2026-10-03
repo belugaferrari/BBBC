@@ -53,6 +53,49 @@ def consolidated_balances(db: Session, family_id: UUID, member_id: UUID | None) 
     }
 
 
+# Quanto das doacoes com destino foi de fato coberto pelo gasto daquele destino.
+#
+# Sem o limite, uma doacao de 3.000 "para a escola" num mes em que a escola
+# custou 1.000 abateria 3.000 do consumo da familia - e o mes apareceria melhor
+# do que foi. O `LEAST` corta no que realmente se gastou: a doacao cobre ate onde
+# houve o que cobrir.
+_DOACOES_APLICADAS = f"""
+    WITH recebidas AS (
+        SELECT t.donation_for_category_id AS categoria,
+               SUM(t.amount)              AS valor
+          FROM transactions t
+         WHERE t.family_id = :family_id
+           AND t.direction = 'ENTRADA'
+           AND t.status IN ('EFETIVADA', 'CONCILIADA')
+           AND t.donation_for_category_id IS NOT NULL
+           AND date_trunc('month', t.booked_on)
+               = date_trunc('month', CAST(:month AS date))
+           {_SCOPE_FILTER}
+         GROUP BY 1
+    ),
+    gasto_no_destino AS (
+        SELECT r.categoria,
+               COALESCE(SUM(g.amount), 0) AS gasto
+          FROM recebidas r
+          JOIN categories alvo ON alvo.id = r.categoria
+          LEFT JOIN categories filha
+                 ON filha.family_id = alvo.family_id
+                AND filha.path <@ alvo.path
+          LEFT JOIN transactions g
+                 ON g.category_id = filha.id
+                AND g.direction = 'SAIDA'
+                AND g.status IN ('EFETIVADA', 'CONCILIADA')
+                AND COALESCE(filha.counts_as_expense, true)
+                AND date_trunc('month', g.booked_on)
+                    = date_trunc('month', CAST(:month AS date))
+         GROUP BY r.categoria
+    )
+    SELECT COALESCE(SUM(LEAST(r.valor, d.gasto)), 0)
+      FROM recebidas r
+      JOIN gasto_no_destino d ON d.categoria = r.categoria
+"""
+
+
 def monthly_cashflow(
     db: Session, family_id: UUID, month: date, member_id: UUID | None
 ) -> dict:
@@ -61,6 +104,12 @@ def monthly_cashflow(
             f"""
             SELECT
               COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'ENTRADA'), 0) AS inflow,
+              COALESCE(SUM(t.amount) FILTER (
+                  WHERE t.direction = 'ENTRADA'
+                    AND COALESCE(c.counts_as_income, true)), 0)                 AS renda,
+              COALESCE(SUM(t.amount) FILTER (
+                  WHERE t.direction = 'ENTRADA'
+                    AND COALESCE(c.counts_as_income, true) = false), 0)         AS doacoes,
               COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'SAIDA'),   0) AS outflow,
               COALESCE(SUM(t.amount) FILTER (
                   WHERE t.direction = 'SAIDA'
@@ -77,6 +126,13 @@ def monthly_cashflow(
         {"family_id": family_id, "month": month, "member_id": member_id},
     ).mappings().one()
 
+    aplicadas = brl(
+        db.execute(
+            text(_DOACOES_APLICADAS),
+            {"family_id": family_id, "month": month, "member_id": member_id},
+        ).scalar()
+    )
+
     inflow, outflow = brl(row["inflow"]), brl(row["outflow"])
     # Amortizacao e aporte saem da conta, mas nao sao consumo: sao divida
     # virando patrimonio e dinheiro mudando de bolso. Somados ao gasto, fariam
@@ -84,12 +140,30 @@ def monthly_cashflow(
     # esta construindo patrimonio.
     patrimonio = brl(row["patrimonio"])
     consumo = brl(outflow - patrimonio)
-    savings_rate = (inflow - consumo) / inflow if inflow else ZERO
+
+    # Entrou na conta, mas nao e renda da familia: doacao recebida. Contar como
+    # renda inflaria o mes, a taxa de poupanca e a projecao dos proximos meses -
+    # esta ultima e a pior, porque passaria a contar com dinheiro que depende da
+    # vontade de outra pessoa.
+    renda = brl(row["renda"])
+    doacoes = brl(row["doacoes"])
+
+    # E o outro lado da mesma honestidade: a escola paga pelos avos saiu da conta,
+    # mas nao foi a familia que a pagou. Tirar a doacao da renda sem tirar o gasto
+    # que ela cobriu seria trocar um erro por outro, e o novo seria pior, porque
+    # faria a familia parecer gastadora todo mes.
+    consumo_proprio = brl(consumo - aplicadas)
+    savings_rate = (renda - consumo_proprio) / renda if renda else ZERO
+
     return {
         "month": month.replace(day=1),
         "inflow": inflow,
+        "renda": renda,
+        "doacoes": doacoes,
+        "doacoes_aplicadas": aplicadas,
         "outflow": outflow,
         "consumo": consumo,
+        "consumo_proprio": consumo_proprio,
         "patrimonio": patrimonio,
         "net": brl(inflow - outflow),
         "savings_rate": Decimal(savings_rate).quantize(Decimal("0.0001")),

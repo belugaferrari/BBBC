@@ -76,6 +76,12 @@ def owned_member(db: Session, member_id: UUID, current: Member) -> Member:
     return _owned(db, Member, member_id, current.family_id, "Membro")
 
 
+def owned_donor(db: Session, donor_id: UUID, current: Member):
+    from app.models import Donor
+
+    return _owned(db, Donor, donor_id, current.family_id, "Doador")
+
+
 def owned_tag(db: Session, tag_id: UUID, current: Member):
     from app.models import Tag
 

@@ -69,6 +69,9 @@ class Category(PKUuid, TimestampMixin, Base):
     # false quando a saida e transferencia patrimonial (amortizacao, aporte):
     # o dinheiro sai da conta, mas nao e consumo
     counts_as_expense: Mapped[bool] = mapped_column(Boolean, default=True)
+    # false na doacao recebida: entra na conta, mas nao e renda da familia -
+    # contar como renda inflaria o mes, a taxa de poupanca e a projecao.
+    counts_as_income: Mapped[bool] = mapped_column(Boolean, default=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 

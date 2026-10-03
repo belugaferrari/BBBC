@@ -33,6 +33,7 @@ def _to_out(row: Category) -> CategoryOut:
         icon=row.icon, color=row.color,
         requires_note=row.requires_note,
         counts_as_expense=row.counts_as_expense,
+        counts_as_income=row.counts_as_income,
     )
 
 

@@ -9,6 +9,7 @@ from app.api.v1 import (
     cartoes,
     categories,
     dashboard,
+    doacoes,
     forecast,
     imports,
     investments,
@@ -33,6 +34,7 @@ api_router.include_router(patrimonio.router)
 api_router.include_router(avisos.router)
 api_router.include_router(pontos.router)
 api_router.include_router(cartoes.router)
+api_router.include_router(doacoes.router)
 api_router.include_router(investments.router)
 api_router.include_router(tax.router)
 api_router.include_router(openfinance.router)

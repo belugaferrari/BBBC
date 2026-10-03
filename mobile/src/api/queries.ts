@@ -23,6 +23,8 @@ import type {
   SpendByCategory,
   Category,
   DashboardData,
+  DonationsSummary,
+  Donor,
   Goal,
   Portfolio,
   Scope,
@@ -52,6 +54,8 @@ export const queryKeys = {
   categoryAnalysis: (id: string, month: string) => ['category-analysis', id, month] as const,
   budgetCaps: (month: string) => ['budget-caps', month] as const,
   cardSummary: (month: string) => ['card-summary', month] as const,
+  donors: ['donors'] as const,
+  doacoes: (year: number) => ['doacoes', year] as const,
   evolucao: (month: string, scope: string) => ['evolucao', month, scope] as const,
   checklist: (month: string) => ['statement-checklist', month] as const,
 };
@@ -410,5 +414,105 @@ export function useCardSummary(month: string) {
   return useQuery({
     queryKey: queryKeys.cardSummary(month),
     queryFn: () => api.get<CardSummary>('/cards/summary', { month }),
+  });
+}
+
+// ------------------------------------------------------------ doacoes ---
+// Dinheiro que entra e não é renda. Os avós depositam para a escola das meninas:
+// o dinheiro passa pela conta, mas não é da família, e tratar como renda estraga
+// o mês, a taxa de poupança e a projeção — esta última é a pior, porque passaria
+// a contar com dinheiro que depende da vontade de outra pessoa.
+
+/** Quem doa. Serve para o seletor do lançamento e para a soma do ano. */
+export function useDonors() {
+  return useQuery({
+    queryKey: queryKeys.donors,
+    queryFn: () => api.get<Donor[]>('/donors'),
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+function invalidarDoacoes(client: ReturnType<typeof useQueryClient>): void {
+  client.invalidateQueries({ queryKey: queryKeys.donors });
+  client.invalidateQueries({ queryKey: ['doacoes'] });
+  client.invalidateQueries({ queryKey: ['dashboard'] });
+}
+
+export function useCreateDonor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; relationship?: string; notes?: string }) =>
+      api.post<Donor>('/donors', input),
+    onSuccess: () => invalidarDoacoes(client),
+  });
+}
+
+export function useUpdateDonor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; name: string; relationship?: string }) =>
+      api.patch<Donor>(`/donors/${input.id}`, {
+        name: input.name,
+        relationship: input.relationship,
+      }),
+    onSuccess: () => invalidarDoacoes(client),
+  });
+}
+
+/**
+ * Arquiva o doador — não apaga. As doações dele continuam no histórico: apagar
+ * deixaria soma sem dono no ano que já passou.
+ */
+export function useArchiveDonor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ arquivado: boolean; nome: string }>(`/donors/${id}`),
+    onSuccess: () => invalidarDoacoes(client),
+  });
+}
+
+/** Quanto cada um doou no ano, contra o limite de isenção do ITCMD. */
+export function useDonationsSummary(year: number) {
+  return useQuery({
+    queryKey: queryKeys.doacoes(year),
+    queryFn: () => api.get<DonationsSummary>('/doacoes/resumo', { year }),
+  });
+}
+
+/**
+ * O limite de isenção do ITCMD, que é ESTADUAL: muda de estado para estado e é
+ * corrigido todo ano. Por isso é digitado, e não embutido no sistema — um número
+ * chutado tranquilizaria sobre um limite que pode não ser o deste estado.
+ */
+export function useSaveItcmdLimit() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { itcmd_state?: string; itcmd_annual_exemption?: number | null }) =>
+      api.put<{ itcmd_state: string | null; itcmd_annual_exemption: string | null }>(
+        '/doacoes/limite',
+        input,
+      ),
+    onSuccess: () => invalidarDoacoes(client),
+  });
+}
+
+/**
+ * Aponta quem depositou num lançamento que entrou sem doador — é como chega o
+ * depósito vindo do extrato, porque o banco não sabe quem depositou.
+ *
+ * `learn_rule` fica de fora: o que se está corrigindo é o doador, não a
+ * categoria, e não há regra de fornecedor a aprender com isso.
+ */
+export function useSetDonor() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { transaction_id: string; donor_id: string }) =>
+      api.patch<Transaction>(`/transactions/${input.transaction_id}`, {
+        donor_id: input.donor_id,
+      }),
+    onSuccess: () => {
+      invalidarDoacoes(client);
+      client.invalidateQueries({ queryKey: ['transactions'] });
+    },
   });
 }

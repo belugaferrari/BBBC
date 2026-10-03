@@ -12,11 +12,20 @@ export interface AuthToken {
 
 export interface Cashflow {
   month: string;
+  /** tudo que entrou na conta, doação incluída */
   inflow: string;
+  /** o que é renda da família — a doação dos avós não entra aqui */
+  renda: string;
+  /** doação recebida no mês: entrou na conta, mas não é renda */
+  doacoes: string;
+  /** quanto da doação de fato cobriu gasto do destino dela, no mês */
+  doacoes_aplicadas: string;
   /** tudo que saiu da conta */
   outflow: string;
   /** o que foi consumido de verdade */
   consumo: string;
+  /** o consumo que foi a família que pagou (fora o que a doação cobriu) */
+  consumo_proprio: string;
   /** amortização e aporte: saiu da conta, mas virou patrimônio */
   patrimonio: string;
   net: string;
@@ -98,6 +107,8 @@ export interface Category {
   requires_note: boolean;
   /** false em amortização e aporte: sai da conta, mas não é consumo */
   counts_as_expense: boolean;
+  /** false na doação recebida: entra na conta, mas não é renda da família */
+  counts_as_income: boolean;
   children: Category[];
 }
 
@@ -277,6 +288,54 @@ export interface TransactionCreate {
   description: string;
   category_id?: string;
   notes?: string;
+  /** quem doou. O limite de isenção do ITCMD é por doador e por ano */
+  donor_id?: string;
+  /** para que a doação foi dada: é o que permite abater o gasto que ela cobriu */
+  donation_for_category_id?: string;
+}
+
+export interface Donor {
+  id: string;
+  name: string;
+  relationship: string | null;
+  is_active: boolean;
+}
+
+export interface DonorYear {
+  id: string;
+  /** primeiro nome e inicial do sobrenome: o servidor não manda o nome completo */
+  name: string;
+  relationship: string | null;
+  is_active: boolean;
+  total: string;
+  deposits: number;
+  last_on: string | null;
+  /** quanto do limite de isenção já foi usado. null quando não há limite preenchido */
+  used_pct: string | null;
+  remaining: string | null;
+  should_alert: boolean;
+}
+
+export interface DonationSemDono {
+  id: string;
+  booked_on: string;
+  amount: string;
+  /** já sem agência e conta: o extrato costuma trazê-las na própria descrição */
+  description: string;
+}
+
+export interface DonationsSummary {
+  year: number;
+  total: string;
+  /** doação lançada sem dizer quem deu: não dá para medir contra limite nenhum */
+  sem_doador: string;
+  /** uma a uma, para a tela resolver em vez de só reclamar */
+  sem_doador_lancamentos: DonationSemDono[];
+  itcmd_state: string | null;
+  itcmd_annual_exemption: string | null;
+  donors: DonorYear[];
+  /** o aviso de que o limite estadual ainda não foi preenchido */
+  aviso: string | null;
 }
 
 export interface Member {

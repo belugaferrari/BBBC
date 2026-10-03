@@ -12,6 +12,7 @@ from app.api.deps import (
     DbSession,
     owned_account,
     owned_category,
+    owned_donor,
     owned_member,
     owned_tag,
     scope_member_id,
@@ -143,6 +144,10 @@ def create_transaction(
         owned_member(db, payload.ir_deduction_member_id, current)
     if payload.owner_member_id:
         owned_member(db, payload.owner_member_id, current)
+    if payload.donor_id:
+        owned_donor(db, payload.donor_id, current)
+    if payload.donation_for_category_id:
+        owned_category(db, payload.donation_for_category_id, current)
     for tag_id in payload.tags:
         owned_tag(db, tag_id, current)
 
@@ -177,6 +182,10 @@ def update_transaction(
         owned_member(db, payload.ir_deduction_member_id, current)
     if payload.owner_member_id:
         owned_member(db, payload.owner_member_id, current)
+    if payload.donor_id:
+        owned_donor(db, payload.donor_id, current)
+    if payload.donation_for_category_id:
+        owned_category(db, payload.donation_for_category_id, current)
 
     data = payload.model_dump(exclude_unset=True, exclude={"learn_rule", "category_id"})
     for field, value in data.items():

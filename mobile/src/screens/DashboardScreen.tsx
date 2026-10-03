@@ -97,6 +97,11 @@ export function DashboardScreen(): React.ReactElement {
 
   const { cashflow, balances, budget_caps: caps, alerts } = data;
   const net = Number(cashflow.net);
+  // Doação recebida: entrou na conta, mas não é renda da família. Fica em linha
+  // separada - somada à renda, inflaria o mês e a taxa de poupança, e é o tipo
+  // de número que depois ninguém desconfia.
+  const doacoes = Number(cashflow.doacoes);
+  const cobriu = Number(cashflow.doacoes_aplicadas);
 
   return (
     <ScrollView
@@ -120,18 +125,30 @@ export function DashboardScreen(): React.ReactElement {
       </View>
 
       <View style={styles.tiles}>
-        <StatTile label="Entrou" value={money(cashflow.inflow)} />
+        <StatTile
+          label={doacoes > 0 ? 'Renda' : 'Entrou'}
+          value={money(doacoes > 0 ? cashflow.renda : cashflow.inflow)}
+          hint={doacoes > 0 ? `+ ${money(doacoes)} de doação` : undefined}
+        />
         <StatTile
           label="Gastou"
-          value={money(cashflow.consumo)}
+          value={money(cobriu > 0 ? cashflow.consumo_proprio : cashflow.consumo)}
           tone="alert"
           hint={
-            Number(cashflow.patrimonio) > 0
-              ? `+ ${money(cashflow.patrimonio)} viraram patrimônio`
-              : undefined
+            cobriu > 0
+              ? `${money(cobriu)} foram pagos com doação`
+              : Number(cashflow.patrimonio) > 0
+                ? `+ ${money(cashflow.patrimonio)} viraram patrimônio`
+                : undefined
           }
         />
       </View>
+      {doacoes > 0 ? (
+        <Text style={styles.avisoDoSaldo}>
+          A doação entrou na conta, mas não conta como renda — e o gasto que ela cobriu saiu do
+          que a casa gastou. Em Mais › Doações recebidas está a soma do ano, por quem deu.
+        </Text>
+      ) : null}
       <View style={styles.tiles}>
         <StatTile
           label={mesAtual ? 'Disponível' : 'Disponível hoje'}

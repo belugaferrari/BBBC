@@ -19,6 +19,13 @@ class Family(PKUuid, TimestampMixin, Base):
     base_currency: Mapped[str] = mapped_column(String(3), default="BRL")
     timezone: Mapped[str] = mapped_column(Text, default="America/Sao_Paulo")
 
+    # O limite de isencao do ITCMD, que e imposto ESTADUAL: a aliquota e o limite
+    # mudam de estado para estado e sao corrigidos todo ano. Nulo ate alguem
+    # preencher com o numero do proprio estado - um padrao chutado tranquilizaria
+    # sobre um limite que nao e o desta familia.
+    itcmd_state: Mapped[str | None] = mapped_column(String(2))
+    itcmd_annual_exemption: Mapped[Decimal | None] = mapped_column(Numeric(18, 2))
+
     members: Mapped[list["Member"]] = relationship(back_populates="family")
 
 

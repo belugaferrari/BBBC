@@ -84,6 +84,12 @@ class Transaction(PKUuid, TimestampMixin, Base):
     # Identidade gerada pelo aplicativo antes de haver conexao: permite reenviar
     # a fila de lancamentos offline sem duplicar.
     client_key: Mapped[str | None] = mapped_column(Text)
+    # Quem doou. O limite de isencao do ITCMD e por doador e por ano, entao somar
+    # tudo num balde so nao responde a pergunta que importa.
+    donor_id: Mapped[UUID | None] = uuid_fk("donors.id")
+    # Para que a doacao foi dada. Permite abater do consumo da familia o que ela
+    # cobriu: a escola paga pelos avos nao e gasto da casa.
+    donation_for_category_id: Mapped[UUID | None] = uuid_fk("categories.id")
 
     applied_rule_id: Mapped[UUID | None] = uuid_fk("categorization_rules.id")
     auto_confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))

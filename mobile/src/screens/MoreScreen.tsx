@@ -17,7 +17,14 @@ import { colors, spacing, typography } from '@/theme';
 
 export interface MoreScreenProps {
   aoEscolher: (
-    destino: 'Contas' | 'Importar' | 'Cartoes' | 'Previsoes' | 'Investimentos' | 'IR',
+    destino:
+      | 'Contas'
+      | 'Importar'
+      | 'Cartoes'
+      | 'Previsoes'
+      | 'Investimentos'
+      | 'Doacoes'
+      | 'IR',
   ) => void;
 }
 
@@ -70,6 +77,12 @@ export function MoreScreen({ aoEscolher }: MoreScreenProps): React.ReactElement 
           title="Previsões"
           subtitle="Como ficam os próximos meses, com o que já está combinado"
           onPress={() => aoEscolher('Previsoes')}
+        />
+        <MenuRow
+          icon="♡"
+          title="Doações recebidas"
+          subtitle="O que os avós depositam: quem deu, quanto no ano e o limite de isenção"
+          onPress={() => aoEscolher('Doacoes')}
         />
       </Card>
 
