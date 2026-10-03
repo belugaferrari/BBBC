@@ -444,8 +444,8 @@ export function EntryScreen(): React.ReactElement {
               ) : null}
             </ScrollView>
             <Text style={styles.explica}>
-              Pode deixar em branco: o sistema tenta adivinhar pela descrição, e o que ele não
-              souber aparece em Gastos para você corrigir.
+              Pode deixar em branco: o sistema tenta adivinhar pela descrição e, quando não sabe,
+              guarda em “A definir” — que aparece no Resumo cobrando, até você dizer o que foi.
             </Text>
           </>
         )}

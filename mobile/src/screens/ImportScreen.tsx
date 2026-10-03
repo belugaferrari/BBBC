@@ -4,6 +4,20 @@
  * A tela existe por causa do passo do meio. O backend nunca grava nada no
  * envio - o que chega aqui e uma proposta, e o usuario decide linha a linha.
  * Linhas ja existentes vem desmarcadas, com o motivo escrito.
+ *
+ * E a decisao inclui a CATEGORIA. Antes, a sugestao do sistema aparecia como
+ * texto e nao havia o que fazer com ela: para trocar, era gravar errado e
+ * corrigir depois, lancamento por lancamento, na lista de gastos. Agora a
+ * categoria e um botao em cada linha, e a troca acontece antes de existir
+ * lancamento - que e quando ela e mais barata.
+ *
+ * Duas coisas aparecem diferentes de proposito:
+ *
+ *   * a sugestao com base em algo ("SUPERMERCADO X" -> Mercado) vem como
+ *     sugestao;
+ *   * a ausencia de sugestao vem como "A definir", em vermelho, porque e o que
+ *     precisa de atencao. Mostrar as duas iguais faria a segunda passar por
+ *     sugestao e ser confirmada sem ninguem olhar.
  */
 
 import { useNavigation } from '@react-navigation/native';
@@ -19,11 +33,12 @@ import {
   View,
 } from 'react-native';
 
-import { useAccounts, useStatementChecklist } from '@/api/queries';
+import { useAccounts, useCategories, useStatementChecklist } from '@/api/queries';
 import { confirmImport, uploadStatement } from '@/api/imports';
-import type { ImportPreviewRow, StatementImport } from '@/api/types';
-import { Botao, Card, MoneyValue, SectionTitle } from '@/components/ui';
+import type { Category, ImportPreviewRow, StatementImport } from '@/api/types';
+import { Botao, Card, Field, MoneyValue, SectionTitle } from '@/components/ui';
 import { colors, layout, radius, spacing, typography } from '@/theme';
+import { folhas } from '@/screens/EntryScreen';
 import { dayLabel, money } from '@/theme/format';
 
 type Phase = 'escolha' | 'lendo' | 'conferencia' | 'gravando' | 'pronto';
@@ -66,6 +81,19 @@ export function ImportScreen(): React.ReactElement {
   const [batch, setBatch] = useState<StatementImport | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  // index da linha -> categoria escolhida a mao nesta conferencia
+  const [escolhidas, setEscolhidas] = useState<Record<number, string>>({});
+  // qual linha esta com o seletor aberto (uma por vez: duas listas abertas na
+  // mesma tela nao cabem no celular)
+  const [escolhendo, setEscolhendo] = useState<number | null>(null);
+  const { data: categories } = useCategories();
+
+  const opcoes = useMemo(() => folhas(categories ?? []), [categories]);
+  const nomePorId = useMemo(() => {
+    const mapa = new Map<string, string>();
+    opcoes.forEach((f) => mapa.set(f.categoria.id, f.caminho));
+    return mapa;
+  }, [opcoes]);
 
   const conta = accountId ?? accounts?.[0]?.id ?? null;
 
@@ -83,6 +111,17 @@ export function ImportScreen(): React.ReactElement {
         { entrada: 0, saida: 0 },
       );
   }, [batch, selected]);
+
+  // Quantas linhas marcadas ainda vao entrar sem categoria de verdade. Nao
+  // impede de confirmar - e o ponto do "A definir" poder ser resolvido depois -
+  // mas dizer o numero antes e o que evita a surpresa no fim do mes.
+  const pendentes = useMemo(() => {
+    if (!batch) return 0;
+    return batch.preview.filter(
+      (row) =>
+        selected.has(row.index) && !escolhidas[row.index] && row.suggested_is_pending,
+    ).length;
+  }, [batch, selected, escolhidas]);
 
   async function escolherArquivo(): Promise<void> {
     if (!conta) {
@@ -112,7 +151,7 @@ export function ImportScreen(): React.ReactElement {
     if (!batch) return;
     setPhase('gravando');
     try {
-      const resultado = await confirmImport(batch.id, [...selected]);
+      const resultado = await confirmImport(batch.id, [...selected], escolhidas);
       setBatch(resultado);
       setPhase('pronto');
     } catch (err) {
@@ -158,6 +197,8 @@ export function ImportScreen(): React.ReactElement {
           onPress={() => {
             setBatch(null);
             setSelected(new Set());
+            setEscolhidas({});
+            setEscolhendo(null);
             setPhase('escolha');
           }}
         >
@@ -281,18 +322,42 @@ export function ImportScreen(): React.ReactElement {
             row={row}
             checked={selected.has(row.index)}
             onToggle={() => alternar(row.index)}
+            categoria={
+              escolhidas[row.index]
+                ? (nomePorId.get(escolhidas[row.index]) ?? 'categoria escolhida')
+                : (row.suggested_category_name ?? 'sem categoria')
+            }
+            pendente={!escolhidas[row.index] && row.suggested_is_pending}
+            trocada={Boolean(escolhidas[row.index])}
+            aberto={escolhendo === row.index}
+            opcoes={opcoes}
+            onAbrir={() => setEscolhendo(escolhendo === row.index ? null : row.index)}
+            onEscolher={(categoriaId) => {
+              setEscolhidas((atual) => ({ ...atual, [row.index]: categoriaId }));
+              setEscolhendo(null);
+              // escolher categoria e dizer "esta linha entra": desmarcada, a
+              // escolha nao teria efeito nenhum e o toque seria perdido
+              setSelected((atual) => new Set(atual).add(row.index));
+            }}
           />
         ))}
       </ScrollView>
 
       <View style={styles.footer}>
-        <View>
+        <View style={styles.footerMain}>
           <Text style={styles.footerLabel}>
             {selected.size} de {batch.rows_detected} marcados
           </Text>
           <Text style={styles.footerTotals}>
             +{money(totals.entrada)} · −{money(totals.saida)}
           </Text>
+          {pendentes > 0 ? (
+            <Text style={styles.footerPendentes}>
+              {pendentes === 1
+                ? '1 vai entrar como “A definir”'
+                : `${pendentes} vão entrar como “A definir”`}
+            </Text>
+          ) : null}
         </View>
         <Pressable
           style={[styles.button, styles.buttonCompact, selected.size === 0 && styles.buttonOff]}
@@ -306,34 +371,137 @@ export function ImportScreen(): React.ReactElement {
   );
 }
 
+type Folha = ReturnType<typeof folhas>[number];
+
+/**
+ * Uma linha da conferencia.
+ *
+ * O toque na linha marca e desmarca; o toque na CATEGORIA abre a escolha. Sao
+ * dois alvos separados de proposito: a categoria fica num botao proprio, com
+ * borda, porque um texto que vira lista ao ser tocado nao se anuncia.
+ */
 function PreviewRow({
   row,
   checked,
   onToggle,
+  categoria,
+  pendente,
+  trocada,
+  aberto,
+  opcoes,
+  onAbrir,
+  onEscolher,
 }: {
   row: ImportPreviewRow;
   checked: boolean;
   onToggle: () => void;
+  categoria: string;
+  pendente: boolean;
+  trocada: boolean;
+  aberto: boolean;
+  opcoes: Folha[];
+  onAbrir: () => void;
+  onEscolher: (categoriaId: string) => void;
 }): React.ReactElement {
+  const [busca, setBusca] = useState('');
+
+  // mesma direcao da linha: num gasto, oferecer categoria de receita e oferecer
+  // um erro
+  const doLado = useMemo(
+    () =>
+      opcoes.filter((f) =>
+        row.direction === 'SAIDA'
+          ? f.categoria.kind === 'DESPESA' || f.categoria.kind === 'INVESTIMENTO'
+          : f.categoria.kind === 'RECEITA',
+      ),
+    [opcoes, row.direction],
+  );
+
+  const visiveis = useMemo(() => {
+    const termo = busca.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (!termo) return doLado.slice(0, 12);
+    return doLado
+      .filter((f) =>
+        f.caminho
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .includes(termo),
+      )
+      .slice(0, 30);
+  }, [doLado, busca]);
+
   return (
-    <Pressable onPress={onToggle} style={styles.row}>
-      <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-        {checked ? <Text style={styles.check}>✓</Text> : null}
-      </View>
-      <View style={styles.rowMain}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {row.description}
+    <View style={styles.rowWrap}>
+      <Pressable onPress={onToggle} style={styles.row}>
+        <View style={[styles.checkbox, checked && styles.checkboxOn]}>
+          {checked ? <Text style={styles.check}>✓</Text> : null}
+        </View>
+        <View style={styles.rowMain}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {row.description}
+          </Text>
+          <Text style={styles.rowSubtitle}>{dayLabel(row.booked_on)}</Text>
+          {row.duplicate_reason ? (
+            <Text style={styles.duplicate}>{row.duplicate_reason}</Text>
+          ) : null}
+        </View>
+        <MoneyValue value={row.amount} direction={row.direction === 'SAIDA' ? 'out' : 'in'} />
+      </Pressable>
+
+      <Pressable
+        onPress={onAbrir}
+        accessibilityRole="button"
+        accessibilityLabel={`Categoria: ${categoria}. Toque para trocar.`}
+        style={[
+          styles.categoriaBotao,
+          pendente && styles.categoriaPendente,
+          trocada && styles.categoriaTrocada,
+        ]}
+      >
+        <Text
+          style={[
+            styles.categoriaTexto,
+            pendente && styles.categoriaTextoPendente,
+            trocada && styles.categoriaTextoTrocada,
+          ]}
+          numberOfLines={1}
+        >
+          {categoria}
         </Text>
-        <Text style={styles.rowSubtitle}>
-          {dayLabel(row.booked_on)}
-          {row.suggested_category_name ? ` · ${row.suggested_category_name}` : ' · sem categoria'}
-        </Text>
-        {row.duplicate_reason ? (
-          <Text style={styles.duplicate}>{row.duplicate_reason}</Text>
-        ) : null}
-      </View>
-      <MoneyValue value={row.amount} direction={row.direction === 'SAIDA' ? 'out' : 'in'} />
-    </Pressable>
+        <Text style={styles.categoriaAcao}>{aberto ? 'fechar' : 'trocar'}</Text>
+      </Pressable>
+
+      {aberto ? (
+        <View style={styles.escolha}>
+          <Field
+            label=""
+            value={busca}
+            onChangeText={setBusca}
+            placeholder="Procurar categoria…"
+            autoCapitalize="none"
+          />
+          <ScrollView style={styles.escolhaLista} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+            {visiveis.map((f) => (
+              <Pressable
+                key={f.categoria.id}
+                onPress={() => {
+                  setBusca('');
+                  onEscolher(f.categoria.id);
+                }}
+                accessibilityRole="button"
+                style={styles.escolhaItem}
+              >
+                <Text style={styles.escolhaTexto}>{f.caminho}</Text>
+              </Pressable>
+            ))}
+            {visiveis.length === 0 ? (
+              <Text style={styles.hint}>Nenhuma categoria com esse nome.</Text>
+            ) : null}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -383,9 +551,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
     gap: spacing.sm,
   },
   checkbox: {
@@ -399,7 +566,32 @@ const styles = StyleSheet.create({
   },
   checkboxOn: { backgroundColor: colors.red, borderColor: colors.red },
   check: { color: colors.white, fontSize: 13, fontWeight: '700' },
+  rowWrap: { borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1 },
+  categoriaBotao: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginLeft: 30,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  categoriaPendente: { borderColor: colors.redDark, backgroundColor: colors.redSoft },
+  categoriaTrocada: { borderColor: colors.white },
+  categoriaTexto: { ...typography.caption, color: colors.textMuted, flex: 1 },
+  categoriaTextoPendente: { color: colors.red, fontWeight: '700' },
+  categoriaTextoTrocada: { color: colors.text },
+  categoriaAcao: { ...typography.caption, color: colors.textFaint },
+  escolha: { marginLeft: 30, marginBottom: spacing.md },
+  escolhaLista: { maxHeight: 220 },
+  escolhaItem: { paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border },
+  escolhaTexto: { ...typography.caption, color: colors.text },
   rowTitle: { ...typography.body, color: colors.text },
   rowSubtitle: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
   duplicate: { ...typography.caption, color: colors.red, marginTop: 2 },
@@ -413,7 +605,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...layout.coluna,
   },
+  footerMain: { flex: 1 },
   footerLabel: { ...typography.caption, color: colors.textMuted },
+  footerPendentes: { ...typography.caption, color: colors.red, marginTop: 2 },
   footerTotals: { ...typography.body, color: colors.text, marginTop: 2 },
   button: {
     backgroundColor: colors.red,

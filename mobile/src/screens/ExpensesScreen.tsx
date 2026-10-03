@@ -148,7 +148,7 @@ export function ExpensesScreen(): React.ReactElement {
       {modo === 'lista' && (
         <Pressable onPress={() => setOnlyPending((v) => !v)} style={styles.filterChip}>
           <Text style={[styles.filterText, onlyPending && { color: colors.white }]}>
-            {onlyPending ? '✓ ' : ''}Só sem categoria
+            {onlyPending ? '✓ ' : ''}Só os pendentes
           </Text>
         </Pressable>
       )}

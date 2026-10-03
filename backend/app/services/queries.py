@@ -456,3 +456,35 @@ def note_required_for(db: Session, category_id: UUID) -> str | None:
         ),
         {"category_id": category_id},
     ).scalar_one_or_none()
+
+
+def pendentes_de_categoria(
+    db: Session, family_id: UUID, month: date, member_id: UUID | None
+) -> dict:
+    """Quanto do mes ainda esta em "A definir", e quantos lancamentos sao.
+
+    Existe para o painel poder cobrar. "Salvo agora, arrumo depois" so funciona
+    se o depois aparecer em algum lugar - sem isto, o lancamento que ninguem
+    classificou fica num canto da lista de categorias e sobrevive ao mes.
+
+    Conta tambem a categoria nula, que e a forma antiga do mesmo problema.
+    """
+    row = db.execute(
+        text(
+            f"""
+            SELECT COUNT(*)                   AS quantos,
+                   COALESCE(SUM(t.amount), 0) AS total
+              FROM transactions t
+              LEFT JOIN categories c ON c.id = t.category_id
+             WHERE t.family_id = :family_id
+               AND t.status IN ('EFETIVADA', 'CONCILIADA')
+               AND t.direction <> 'TRANSFERENCIA'
+               AND (t.category_id IS NULL OR c.slug = 'a_definir')
+               AND date_trunc('month', t.booked_on)
+                   = date_trunc('month', CAST(:month AS date))
+               {_SCOPE_FILTER}
+            """
+        ),
+        {"family_id": family_id, "month": month, "member_id": member_id},
+    ).mappings().one()
+    return {"quantos": int(row["quantos"]), "total": brl(row["total"])}

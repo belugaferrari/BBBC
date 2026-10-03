@@ -200,7 +200,10 @@ def test_correcao_manual_ensina_o_motor_de_categorizacao(client, family, account
         client, family, amount="890.00", direction="SAIDA",
         description="COMPRA CARTAO BAMBU LAB FILAMENTO",
     )
-    assert criada["category_id"] is None  # nenhuma regra existia ainda
+    # Nenhuma regra existia ainda - mas "sem regra" nao e mais "sem categoria":
+    # o lancamento cai em "A definir", que e um lugar visivel, e nao fora da soma
+    # por categoria.
+    assert criada["category_id"] == cats["despesas.a_definir"]
 
     corrigida = client.patch(
         f"/api/v1/transactions/{criada['id']}",

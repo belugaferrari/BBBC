@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import CategorizationRule, Transaction
+from app.models import CategorizationRule, Category, Transaction
 from app.models.enums import TxDirection
 from app.services.categorization import (
     Rule,
@@ -40,6 +40,40 @@ def _to_rule(row: CategorizationRule) -> Rule:
     )
 
 
+# Onde vai o lancamento que nenhuma regra reconheceu, por direcao.
+#
+# Nao e so um rotulo bonito para "sem categoria". Categoria nula sai da soma por
+# categoria (que nasce de um JOIN com `categories`) e continua no fluxo do mes
+# (que soma lancamento direto) - o painel acusava "gastou R$ 5.000" com a lista
+# somando R$ 4.200 e nenhuma linha explicando a diferenca. Com categoria de
+# verdade, o pendente aparece com nome e total, impossivel de nao ver.
+_A_DEFINIR = {
+    TxDirection.SAIDA: "despesas.a_definir",
+    TxDirection.ENTRADA: "receitas.a_definir",
+}
+
+
+def categoria_a_definir(
+    db: Session, family_id: UUID, direction: TxDirection | str
+) -> UUID | None:
+    """A categoria "A definir" da familia para aquela direcao.
+
+    Devolve None para TRANSFERENCIA (que nao e gasto nem receita: pedir uma
+    categoria para "pagamento de fatura" seria pedir uma decisao que nao existe)
+    e tambem quando a familia e de antes da migration que criou a categoria - ai
+    o comportamento volta a ser o antigo, que e pior, mas nao quebra nada.
+    """
+    caminho = _A_DEFINIR.get(TxDirection(direction))
+    if not caminho:
+        return None
+    return db.scalar(
+        select(Category.id).where(
+            Category.family_id == family_id,
+            Category.path == caminho,
+        )
+    )
+
+
 def load_rules(db: Session, family_id: UUID) -> list[Rule]:
     rows = db.scalars(
         select(CategorizationRule).where(CategorizationRule.family_id == family_id)
@@ -48,7 +82,11 @@ def load_rules(db: Session, family_id: UUID) -> list[Rule]:
 
 
 def autocategorize(db: Session, family_id: UUID, tx: Transaction) -> Transaction:
-    """Aplica a melhor regra disponivel. Sem match, a transacao fica para revisao."""
+    """Aplica a melhor regra disponivel.
+
+    Sem regra que reconheca, o lancamento vai para "A definir" em vez de ficar
+    sem categoria - ver o comentario de `categoria_a_definir`.
+    """
     tx.description_norm = normalize(tx.description)
     match = categorize(
         TransactionFacts(
@@ -60,6 +98,7 @@ def autocategorize(db: Session, family_id: UUID, tx: Transaction) -> Transaction
         load_rules(db, family_id),
     )
     if not match:
+        tx.category_id = categoria_a_definir(db, family_id, tx.direction)
         return tx
 
     tx.category_id = match.category_id

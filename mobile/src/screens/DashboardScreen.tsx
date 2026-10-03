@@ -107,7 +107,7 @@ export function DashboardScreen(): React.ReactElement {
     );
   }
 
-  const { cashflow, balances, budget_caps: caps, alerts } = data;
+  const { cashflow, balances, budget_caps: caps, alerts, pendentes } = data;
   const net = Number(cashflow.net);
   // Doação recebida: entrou na conta, mas não é renda da família. Fica em linha
   // separada - somada à renda, inflaria o mês e a taxa de poupança, e é o tipo
@@ -180,6 +180,21 @@ export function DashboardScreen(): React.ReactElement {
         </Text>
       ) : null}
 
+      {pendentes && pendentes.quantos > 0 ? (
+        <Card>
+          <Text style={styles.pendentesTitulo}>
+            {pendentes.quantos === 1
+              ? '1 lançamento esperando categoria'
+              : `${pendentes.quantos} lançamentos esperando categoria`}
+          </Text>
+          <Text style={styles.pendentesValor}>{money(pendentes.total)}</Text>
+          <Text style={styles.pendentesHint}>
+            Estão em “A definir”: contam no gasto do mês, mas ainda não dizem em quê. Na aba
+            Gastos, o filtro “só os pendentes” mostra só eles.
+          </Text>
+        </Card>
+      ) : null}
+
       {mesAtual && alerts.length > 0 && (
         <Card>
           <SectionTitle>Alertas</SectionTitle>
@@ -237,6 +252,9 @@ export function DashboardScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  pendentesTitulo: { ...typography.body, color: colors.text, fontWeight: '700' },
+  pendentesValor: { ...typography.title, color: colors.red, marginTop: 2 },
+  pendentesHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, paddingBottom: spacing.xl, ...layout.coluna },
   center: {

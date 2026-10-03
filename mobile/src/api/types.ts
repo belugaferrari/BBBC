@@ -86,6 +86,8 @@ export interface DashboardData {
   reference_month: string;
   scope: Scope;
   cashflow: Cashflow;
+  /** o que entrou no mês e ainda está em "A definir" */
+  pendentes: { quantos: number; total: string };
   balances: Balances;
   sankey: SankeyData;
   budget_caps: BudgetCapStatus[];
@@ -217,6 +219,14 @@ export interface ImportPreviewRow {
   duplicate_reason: string | null;
   suggested_category_id: string | null;
   suggested_category_name: string | null;
+  /**
+   * true quando nenhuma regra reconheceu a linha e a "sugestão" é só "A definir".
+   *
+   * A tela precisa das duas coisas separadas: "MERCADO X → Mercado" é um palpite
+   * com base em algo; "A definir" é a ausência de palpite. Mostradas iguais, a
+   * segunda passaria por sugestão e seria confirmada sem ninguém olhar.
+   */
+  suggested_is_pending: boolean;
   confidence: string | null;
   selected: boolean;
 }

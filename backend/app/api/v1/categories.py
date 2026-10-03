@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select, text
 
@@ -152,6 +152,17 @@ def delete_category(category_id: UUID, current: CurrentMember, db: DbSession) ->
     orfa nao e um estado que faca sentido.
     """
     categoria = owned_category(db, category_id, current)
+
+    # "A definir" nao sai. Ela e o destino do que o sistema nao soube
+    # classificar: sem ela, o lancamento volta a entrar sem categoria nenhuma e
+    # a desaparecer da soma por categoria, que e o problema que ela resolve.
+    if categoria.slug == "a_definir":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "'A definir' nao pode ser excluida: e onde o sistema guarda o que "
+            "ainda nao foi classificado. Ela fica vazia sozinha, conforme voce "
+            "escolhe a categoria de cada lancamento.",
+        )
 
     com_historico = db.execute(
         text(

@@ -199,7 +199,11 @@ def test_lancamento_sem_categoria_nao_some_do_agrupamento(client, familia):
         headers=familia["headers"],
     )
     grupos = {g["name"] for g in resposta.json()["categories"]}
-    assert "Sem categoria" in grupos
+    # O lancamento que nenhuma regra reconheceu nao pode sumir do agrupamento.
+    # Hoje ele chega ja com a categoria "A definir" (antes ficava sem categoria e
+    # aparecia no balde calculado "Sem categoria") - os dois nomes valem, porque
+    # o que este teste guarda e que o dinheiro aparece em algum lugar.
+    assert grupos & {"A definir", "Sem categoria"}, grupos
 
 
 def test_quanto_cada_um_gastou(client, familia):

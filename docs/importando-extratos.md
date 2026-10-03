@@ -36,6 +36,41 @@ valor à mão"). Você marca e desmarca o que quiser e confirma.
 Gravar direto seria mais rápido, e seria a forma mais fácil de sujar a base.
 Sujeira em base financeira custa horas de conferência depois.
 
+### A categoria se troca na conferência
+
+Em cada linha, a categoria é um botão: toque e escolha outra, **antes de
+gravar**. É mais barato aí que depois — depois seria abrir a lista de gastos e
+corrigir um por um.
+
+Duas coisas aparecem diferentes de propósito:
+
+| Na linha | O que significa |
+|---|---|
+| **Mercado**, em cinza | sugestão com base em algo — "SUPERMERCADO ANGELONI" casou com uma regra |
+| **A definir**, em vermelho | nenhuma regra reconheceu: o sistema não está sugerindo, está admitindo que não sabe |
+
+Mostrar as duas iguais faria a segunda passar por sugestão e ser confirmada sem
+ninguém olhar. Por isso o rodapé também conta: "2 vão entrar como 'A definir'".
+
+### "A definir" é uma categoria de verdade
+
+Você pode confirmar sem resolver — é para isso que ela existe: *"nem sempre pelo
+nome dos gastos vou saber o que é"*. O lançamento entra, conta no gasto do mês, e
+fica num lugar visível:
+
+- aparece no **Resumo**, numa linha que cobra: "3 lançamentos esperando
+  categoria · R$ 850";
+- aparece na tela de **Categorias**, com nome e total, como qualquer outra;
+- some de lá assim que você escolher a categoria certa, na aba **Gastos** →
+  "só os pendentes".
+
+Isso é diferente de "sem categoria", que era um rótulo calculado: não abria, não
+recebia meta, não aparecia na tela de Categorias — e o total daquela tela ficava
+menor que o do Resumo, sem uma linha explicando a diferença.
+
+A categoria "A definir" não pode ser excluída: ela é o destino do que o sistema
+não soube classificar. Ela fica vazia sozinha, conforme você decide.
+
 ## O que impede lançamento duplicado
 
 Três camadas, da mais exata para a mais tolerante:

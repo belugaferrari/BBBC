@@ -13,6 +13,7 @@ from app.services.projection import budget_status
 from app.services.queries import (
     consolidated_balances,
     monthly_cashflow,
+    pendentes_de_categoria,
     sankey_rows,
     spend_by_budget_cap,
 )
@@ -61,6 +62,9 @@ def dashboard(
         "reference_month": reference,
         "scope": scope,
         "cashflow": monthly_cashflow(db, current.family_id, reference, owner),
+        # O que ainda esta em "A definir". Vem no painel porque "salvo agora,
+        # arrumo depois" so funciona se o depois aparecer em algum lugar.
+        "pendentes": pendentes_de_categoria(db, current.family_id, reference, owner),
         "balances": consolidated_balances(db, current.family_id, owner),
         "sankey": build_sankey(sankey_rows(db, current.family_id, reference, owner)),
         "budget_caps": [cap.__dict__ for cap in caps],
