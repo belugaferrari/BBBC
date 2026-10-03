@@ -371,3 +371,42 @@ atualizar. E, quando não acha `backend\.venv` nem `mobile\node_modules` ali,
 avisa que aquilo não parece a instalação e pergunta se é para seguir — com "não"
 como padrão. Não dá para ter certeza só por isso (uma instalação nova também não
 os tem), mas dá para desconfiar em voz alta.
+
+## O primeiro extrato de conta corrente de verdade
+
+Ele mandou um OFX do Itaú e achou que o sistema tinha lido só metade do mês. Não
+tinha: **o arquivo é que só traz 18/09 a 01/10**, e diz isso nele mesmo
+(`DTSTART` / `DTEND`). O leitor trouxe as 14 linhas que existiam. O banco é que
+limita o período na hora de gerar o arquivo — é lá que o período se escolhe.
+
+Mas o arquivo revelou um problema de verdade, e grande.
+
+### Uma de catorze
+
+Fatura de cartão traz nome de loja: iFood, Uber, Netflix. **Extrato de conta
+corrente traz sigla de banco e PIX para pessoas.** O catálogo só conhecia o
+primeiro, e esse extrato chegou com **1 linha de 14** sugerida.
+
+Entraram as siglas que dá para reconhecer com segurança: `FINANC IMOBILIARIO`,
+`REND PAGO`, `APLIC AUT` / `RESGATE AUT` (a aplicação automática move dinheiro
+todo dia entre a conta e o fundo — não é gasto nem receita, e contada como saída
+encheria o mês de despesa que nunca existiu), `TARIFA`, `IOF`. Foram de 1 para 5.
+
+### E as outras nove — o achado que vale mais
+
+As nove restantes são PIX para pessoas. **Regra nenhuma vai adivinhar essas**, e
+nem deveria. O que resolve é corrigir uma vez e o sistema lembrar.
+
+Só que não lembrava. O Itaú cola o dia e o mês no fim da descrição —
+`PIX TRANSF KARINA 27 09`, e quando o nome é longo sem espaço nenhum:
+`GEORGET26 09`. A data entrava no padrão aprendido, então corrigir aquela linha
+ensinava uma regra que **só casaria de novo no dia 27 de setembro**. O
+aprendizado era inútil justamente onde era necessário.
+
+A data colada passou a ser tratada como ruído, junto com os prefixos de
+movimentação (`PIX QRS`, `PIX AUT`, `TED`, `DOC`). O padrão aprendido virou
+`karina`, `georget`, `booma organ` — e atravessa o mês.
+
+Conferido de ponta a ponta contra a API: PIX de setembro chega sem categoria, ele
+corrige para Diarista, e o PIX de **outubro** para a mesma pessoa já chega
+classificado.

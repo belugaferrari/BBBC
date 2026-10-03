@@ -248,7 +248,30 @@ DEFAULT_MERCHANT_RULES: list[tuple[str, str]] = [
     # --- gastos unicos --------------------------------------------------------
     ("multa", "despesas.gastos_unicos.multas"),
 
+    # --- siglas de extrato de conta corrente ----------------------------------
+    # Fatura de cartao traz nome de loja; extrato de conta corrente traz sigla de
+    # banco. Sao mundos diferentes, e o catalogo so conhecia o primeiro - o
+    # primeiro extrato de conta corrente dele chegou com 1 linha de 14 sugerida.
+    ("financ imobiliario", "despesas.financiamentos"),
+    ("financiamento imobiliario", "despesas.financiamentos"),
+    ("credito imobiliario", "despesas.financiamentos"),
+    # A aplicacao automatica do banco move dinheiro todo dia entre a conta e o
+    # fundo. Nao e gasto nem receita: e o mesmo dinheiro mudando de lugar, e
+    # contado como saida encheria o mes de despesa que nunca existiu.
+    ("aplic aut", "transferencias.entre_contas"),
+    ("aplicacao aut", "transferencias.entre_contas"),
+    ("resgate aut", "transferencias.entre_contas"),
+    ("tarifa", "despesas.gastos_anuais.anuidades"),
+    ("cesta de servicos", "despesas.gastos_anuais.anuidades"),
+    ("pacote de servicos", "despesas.gastos_anuais.anuidades"),
+    ("iof", "despesas.gastos_anuais.anuidades"),
+
     # --- receitas -------------------------------------------------------------
+    # O rendimento da aplicacao automatica. Precisa de prioridade porque a
+    # descricao inteira - "REND PAGO APLIC AUT MAIS" - casa tambem com a regra da
+    # aplicacao acima, e as duas tem o mesmo tamanho: sem desempate, qual das
+    # duas ganha seria sorte.
+    ("rend pago", "receitas.passiva.renda_fixa"),
     ("pro labore", "receitas.ativa_fixa.pro_labore"),
     ("pro-labore", "receitas.ativa_fixa.pro_labore"),
     ("distribuicao de lucros", "receitas.ativa_variavel.lucros"),
@@ -263,7 +286,7 @@ CATALOG_RULE_PRIORITY = 90
 CATALOG_RULE_CONFIDENCE = "0.600"
 
 # ---------------------------------------------------------------------------
-# Padroes que falam da PLATAFORMA, e nao do estabelecimento
+# Padroes que precisam vencer o desempate por tamanho
 # ---------------------------------------------------------------------------
 # O desempate normal e por tamanho do padrao, e isso erra num caso concreto:
 # "IFOOD *RESTAURANTE SAO JOSE" casa com 'ifood' (5 letras) e com 'restaurante'
@@ -277,7 +300,12 @@ CATALOG_RULE_CONFIDENCE = "0.600"
 # se ele discordar uma vez, a correcao dele e que passa a valer.
 PRIORIDADE_PLATAFORMA = 80
 
+# "REND PAGO APLIC AUT MAIS" e o terceiro caso, e nao e sobre plataforma: a
+# descricao casa com 'rend pago' (a receita) e com 'aplic aut' (a transferencia),
+# e as duas tem nove letras. Empate exato e pior que erro: a resposta passa a
+# depender de qual regra o banco devolveu primeiro.
 PADROES_DE_PLATAFORMA = frozenset({
+    "rend pago",
     # aplicativos de entrega: o nome do restaurante vem na descricao
     "ifood", "rappi", "uber eats", "99food", "99 food", "cheeta", "aiqfome",
     "zedelivery", "ze delivery", "daki",

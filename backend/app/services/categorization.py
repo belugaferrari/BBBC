@@ -17,14 +17,29 @@ from uuid import UUID
 from app.models.enums import TxDirection
 
 # Ruido tipico de extrato bancario e fatura de cartao.
+#
+# A ORDEM importa: a alternancia e aplicada da esquerda para a direita em cada
+# posicao, entao o padrao mais especifico (a data colada na palavra) vem antes do
+# mais geral (a data solta).
 _NOISE_PATTERNS = [
     r"\bcompra\s+(com\s+)?cart[aã]o\b",
     r"\bcartao\s+de\s+credito\b",
     r"\bdebito\s+automatico\b",
     r"\bpagamento\s+(de\s+)?(fatura|boleto)\b",
-    r"\bpix\s+(enviado|recebido|transf)\b",
+    # Prefixos de movimentacao: dizem COMO o dinheiro andou, nao PARA QUEM. Sem
+    # tira-los, o fornecedor de "PIX QRS BOOMA ORGANICOS" seria "pix qrs booma".
+    r"\bpix\s+(enviado|recebido|transf|qrs|aut|cred|deb)\b",
+    r"\b(ted|doc|tev)\s+(enviad|recebid|transf)\w*\b",
     r"\bparcela\s+\d+\s*/\s*\d+\b",
     r"\b\d{2}/\d{2}(/\d{2,4})?\b",
+    # A DATA QUE O BANCO COLA NO FIM. O Itau termina a descricao com o dia e o
+    # mes - "PIX TRANSF KARINA 27 09" - e as vezes sem espaco nenhum antes,
+    # "GEORGET26 09". Enquanto isso ficava, o padrao aprendido numa correcao
+    # nascia com a data dentro e so casava naquele dia: ensinar o sistema sobre
+    # um fornecedor nao servia para o mes seguinte. E o mesmo fornecedor todo
+    # mes e exatamente o caso que o aprendizado existe para resolver.
+    r"(?<=[a-z])\d{1,2}\s+\d{2}\s*$",
+    r"\b\d{1,2}\s+\d{2}\s*$",
     r"\bbr\b",
     r"\*+",
     r"\bltda\b|\bme\b|\beireli\b|\bs\.?a\.?\b",
