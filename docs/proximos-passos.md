@@ -239,3 +239,47 @@ O launcher passou a guardar o endereço da última vez e a comparar:
 
 Falha na detecção não apaga o endereço guardado — senão a próxima partida
 acusaria mudança sem ter havido nenhuma.
+
+## O OFX que o sistema recusava
+
+Ele mandou extratos OFX e o sistema não leu nenhum. Eram **dois** problemas
+independentes, e o primeiro escondia o segundo.
+
+### 1. No navegador, o arquivo nunca saía do aplicativo
+
+O envio montava o arquivo como `{uri, name, type}` — que é o contrato do FormData
+do React Native, e funciona no celular. No navegador o FormData é o do padrão
+web: ele só entende `Blob` ou `File`, e um objeto comum **não dá erro** — é
+convertido para texto. O que chegava no servidor era a palavra
+`[object Object]`, e a resposta falava de um tipo de dado que não dizia nada a
+quem estava tentando importar um extrato.
+
+Agora o envio olha onde está rodando: no navegador anexa o `File` de verdade (o
+seletor sempre entrega um), no celular mantém o objeto com `uri`. E erro de
+validação do servidor, que vem como lista, virou frase.
+
+### 2. O leitor de OFX não aguentava banco brasileiro
+
+Três falhas reais, achadas com arquivos montados no formato de cada banco:
+
+- **Agregado sem etiqueta de fechamento.** O padrão pede `</STMTTRN>`; Banco do
+  Brasil e Caixa não escrevem, e abrem o lançamento seguinte em cima do anterior.
+  O leitor procurava pelo fechamento, não achava lançamento nenhum e recusava o
+  arquivo com *"o arquivo é mesmo um OFX?"* — para um OFX legítimo. Era o sintoma
+  exato.
+- **Encoding declarado que não é o usado.** O cabeçalho quase sempre diz
+  `ENCODING:USASCII` / `CHARSET:1252` e boa parte dos bancos grava UTF-8. O
+  leitor obedecia o cabeçalho e devolvia `FarmÃ¡cia`. O estrago não era só
+  visual: é esse texto que alimenta a sugestão de categoria, então a regra
+  `farmacia` deixava de casar.
+- **UTF-16.** Byte zero intercalado fazia a etiqueta `<STMTTRN>` nem aparecer.
+
+A ordem de decisão agora é: BOM primeiro (é fato, não declaração), depois o teste
+de UTF-8 válido (acento em cp1252 é byte solto que não fecha sequência multibyte,
+então um arquivo cp1252 não passa por aí por acidente), e só no fim o cabeçalho —
+porque é justamente ele que mente.
+
+Sete arquivos no formato de Itaú, BB, Nubank, Santander (OFX 2.x), um por linha,
+com BOM e em UTF-16 passam pela API e chegam com a categoria sugerida certa —
+inclusive `PAGAMENTO FATURA CARTAO` caindo em "Pagamento de fatura", que é o que
+impede a duplicata do cartão.

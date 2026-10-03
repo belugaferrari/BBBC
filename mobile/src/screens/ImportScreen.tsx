@@ -28,7 +28,22 @@ import { dayLabel, money } from '@/theme/format';
 
 type Phase = 'escolha' | 'lendo' | 'conferencia' | 'gravando' | 'pronto';
 
+/**
+ * O que o seletor de arquivos aceita.
+ *
+ * As extensoes estao na lista junto com os tipos MIME de proposito: no
+ * navegador, o seletor usa esta lista como o atributo `accept`, e banco
+ * brasileiro entrega .ofx com tipo MIME em branco ou generico - so o tipo MIME
+ * deixaria o arquivo certo apagado na janela. O `*​/*` no fim garante que nada
+ * fique de fora quando o banco inventar outra extensao.
+ */
 const ACCEPTED = [
+  '.ofx',
+  '.ofc',
+  '.qfx',
+  '.csv',
+  '.txt',
+  '.pdf',
   'application/x-ofx',
   'application/pdf',
   'text/csv',
