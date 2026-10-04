@@ -45,6 +45,7 @@ _SOURCE_BY_FORMAT = {
     "OFX": TxSource.IMPORT_OFX,
     "CSV": TxSource.IMPORT_CSV,
     "PDF": TxSource.IMPORT_PDF,
+    "XLSX": TxSource.IMPORT_XLSX,
 }
 
 

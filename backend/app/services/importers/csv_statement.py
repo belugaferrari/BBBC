@@ -94,7 +94,19 @@ def parse(content: bytes) -> ParsedStatement:
     if not rows:
         raise StatementParseError("arquivo sem linhas")
 
-    statement = ParsedStatement(file_format="CSV")
+    return montar_extrato(rows, file_format="CSV")
+
+
+def montar_extrato(rows: list[list[str]], file_format: str = "CSV") -> ParsedStatement:
+    """Monta o extrato a partir de uma grade de texto, ache ela as colunas onde
+    achar.
+
+    Separado do `parse` porque a planilha do Excel chega aqui pelo mesmo caminho:
+    o que muda entre um .csv e um .xlsx e como se obtem a grade - achar a coluna
+    de data no meio do cabecalho que o banco inventou e identico nos dois, e essa
+    parte nao deve existir duas vezes.
+    """
+    statement = ParsedStatement(file_format=file_format)
 
     columns: dict[str, int] = {}
     start = 0

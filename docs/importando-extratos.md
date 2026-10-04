@@ -9,7 +9,13 @@ pelo app. Funciona hoje, sem contratar nada.
 |---|---|---|
 | **OFX** (`.ofx`, `.ofc`, `.qfx`) | **Exata** | Sempre que o banco oferecer. Cada lançamento vem com identificador próprio (FITID), então a deduplicação é perfeita. |
 | **CSV** (`.csv`, `.txt`) | Muito boa | Segunda opção. O leitor identifica as colunas pelo nome e, se não achar cabeçalho, deduz pelo conteúdo. |
+| **Excel** (`.xlsx`, `.xlsm`) | Muito boa | Quando o banco entrega a fatura em planilha. Mesma leitura do CSV — o que muda é só como a grade é obtida. |
 | **PDF** | Aproximada | Último recurso. Funciona, mas confira antes de confirmar. |
+
+**Planilha em `.xls`** (formato antigo, de antes de 2007) **não abre**: é outro
+formato por dentro, não um zip. Abra no Excel e salve como `.xlsx`, ou exporte em
+CSV — o sistema avisa isso quando acontece, em vez de dizer que o arquivo está
+corrompido.
 
 Quase todo banco brasileiro exporta OFX — costuma aparecer como "Exportar para
 o gerenciador financeiro", "OFX" ou "Money/Quicken". Vale procurar: é a

@@ -59,11 +59,14 @@ const ACCEPTED = [
   '.csv',
   '.txt',
   '.pdf',
+  '.xlsx',
+  '.xlsm',
   'application/x-ofx',
   'application/pdf',
   'text/csv',
   'text/comma-separated-values',
   'text/plain',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '*/*',
 ];
 
@@ -277,9 +280,14 @@ export function ImportScreen(): React.ReactElement {
         <Card style={{ marginTop: spacing.lg }}>
           <SectionTitle>Enviar extrato</SectionTitle>
           <Text style={styles.explain}>
-            Aceita <Text style={styles.strong}>OFX</Text>, <Text style={styles.strong}>CSV</Text> e{' '}
-            <Text style={styles.strong}>PDF</Text>. Se o seu banco oferecer OFX, prefira: a
-            leitura é exata, porque cada lançamento vem com identificador próprio.
+            Aceita <Text style={styles.strong}>OFX</Text>, <Text style={styles.strong}>CSV</Text>,{' '}
+            <Text style={styles.strong}>Excel</Text> (.xlsx) e <Text style={styles.strong}>PDF</Text>.
+            Se o seu banco oferecer OFX, prefira: a leitura é exata, porque cada lançamento vem
+            com identificador próprio.
+          </Text>
+          <Text style={styles.explain}>
+            Planilha em <Text style={styles.strong}>.xls</Text> (formato antigo) não abre: abra no
+            Excel e salve como .xlsx.
           </Text>
           <Text style={styles.explain}>
             Nada é gravado no envio — você confere lançamento a lançamento antes de confirmar.

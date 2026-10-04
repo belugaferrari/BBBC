@@ -197,6 +197,33 @@ def test_categoria_pode_ser_corrigida_na_conferencia(client, conta):
     assert lancamentos[0]["category_id"] == categoria
 
 
+def test_planilha_do_excel_entra_pela_mesma_porta(client, conta):
+    """A fatura que o banco entrega em .xlsx. O que muda em relacao ao CSV e so
+    como a grade e obtida - achar as colunas e gravar os lancamentos e o mesmo
+    caminho, e este teste existe para garantir que continua sendo."""
+    from tests.test_importador_xlsx import FATURA, _planilha
+
+    resposta = client.post(
+        "/api/v1/imports",
+        data={"account_id": conta["account_id"]},
+        files={"file": ("fatura.xlsx", _planilha(FATURA), "application/octet-stream")},
+        headers=conta["headers"],
+    )
+    assert resposta.status_code == 201, resposta.text
+    lote = resposta.json()
+    assert lote["file_format"] == "XLSX"
+    assert lote["rows_detected"] == 3
+
+    client.post(
+        f"/api/v1/imports/{lote['id']}/confirm", json={}, headers=conta["headers"]
+    )
+    lancamentos = transacoes(client, conta)
+    assert len(lancamentos) == 3
+    # a origem fica registrada: planilha e o formato em que o proprio usuario
+    # pode ter mexido antes de mandar
+    assert {t["source"] for t in lancamentos} == {"IMPORT_XLSX"}
+
+
 def test_arquivo_ilegivel_explica_o_motivo(client, conta):
     resposta = client.post(
         "/api/v1/imports",

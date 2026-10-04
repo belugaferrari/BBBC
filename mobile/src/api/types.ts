@@ -243,7 +243,7 @@ export interface StatementImport {
   id: string;
   account_id: string;
   filename: string;
-  file_format: 'OFX' | 'CSV' | 'PDF';
+  file_format: 'OFX' | 'CSV' | 'PDF' | 'XLSX';
   status: 'CRIADO' | 'CONFIRMADO' | 'DESCARTADO' | 'ERRO';
   period_start: string | null;
   period_end: string | null;

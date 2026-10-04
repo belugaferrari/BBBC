@@ -45,7 +45,10 @@ function Fim($codigo) {
     exit $codigo
 }
 
-$REPO_ZIP = 'https://github.com/belugaferrari/BBBC/archive/refs/heads/main.zip'
+# De onde a versao nova vem. O ramo esta numa variavel porque o nome dele aparece
+# tambem na mensagem de "nada mudou", e os dois tem de contar a mesma historia.
+$REPO_RAMO = 'main'
+$REPO_ZIP = "https://github.com/belugaferrari/BBBC/archive/refs/heads/$REPO_RAMO.zip"
 
 function SistemaNoAr {
     try {
@@ -165,6 +168,7 @@ if ($temGit) {
             ForEach-Object { "    $_" }
     }
 
+    $antesDoPull = (& git rev-parse HEAD 2>$null)
     & git pull --ff-only origin main 2>&1 | ForEach-Object { "    $_" }
     if ($LASTEXITCODE -ne 0) {
         Erro "O git nao conseguiu trazer a versao nova."
@@ -172,6 +176,7 @@ if ($temGit) {
         Write-Host "  continua funcionando na versao de antes."
         Fim 1
     }
+    $novidade = ((& git rev-parse HEAD 2>$null) -ne $antesDoPull)
     Ok "Codigo atualizado"
 } else {
     # ------------------------------------------------------------ 2. zip ---
@@ -232,11 +237,37 @@ if ($temGit) {
         Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
         Fim 1
     }
+    # O codigo de saida do robocopy e um mapa de bits, e o bit 0 (valor 1) quer
+    # dizer "copiei pelo menos um arquivo". Zero, entao, e "o que esta aqui ja
+    # era igual ao que baixei" - nada mudou.
+    $novidade = (($LASTEXITCODE -band 1) -ne 0)
     Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
     Ok "Codigo atualizado"
 }
 
 # ---------------------------------------------------------------- pronto ---
+# "Atualizei e a novidade nao apareceu" custou uma hora uma vez, e a causa nao
+# estava aqui: a novidade ainda nao tinha ido para o `main`, que e de onde este
+# script baixa. Quando nada muda, o script agora DIZ que nada mudou - e diz onde
+# procurar o que falta, em vez de deixar o silencio parecer sucesso.
+if (-not $novidade) {
+    Titulo "Nada mudou"
+    Aviso "Esta pasta ja estava na versao mais nova do $REPO_RAMO."
+    Write-Host ""
+    Write-Host "  Se voce foi avisado de uma novidade e ela nao apareceu, ela" -ForegroundColor White
+    Write-Host "  provavelmente ainda nao entrou no ${REPO_RAMO}: fica esperando" -ForegroundColor White
+    Write-Host "  aprovacao num 'pull request'." -ForegroundColor White
+    Write-Host ""
+    Write-Host "    1. abra https://github.com/belugaferrari/BBBC/pulls"
+    Write-Host "    2. clique no pull request aberto"
+    Write-Host "    3. clique em 'Merge pull request' e confirme"
+    Write-Host "    4. rode este ATUALIZAR de novo"
+    Write-Host ""
+    Write-Host "  Nao precisa fechar nem reabrir nada: o sistema que esta no ar"
+    Write-Host "  continua sendo o mesmo de antes, e esta correto."
+    Fim 0
+}
+
 Titulo "Pronto"
 Write-Host "  O que acontece agora:"
 Write-Host "    - as bibliotecas so sao reinstaladas se a lista mudou;"
