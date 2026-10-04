@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Account, Category, StatementImport, Transaction
-from app.models.enums import SocioFlow, TxDirection, TxSource, TxStatus
+from app.models.enums import AccountType, SocioFlow, TxDirection, TxSource, TxStatus
 from app.services.categorization import (
     Rule,
     TransactionFacts,
@@ -29,6 +29,7 @@ from app.services.categorization import (
     normalize,
 )
 from app.services.categorization_repository import categoria_padrao, load_rules
+from app.services.importers import fatura
 from app.services.importers.base import ParsedTransaction, fingerprint
 from app.services.importers.detect import parse_statement
 from app.services.socio import (
@@ -80,6 +81,13 @@ def build_preview(
 ) -> StatementImport:
     """Le o arquivo e monta a tela de conferencia. Nao grava lancamento algum."""
     statement = parse_statement(filename, content)
+    # A fatura do cartao fala pelo lado da divida: compra positiva, pagamento
+    # negativo - o contrario do extrato de conta. Precisa ser corrigida AQUI,
+    # antes da impressao digital e da sugestao de categoria, porque as duas
+    # dependem da direcao. Ver app/services/importers/fatura.py.
+    fatura.ajustar(
+        statement, e_cartao=account.type == AccountType.CARTAO_CREDITO
+    )
     file_hash = hashlib.sha256(content).hexdigest()
 
     already = db.scalar(
@@ -199,6 +207,33 @@ def build_preview(
     return row
 
 
+def _direcao_conferida(
+    account_id: UUID, item: dict, escolhida: str | None
+) -> tuple[TxDirection, str]:
+    """A direcao da linha e a impressao digital que corresponde a ela.
+
+    Virar a direcao muda a impressao digital, porque ela e calculada com a
+    direcao dentro (ver `fingerprint`). Guardar a antiga faria a mesma linha,
+    reimportada no mes seguinte, parecer uma linha nova - e o gasto entraria
+    duas vezes.
+    """
+    direcao = TxDirection(escolhida) if escolhida else TxDirection(item["direction"])
+    if escolhida is None or direcao == TxDirection(item["direction"]):
+        return direcao, item["fingerprint"]
+
+    digital = fingerprint(
+        account_id,
+        ParsedTransaction(
+            booked_on=datetime.fromisoformat(item["booked_on"]).date(),
+            amount=Decimal(item["amount"]),
+            direction=direcao,
+            description=item["description"],
+            document=item.get("document"),
+        ),
+    )
+    return direcao, digital
+
+
 def _categoria_por_path(db: Session, family_id: UUID, path: str) -> Category | None:
     """A copia da familia primeiro; o catalogo global so como reserva."""
     return db.scalar(
@@ -215,6 +250,7 @@ def confirm_import(
     *,
     selected_indexes: list[int] | None = None,
     category_overrides: dict[int, UUID] | None = None,
+    direction_overrides: dict[int, str] | None = None,
     contrapartidas: dict[int, str] | None = None,
 ) -> StatementImport:
     """Grava os lancamentos escolhidos na tela de conferencia.
@@ -242,24 +278,47 @@ def confirm_import(
         if index not in chosen:
             continue
 
+        booked_on = datetime.fromisoformat(item["booked_on"]).date()
+        amount = Decimal(item["amount"])
+        # A direcao pode ter sido virada na conferencia. A impressao digital vai
+        # junto, porque a direcao faz parte dela: mantida a antiga, a mesma linha
+        # reimportada no mes seguinte pareceria linha nova.
+        direction, digital = _direcao_conferida(
+            account.id, item, (direction_overrides or {}).get(index)
+        )
+
         # A guarda final e o indice unico em (account_id, import_fingerprint):
         # mesmo com duas confirmacoes simultaneas, a linha nao duplica.
         if db.scalar(
             select(Transaction).where(
                 Transaction.account_id == account.id,
-                Transaction.import_fingerprint == item["fingerprint"],
+                Transaction.import_fingerprint == digital,
             )
         ):
             continue
 
-        category_id = overrides.get(index) or (
-            UUID(item["suggested_category_id"]) if item["suggested_category_id"] else None
-        )
+        confianca = item["confidence"]
+        if index in overrides:
+            category_id = overrides[index]
+        elif direction != TxDirection(item["direction"]):
+            # Virou de lado e ninguem escolheu categoria: a sugestao da
+            # pre-visualizacao era do OUTRO lado, e gravar "Salario" numa saida
+            # seria trocar um erro por um pior - o que erra do lado da receita
+            # ainda estraga a renda do mes e o IR. Vai para "A definir", que
+            # aparece no Resumo cobrando.
+            category_id = categoria_padrao(
+                db,
+                row.family_id,
+                direction,
+                account.type.value if account.type else None,
+            )
+            # a confianca era da sugestao que acabou de ser descartada
+            confianca = None
+        else:
+            category_id = (
+                UUID(item["suggested_category_id"]) if item["suggested_category_id"] else None
+            )
         description = item["description"]
-
-        booked_on = datetime.fromisoformat(item["booked_on"]).date()
-        direction = TxDirection(item["direction"])
-        amount = Decimal(item["amount"])
         da_empresa = bool(getattr(account, "is_business", False))
 
         lancamento = Transaction(
@@ -275,9 +334,9 @@ def confirm_import(
             status=TxStatus.EFETIVADA,
             source=_SOURCE_BY_FORMAT[row.file_format],
             import_id=row.id,
-            import_fingerprint=item["fingerprint"],
+            import_fingerprint=digital,
             ir_year=booked_on.year,
-            auto_confidence=Decimal(item["confidence"]) if item["confidence"] else None,
+            auto_confidence=Decimal(confianca) if confianca else None,
             socio_flow=SocioFlow.PESSOAL_VIA_EMPRESA if da_empresa else None,
         )
         db.add(lancamento)

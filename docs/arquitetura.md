@@ -171,6 +171,27 @@ compra — nunca é dinheiro entrando na família. Depender da categoria estar c
 seria depender de classificação, e classificação erra; tipo de conta não. O valor
 não desaparece: volta como `credito_no_cartao`, em linha própria.
 
+### O sinal do valor depende do tipo da conta
+
+A mesma regra estrutural aparece na importação, e vale escrever porque é
+contraintuitiva: **o sinal de um valor não quer dizer a mesma coisa nos dois
+extratos**. Em conta, o sinal é o do saldo (gasto negativo). Na fatura do cartão,
+é o da dívida (compra positiva, pagamento negativo).
+
+`app/services/importers/fatura.py` normaliza a fatura antes de qualquer outra
+coisa — antes da impressão digital e da sugestão de categoria, porque as duas
+dependem da direção. A decisão de inverter é **pela maioria das linhas** (numa
+fatura, quase tudo é compra), e não por uma tabela de bancos, que erraria no
+próximo banco. E a linha do total, que é a soma das outras, sai: importada junto,
+ela cobra o mês duas vezes.
+
+Duas coisas que vão juntas por princípio: a correção **nunca é silenciosa** (vem
+escrita na conferência, onde ele vê o que o sistema entendeu do arquivo), e
+**existe conserto manual** (o lado de cada linha se vira na conferência, e a
+direção entra na impressão digital, então virar não cria uma linha nova na
+próxima importação). Correção automática sem saída de emergência foi o que
+deixou uma fatura virar renda sem jeito de arrumar pela tela.
+
 ### Reembolso: o que a casa gastou de verdade
 
 Ele paga R$ 300 do jantar e três amigos devolvem R$ 75 cada. Sem um lugar para

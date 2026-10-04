@@ -226,10 +226,15 @@ export function EntryScreen(): React.ReactElement {
       ),
     [todasFolhas, direcao],
   );
-  const folhasVisiveis = useMemo(() => {
-    if (!buscaCategoria.trim()) return folhasDoLado.slice(0, 12);
-    return filtrar(folhasDoLado, buscaCategoria, (f) => f.caminho).slice(0, 30);
-  }, [folhasDoLado, buscaCategoria]);
+  // A lista INTEIRA, sem corte. Ela já nasceu cortada em doze itens, e o preço
+  // apareceu quando ele foi procurar a doação: "Doações recebidas" é a 17ª
+  // categoria de entrada, então não estava na tela — e a conclusão natural é a
+  // que ele tirou, de que a categoria não existe. Lista cortada em silêncio não
+  // diz que falta algo; só esconde.
+  const folhasVisiveis = useMemo(
+    () => filtrar(folhasDoLado, buscaCategoria, (f) => f.caminho),
+    [folhasDoLado, buscaCategoria],
+  );
 
   const categoriaEscolhida = useMemo(
     () => folhasDoLado.find((f) => f.categoria.id === categoriaId) ?? null,
@@ -496,6 +501,9 @@ export function EntryScreen(): React.ReactElement {
               ) : null}
             </ScrollView>
             <Text style={styles.explica}>
+              {folhasVisiveis.length > 0
+                ? `${folhasVisiveis.length} ${folhasVisiveis.length === 1 ? 'categoria' : 'categorias'} de ${direcao === 'SAIDA' ? 'gasto' : 'entrada'} — role a lista ou procure pelo nome. `
+                : ''}
               Pode deixar em branco: o sistema tenta adivinhar pela descrição e, quando não sabe,
               guarda em “A definir” — que aparece no Resumo cobrando, até você dizer o que foi.
             </Text>

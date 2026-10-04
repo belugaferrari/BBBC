@@ -18,7 +18,7 @@
 import { Platform } from 'react-native';
 
 import { ApiError, getServerUrl, getToken } from './client';
-import type { StatementImport } from './types';
+import type { StatementImport, StatementImportResumo } from './types';
 
 export interface PickedFile {
   uri: string;
@@ -102,11 +102,17 @@ export async function uploadStatement(
  * `categoriasEscolhidas` leva as trocas feitas na própria conferência — a
  * categoria por linha, antes de existir lançamento. Sem isso só restaria gravar
  * errado e corrigir depois, na lista de gastos, uma por uma.
+ *
+ * `direcoesEscolhidas` é a saída de emergência do sinal: quando o banco inverte
+ * gasto e entrada e a correção automática não dá conta, a linha se vira aqui.
+ * Mudar a direção depois de gravado é o que não existe — e foi o que deixou
+ * uma fatura de cartão virar renda sem jeito de consertar pela tela.
  */
 export async function confirmImport(
   importId: string,
   selectedIndexes: number[],
   categoriasEscolhidas?: Record<number, string>,
+  direcoesEscolhidas?: Record<number, 'ENTRADA' | 'SAIDA'>,
 ): Promise<StatementImport> {
   const base = await getServerUrl();
   const token = await getToken();
@@ -122,6 +128,9 @@ export async function confirmImport(
       ...(categoriasEscolhidas && Object.keys(categoriasEscolhidas).length > 0
         ? { category_overrides: categoriasEscolhidas }
         : {}),
+      ...(direcoesEscolhidas && Object.keys(direcoesEscolhidas).length > 0
+        ? { direction_overrides: direcoesEscolhidas }
+        : {}),
     }),
   });
 
@@ -130,4 +139,43 @@ export async function confirmImport(
     throw new ApiError(response.status, mensagemDeErro(body, 'Nao consegui confirmar'));
   }
   return body as StatementImport;
+}
+
+/** Os últimos lotes importados, sem o preview (são centenas de linhas). */
+export async function listImports(): Promise<StatementImportResumo[]> {
+  const base = await getServerUrl();
+  const token = await getToken();
+  const response = await fetch(`${base}/imports`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(response.status, mensagemDeErro(body, 'Nao consegui listar'));
+  }
+  return body as StatementImportResumo[];
+}
+
+/**
+ * Apaga os lançamentos que uma importação criou.
+ *
+ * Existe por causa de um caso concreto: a fatura entrou com o sinal invertido e
+ * as compras viraram renda. Sem isto, a saída era apagar dezenas de linhas uma
+ * por uma — e reimportar o arquivo corrigido deixaria as DUAS versões somadas,
+ * porque a direção entra na impressão digital e as linhas corrigidas não são
+ * reconhecidas como repetidas.
+ */
+export async function desfazerImport(
+  importId: string,
+): Promise<{ desfeita: boolean; lancamentos_apagados: number }> {
+  const base = await getServerUrl();
+  const token = await getToken();
+  const response = await fetch(`${base}/imports/${importId}/desfazer`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new ApiError(response.status, mensagemDeErro(body, 'Nao consegui desfazer'));
+  }
+  return body as { desfeita: boolean; lancamentos_apagados: number };
 }

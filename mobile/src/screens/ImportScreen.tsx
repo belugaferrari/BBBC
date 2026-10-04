@@ -23,7 +23,8 @@
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as DocumentPicker from 'expo-document-picker';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ActivityIndicator,
   Pressable,
@@ -34,8 +35,13 @@ import {
 } from 'react-native';
 
 import { useAccounts, useCategories, useStatementChecklist } from '@/api/queries';
-import { confirmImport, uploadStatement } from '@/api/imports';
-import type { Category, ImportPreviewRow, StatementImport } from '@/api/types';
+import { confirmImport, desfazerImport, listImports, uploadStatement } from '@/api/imports';
+import type {
+  Category,
+  ImportPreviewRow,
+  StatementImport,
+  StatementImportResumo,
+} from '@/api/types';
 import { Botao, Card, Field, MoneyValue, SectionTitle } from '@/components/ui';
 import { colors, layout, radius, spacing, typography } from '@/theme';
 import { filtrar } from '@/components/busca';
@@ -87,10 +93,45 @@ export function ImportScreen(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   // index da linha -> categoria escolhida a mao nesta conferencia
   const [escolhidas, setEscolhidas] = useState<Record<number, string>>({});
+  // index da linha -> lado virado a mao. O sistema ja corrige o sinal invertido
+  // da fatura de cartao sozinho; isto e a saida de emergencia para o leiaute que
+  // ele ainda nao conhece - porque direcao errada, depois de gravada, era o
+  // unico erro que nao tinha conserto pela tela.
+  const [direcoes, setDirecoes] = useState<Record<number, 'ENTRADA' | 'SAIDA'>>({});
+  // Os lotes já importados, para poder DESFAZER um.
+  //
+  // Nasceu de um caso concreto: a fatura do cartão entrou com o sinal invertido
+  // e as compras viraram renda. Sem desfazer, a saída era apagar dezenas de
+  // linhas uma por uma - e reimportar o arquivo corrigido deixaria as duas
+  // versões somadas, porque a direção entra na impressão digital.
+  const [lotes, setLotes] = useState<StatementImportResumo[]>([]);
+  const [confirmandoDesfazer, setConfirmandoDesfazer] = useState<string | null>(null);
+  const [desfazendo, setDesfazendo] = useState<string | null>(null);
+  const [desfeito, setDesfeito] = useState<string | null>(null);
   // qual linha esta com o seletor aberto (uma por vez: duas listas abertas na
   // mesma tela nao cabem no celular)
   const [escolhendo, setEscolhendo] = useState<number | null>(null);
   const { data: categories } = useCategories();
+  const queryClient = useQueryClient();
+
+  // Importar e desfazer mexem no mês inteiro, e as telas de números guardam
+  // cópia. Sem jogar a cópia fora, ele confirma a importação e volta para um
+  // Resumo que ainda não viu o que entrou.
+  const recalcular = useCallback(() => {
+    for (const chave of [
+      'dashboard',
+      'transactions',
+      'by-category',
+      'category-overview',
+      'forecast',
+      'card-summary',
+      'evolucao',
+      'statement-checklist',
+      'reembolsaveis',
+    ]) {
+      queryClient.invalidateQueries({ queryKey: [chave] });
+    }
+  }, [queryClient]);
 
   const opcoes = useMemo(() => folhas(categories ?? []), [categories]);
   const nomePorId = useMemo(() => {
@@ -108,13 +149,13 @@ export function ImportScreen(): React.ReactElement {
       .reduce(
         (acc, row) => {
           const value = Number(row.amount);
-          if (row.direction === 'ENTRADA') acc.entrada += value;
+          if ((direcoes[row.index] ?? row.direction) === 'ENTRADA') acc.entrada += value;
           else acc.saida += value;
           return acc;
         },
         { entrada: 0, saida: 0 },
       );
-  }, [batch, selected]);
+  }, [batch, selected, direcoes]);
 
   // Quantas linhas marcadas ainda vao entrar sem categoria de verdade. Nao
   // impede de confirmar - e o ponto do "A definir" poder ser resolvido depois -
@@ -126,6 +167,41 @@ export function ImportScreen(): React.ReactElement {
         selected.has(row.index) && !escolhidas[row.index] && row.suggested_is_pending,
     ).length;
   }, [batch, selected, escolhidas]);
+
+  const carregarLotes = useCallback(async () => {
+    try {
+      const todos = await listImports();
+      // só o que de fato está valendo: lote descartado não tem o que desfazer
+      setLotes(todos.filter((l) => l.status === 'CONFIRMADO' && l.rows_imported > 0));
+    } catch {
+      // sem servidor a lista fica vazia, e a tela de importar não depende dela
+      setLotes([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (phase === 'escolha') void carregarLotes();
+  }, [phase, carregarLotes]);
+
+  async function desfazer(id: string): Promise<void> {
+    setDesfazendo(id);
+    setError(null);
+    try {
+      const resultado = await desfazerImport(id);
+      setDesfeito(
+        resultado.lancamentos_apagados === 1
+          ? '1 lançamento apagado. Pode importar o arquivo de novo.'
+          : `${resultado.lancamentos_apagados} lançamentos apagados. Pode importar o arquivo de novo.`,
+      );
+      setConfirmandoDesfazer(null);
+      recalcular();
+      await carregarLotes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nao consegui desfazer');
+    } finally {
+      setDesfazendo(null);
+    }
+  }
 
   async function escolherArquivo(): Promise<void> {
     if (!conta) {
@@ -155,8 +231,9 @@ export function ImportScreen(): React.ReactElement {
     if (!batch) return;
     setPhase('gravando');
     try {
-      const resultado = await confirmImport(batch.id, [...selected], escolhidas);
+      const resultado = await confirmImport(batch.id, [...selected], escolhidas, direcoes);
       setBatch(resultado);
+      recalcular();
       setPhase('pronto');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nao consegui confirmar');
@@ -202,6 +279,7 @@ export function ImportScreen(): React.ReactElement {
             setBatch(null);
             setSelected(new Set());
             setEscolhidas({});
+            setDirecoes({});
             setEscolhendo(null);
             setPhase('escolha');
           }}
@@ -299,6 +377,56 @@ export function ImportScreen(): React.ReactElement {
           </Pressable>
         </Card>
 
+        {lotes.length > 0 ? (
+          <>
+            <SectionTitle>Extratos já importados</SectionTitle>
+            <Card>
+              <Text style={styles.explain}>
+                Importou e saiu errado? Desfazer apaga os lançamentos daquele arquivo — e só
+                deles. O que você lançou à mão não é tocado.
+              </Text>
+              {desfeito ? <Text style={styles.explain}>{desfeito}</Text> : null}
+              {lotes.map((lote) => (
+                <View key={lote.id} style={styles.lote}>
+                  <View style={styles.loteMain}>
+                    <Text style={styles.loteTitulo}>{lote.rotulo}</Text>
+                    <Text style={styles.hint}>
+                      {lote.rows_imported}{' '}
+                      {lote.rows_imported === 1 ? 'lançamento' : 'lançamentos'}
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() =>
+                      confirmandoDesfazer === lote.id
+                        ? void desfazer(lote.id)
+                        : setConfirmandoDesfazer(lote.id)
+                    }
+                    accessibilityRole="button"
+                    disabled={desfazendo === lote.id}
+                    style={[
+                      styles.desfazer,
+                      confirmandoDesfazer === lote.id && styles.desfazerArmado,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.desfazerTexto,
+                        confirmandoDesfazer === lote.id && styles.desfazerTextoArmado,
+                      ]}
+                    >
+                      {desfazendo === lote.id
+                        ? 'apagando…'
+                        : confirmandoDesfazer === lote.id
+                          ? `apagar ${lote.rows_imported}?`
+                          : 'desfazer'}
+                    </Text>
+                  </Pressable>
+                </View>
+              ))}
+            </Card>
+          </>
+        ) : null}
+
         {(accounts ?? []).length > 0 ? (
           <Botao tom="secundario" onPress={() => navigation.navigate('Contas')}>
             Cadastrar outra conta
@@ -311,7 +439,9 @@ export function ImportScreen(): React.ReactElement {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.filename}>{batch.filename}</Text>
+        {/* O rótulo, e não o nome do arquivo: extrato de banco traz o banco e o
+            número da conta no próprio nome, e isso não vai para a tela. */}
+        <Text style={styles.filename}>{batch.rotulo}</Text>
         <Text style={styles.hint}>
           {batch.file_format} · {batch.rows_detected} lançamentos
           {batch.period_start
@@ -340,6 +470,26 @@ export function ImportScreen(): React.ReactElement {
             trocada={Boolean(escolhidas[row.index])}
             aberto={escolhendo === row.index}
             opcoes={opcoes}
+            direcao={direcoes[row.index] ?? row.direction}
+            direcaoVirada={Boolean(direcoes[row.index])}
+            onDirecao={(lado) => {
+              setDirecoes((atual) => {
+                const proximo = { ...atual };
+                if (lado === row.direction) delete proximo[row.index];
+                else proximo[row.index] = lado;
+                return proximo;
+              });
+              // A categoria sugerida era do outro lado - "Salario" num gasto
+              // nao quer dizer nada. Esquecer a escolha aqui faz a lista abrir
+              // no lado certo, e o servidor manda para "A definir" se ninguem
+              // escolher nada.
+              setEscolhidas((atual) => {
+                const proximo = { ...atual };
+                delete proximo[row.index];
+                return proximo;
+              });
+              setSelected((atual) => new Set(atual).add(row.index));
+            }}
             onAbrir={() => setEscolhendo(escolhendo === row.index ? null : row.index)}
             onEscolher={(categoriaId) => {
               setEscolhidas((atual) => ({ ...atual, [row.index]: categoriaId }));
@@ -398,8 +548,11 @@ function PreviewRow({
   trocada,
   aberto,
   opcoes,
+  direcao,
+  direcaoVirada,
   onAbrir,
   onEscolher,
+  onDirecao,
 }: {
   row: ImportPreviewRow;
   checked: boolean;
@@ -409,8 +562,11 @@ function PreviewRow({
   trocada: boolean;
   aberto: boolean;
   opcoes: Folha[];
+  direcao: 'ENTRADA' | 'SAIDA';
+  direcaoVirada: boolean;
   onAbrir: () => void;
   onEscolher: (categoriaId: string) => void;
+  onDirecao: (lado: 'ENTRADA' | 'SAIDA') => void;
 }): React.ReactElement {
   const [busca, setBusca] = useState('');
 
@@ -419,17 +575,20 @@ function PreviewRow({
   const doLado = useMemo(
     () =>
       opcoes.filter((f) =>
-        row.direction === 'SAIDA'
+        direcao === 'SAIDA'
           ? f.categoria.kind === 'DESPESA' || f.categoria.kind === 'INVESTIMENTO'
           : f.categoria.kind === 'RECEITA',
       ),
-    [opcoes, row.direction],
+    [opcoes, direcao],
   );
 
-  const visiveis = useMemo(() => {
-    if (!busca.trim()) return doLado.slice(0, 12);
-    return filtrar(doLado, busca, (f) => f.caminho).slice(0, 30);
-  }, [doLado, busca]);
+  // Sem corte: a lista cortada em doze itens escondia justamente o fim da
+  // árvore de entrada, onde ficam doação e reembolso. Quem não vê conclui que
+  // não existe.
+  const visiveis = useMemo(
+    () => filtrar(doLado, busca, (f) => f.caminho),
+    [doLado, busca],
+  );
 
   return (
     <View style={styles.rowWrap}>
@@ -446,7 +605,7 @@ function PreviewRow({
             <Text style={styles.duplicate}>{row.duplicate_reason}</Text>
           ) : null}
         </View>
-        <MoneyValue value={row.amount} direction={row.direction === 'SAIDA' ? 'out' : 'in'} />
+        <MoneyValue value={row.amount} direction={direcao === 'SAIDA' ? 'out' : 'in'} />
       </Pressable>
 
       <Pressable
@@ -474,6 +633,26 @@ function PreviewRow({
 
       {aberto ? (
         <View style={styles.escolha}>
+          <Text style={styles.hint}>Esta linha é</Text>
+          <View style={styles.lados}>
+            {(['SAIDA', 'ENTRADA'] as const).map((lado) => (
+              <Pressable
+                key={lado}
+                onPress={() => onDirecao(lado)}
+                accessibilityRole="button"
+                style={[styles.lado, direcao === lado && styles.ladoOn]}
+              >
+                <Text style={[styles.ladoTexto, direcao === lado && styles.ladoTextoOn]}>
+                  {lado === 'SAIDA' ? 'gasto' : 'entrada'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {direcaoVirada ? (
+            <Text style={styles.hint}>
+              Virado à mão. O arquivo dizia o contrário — vale o que está marcado aqui.
+            </Text>
+          ) : null}
           <Field
             label=""
             value={busca}
@@ -516,6 +695,37 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   explain: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  lados: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  lote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  loteMain: { flex: 1 },
+  loteTitulo: { ...typography.body, color: colors.text },
+  desfazer: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  desfazerArmado: { borderColor: colors.red, backgroundColor: colors.red },
+  desfazerTexto: { ...typography.caption, color: colors.textMuted },
+  desfazerTextoArmado: { color: colors.white, fontWeight: '700' },
+  lado: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  ladoOn: { backgroundColor: colors.red, borderColor: colors.red },
+  ladoTexto: { ...typography.caption, color: colors.textMuted },
+  ladoTextoOn: { color: colors.white, fontWeight: '700' },
   checklistTitle: { ...typography.body, color: colors.text, marginBottom: spacing.sm },
   checkline: {
     flexDirection: 'row',

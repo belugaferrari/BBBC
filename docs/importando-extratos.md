@@ -115,9 +115,64 @@ Se você escolher a 2 e depois importar a fatura, o sistema **aponta a duplicata
 — e o botão vira "Voltar a não contar". É a mesma vigilância que já existia para
 a linha de fatura classificada como gasto por engano.
 
+### A fatura fala pelo lado da dívida
+
+Num extrato de **conta**, o sinal é o do saldo: gasto negativo, depósito
+positivo. Na **fatura do cartão**, o sinal é o da **dívida**: cada compra aumenta
+o que você deve, então vem **positiva**, e o pagamento da fatura (que abate a
+dívida) vem negativo. O mesmo número, o mesmo sinal, dois significados opostos.
+
+Lida com a regra da conta, a fatura inteira vira ao contrário: as compras entram
+como **entrada** — dinheiro chegando —, pegam categoria de receita e inflam a
+renda e a taxa de poupança; e o total da fatura, por ser o único negativo, entra
+como o único gasto do mês.
+
+O sistema corrige isso sozinho, e **diz na conferência o que corrigiu**:
+
+- **o sinal.** Numa fatura, a esmagadora maioria das linhas é compra. Se a
+  maioria chegou como entrada, foi o sinal que estava invertido — não o mês que
+  foi de devoluções. A decisão é pela maioria das linhas, e não por uma tabela de
+  bancos: assim funciona com o banco que exporta certo, com o que exporta errado,
+  e com o próximo;
+- **a linha do total.** A fatura repete, numa linha, a soma das outras ("TOTAL DA
+  FATURA"). Ela não é um lançamento: importada junto, cobra o mês duas vezes. Sai
+  por nome (frase inteira, para o posto "TOTAL ENERGIES" não ser confundido com
+  rodapé) e por aritmética — a linha que é a soma das outras.
+
+Isso só vale para conta do tipo **cartão de crédito**. Em conta corrente, o
+depósito positivo é entrada de verdade, e inverter ali transformaria a renda do
+mês em gasto.
+
+### E se mesmo assim vier do lado errado
+
+Na conferência, abrindo a linha (o botão de categoria), a primeira coisa é
+**"Esta linha é: gasto / entrada"**. Vira ali, antes de gravar. Existe porque
+leiaute de banco não acaba — e porque direção errada, depois de gravada, era o
+único erro sem conserto pela tela.
+
+Virar a linha **esquece a categoria sugerida**: ela era do outro lado, e
+"Salário" num gasto não quer dizer nada. A linha vai para "A definir" se você não
+escolher outra.
+
 Uma coisa que a fatura do cartão **ainda não** faz: ler o parcelamento. A
 descrição vem com "PARCELA 01/03", e cada fatura trará a sua parcela — o gasto do
 mês fica certo —, mas a **Previsão não antecipa** as parcelas que faltam.
+
+## Desfazer uma importação
+
+Em **Importar**, abaixo do envio, ficam os **extratos já importados**, com um
+botão **desfazer** (que pede confirmação: o segundo toque é que apaga). Ele apaga
+os lançamentos **daquele arquivo**, e só deles — o que você lançou à mão não é
+tocado.
+
+Existe por causa de um caso concreto: a fatura entrou com o sinal invertido e as
+compras viraram renda. Sem desfazer, a saída era apagar dezenas de linhas uma por
+uma. E reimportar o arquivo corrigido **não** resolveria sozinho: a direção entra
+na impressão digital, então as linhas corrigidas não são reconhecidas como
+repetidas, e você terminaria com as duas versões somadas.
+
+O lote fica registrado como descartado, com os avisos que apareceram na
+conferência — o histórico de que aquele arquivo passou por aqui não se perde.
 
 ## O que impede lançamento duplicado
 

@@ -252,6 +252,15 @@ export interface ImportPreviewRow {
 export interface StatementImport {
   id: string;
   account_id: string;
+  /**
+   * Como o lote se chama na tela: "Extrato XLSX de 01/09 a 30/09/2026".
+   *
+   * O nome do arquivo NÃO serve: extrato de banco costuma trazer o banco e o
+   * número da conta no próprio nome ("extrato-itau-12345.xlsx"), e a regra da
+   * casa é não mostrar nem um nem outro. O nome original fica no servidor, em
+   * casa, para quando for preciso investigar.
+   */
+  rotulo: string;
   filename: string;
   file_format: 'OFX' | 'CSV' | 'PDF' | 'XLSX';
   status: 'CRIADO' | 'CONFIRMADO' | 'DESCARTADO' | 'ERRO';
@@ -264,6 +273,9 @@ export interface StatementImport {
   preview: ImportPreviewRow[];
   created_at: string;
 }
+
+/** Na listagem o preview não vem: são centenas de linhas por lote. */
+export type StatementImportResumo = Omit<StatementImport, 'preview'>;
 
 export type AccountType =
   | 'CONTA_CORRENTE'

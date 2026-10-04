@@ -10,10 +10,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.api.deps import CurrentMember, DbSession, owned_account, owned_category
-from app.models import StatementImport
+from app.models import StatementImport, Transaction
 from app.services.import_service import build_preview, confirm_import
 from app.services.importers.base import StatementParseError
 from app.services.importers.detect import MAX_FILE_BYTES, SUPPORTED
@@ -101,6 +101,12 @@ class ConfirmIn(BaseModel):
 
     selected_indexes: list[int] | None = None
     category_overrides: dict[int, UUID] | None = None
+    # Por linha: ENTRADA ou SAIDA, quando o arquivo disse o contrario. O sistema
+    # ja corrige o sinal invertido da fatura de cartao sozinho (ver
+    # app/services/importers/fatura.py), mas leiaute de banco nao acaba - e a
+    # ultima vez que uma linha entrou do lado errado, nao havia como consertar
+    # pela tela, so no banco de dados.
+    direction_overrides: dict[int, str] | None = None
     # Por linha: PRO_LABORE, LUCROS ou ADIANTAMENTO. Decide o IR da entrada que
     # cobre a despesa; so vale em conta da empresa. Omitido, vai o padrao, que e
     # o unico que nao afirma nada sobre imposto.
@@ -118,12 +124,20 @@ def confirm(
     for category_id in (payload.category_overrides or {}).values():
         owned_category(db, category_id, current)
 
+    for linha, direcao in (payload.direction_overrides or {}).items():
+        if direcao not in ("ENTRADA", "SAIDA"):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"linha {linha}: '{direcao}' nao e ENTRADA nem SAIDA",
+            )
+
     try:
         confirm_import(
             db,
             row,
             selected_indexes=payload.selected_indexes,
             category_overrides=payload.category_overrides,
+            direction_overrides=payload.direction_overrides,
             contrapartidas=payload.contrapartidas,
         )
     # ContrapartidaDesconhecida e ValueError: cai aqui junto com os demais
@@ -146,6 +160,45 @@ def discard(import_id: UUID, current: CurrentMember, db: DbSession) -> dict:
     row.status = "DESCARTADO"
     db.flush()
     return _serialize(row)
+
+
+@router.post("/{import_id}/desfazer")
+def desfazer(import_id: UUID, current: CurrentMember, db: DbSession) -> dict:
+    """Apaga os lancamentos que ESTA importacao criou.
+
+    Existe por causa de um caso concreto: a fatura do cartao entrou com o sinal
+    invertido, as compras viraram renda, e a unica saida era apagar linha por
+    linha - dezenas delas - ou mexer no banco de dados. Pior ainda, reimportar o
+    mesmo arquivo depois da correcao nao resolveria: a direcao entra na impressao
+    digital, entao as linhas corrigidas NAO sao reconhecidas como repetidas, e a
+    familia terminaria com as duas versoes somadas.
+
+    Apaga so o que veio do arquivo (`import_id`), e nada do que foi lancado a
+    mao. Lancamento editado depois tambem vai: ele continua sendo aquela linha do
+    extrato, e deixa-lo orfao seria guardar justamente o numero errado.
+
+    O lote fica como DESCARTADO, e nao apagado: ele e o registro de que aquele
+    arquivo passou por aqui, com os avisos que apareceram na conferencia.
+    """
+    row = db.get(StatementImport, import_id)
+    if not row or row.family_id != current.family_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Importacao nao encontrada")
+
+    apagados = db.execute(
+        delete(Transaction).where(
+            Transaction.import_id == row.id,
+            Transaction.family_id == current.family_id,
+        )
+    ).rowcount
+    row.status = "DESCARTADO"
+    row.rows_imported = 0
+    db.flush()
+
+    return {
+        "desfeita": True,
+        "lancamentos_apagados": apagados,
+        "importacao": _serialize(row),
+    }
 
 
 @router.get("")

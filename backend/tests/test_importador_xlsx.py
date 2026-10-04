@@ -217,3 +217,37 @@ def test_planilha_sem_lancamento_reclama():
     vazia = [["Relatorio"], ["sem nada util aqui"]]
     with pytest.raises(StatementParseError):
         parse(_planilha(vazia))
+
+
+# ---------------------------------------------------------------------------
+# A planilha dele: total negativo na frente, compras positivas
+# ---------------------------------------------------------------------------
+FATURA_COM_SINAL_DA_DIVIDA = [
+    ["Itau Cartoes", None, None],
+    ["Fatura de setembro/2026", None, None],
+    ["Data", "Lançamento", "Valor"],
+    [date(2026, 9, 1), "TOTAL DA FATURA", -1035.80],
+    [date(2026, 9, 3), "POSTO SHELL AV BRASIL", 245.90],
+    [date(2026, 9, 12), "IFOOD CLUB", 189.00],
+    [date(2026, 9, 15), "SUPERMERCADO PAO DE ACUCAR", 600.90],
+]
+
+
+def test_a_planilha_de_fatura_com_compra_positiva_vira_gasto():
+    """O caminho inteiro do arquivo dele: planilha -> leitor -> ajuste da fatura.
+
+    O leitor de planilha aplica a regra do extrato de CONTA (positivo = entrou),
+    que e a certa lá e a errada aqui. Quem conserta e o ajuste da fatura, e e ele
+    que esta sendo exercitado junto com o leitor - porque o problema so aparece
+    com os dois no mesmo caminho.
+    """
+    from app.services.importers import fatura
+
+    extrato = parse(_planilha(FATURA_COM_SINAL_DA_DIVIDA))
+    # como o leitor entrega, antes do ajuste: tudo ao contrario
+    assert sum(1 for t in extrato.transactions if t.direction == TxDirection.ENTRADA) == 3
+
+    ajustado = fatura.ajustar(extrato, e_cartao=True)
+    assert [t.direction for t in ajustado.transactions] == [TxDirection.SAIDA] * 3
+    assert sum(t.amount for t in ajustado.transactions) == Decimal("1035.80")
+    assert all("TOTAL" not in t.description for t in ajustado.transactions)
