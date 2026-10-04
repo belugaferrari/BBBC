@@ -61,6 +61,24 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 """
 
 
+
+def ler_migration(path: pathlib.Path) -> str:
+    """O texto de uma migration - em UTF-8, sempre, diga o sistema o que disser.
+
+    O `encoding` tem de ser EXPLICITO. Sem ele, o Python le o arquivo na
+    codificacao do sistema operacional, que no Windows em portugues e a cp1252.
+    Enquanto as migrations foram ASCII puro isso nao apareceu; a primeira que
+    trouxe acento para os nomes das categorias ("Doações recebidas", "Saúde")
+    derrubou a atualizacao na maquina dele:
+
+        UnicodeDecodeError: 'charmap' codec can't decode byte 0x81 ...
+
+    O arquivo estava certo. Quem leu e que supos a lingua errada - e o estrago
+    e grande porque isso acontece no meio da partida do sistema, com o banco ja
+    de pe e as tabelas pela metade.
+    """
+    return path.read_text(encoding="utf-8")
+
 def migrate() -> None:
     """Aplica as migrations que ainda nao rodaram, em ordem.
 
@@ -109,7 +127,7 @@ def migrate() -> None:
 
         for path in pendentes:
             print(f"aplicando {path.name}")
-            conn.execute(text(path.read_text()))
+            conn.execute(text(ler_migration(path)))
             conn.execute(
                 text("INSERT INTO schema_migrations (filename) VALUES (:f)"),
                 {"f": path.name},
@@ -492,6 +510,17 @@ def main(argv: list[str] | None = None) -> int:
         "needs-setup",
         help="codigo de saida: 0 precisa cadastrar, 1 ja existe, 2 sem banco",
     )
+
+    # O console do Windows nao fala UTF-8. Um acento numa mensagem de erro -
+    # ou num nome de familia - derrubaria o proprio relato do que deu errado, e
+    # a pessoa ficaria com a janela fechando sem explicacao nenhuma. Com
+    # `errors="replace"`, o pior caso e um caractere torto no lugar de uma
+    # instalacao que morre em silencio.
+    for fluxo in (sys.stdout, sys.stderr):
+        try:
+            fluxo.reconfigure(errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
 
     args = parser.parse_args(argv)
     if args.command == "migrate":

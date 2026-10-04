@@ -241,7 +241,33 @@ sistema**. O servidor não está na internet: 5G perfeito com o PC desligado é
 offline, e provedor caído com o PC ligado é online. O único sinal honesto é se a
 última requisição obteve resposta — então é o cliente HTTP que alimenta o estado.
 
-## 12. O que ficou de fora de propósito
+## 12. O servidor roda no Windows da casa, e isso é uma restrição
+
+Não é detalhe de instalação: muda o que o código pode supor. O ambiente de
+desenvolvimento é Linux, onde quase tudo é UTF-8 por padrão; a máquina que de
+fato roda o sistema é um Windows em português, onde o padrão é **cp1252**.
+
+A regra que saiu disso: **toda leitura de arquivo diz a codificação**. Enquanto
+as migrations foram ASCII puro, ninguém viu o buraco. A primeira que trouxe
+acento para os nomes das categorias derrubou a atualização na máquina dele, no
+meio da partida, com o banco já de pé:
+
+```
+aplicando 0014_nomes_com_acento.sql
+UnicodeDecodeError: 'charmap' codec can't decode byte 0x81 in position 1715
+```
+
+O arquivo estava certo. Quem leu é que supôs a língua errada. Há teste para
+isso, e ele não confia na lembrança de ninguém: um roda o leitor de verdade num
+processo com o sistema em ASCII (`LC_ALL=C`, que é a mesma armadilha por outro
+caminho), e outro varre `app/` atrás de `open`/`read_text` sem `encoding`.
+
+Pela mesma razão, a saída do terminal é reconfigurada com `errors="replace"`: um
+acento numa mensagem de erro não pode derrubar o próprio relato do que deu
+errado — o pior caso tem de ser um caractere torto, nunca uma janela que fecha
+sem explicação.
+
+## 13. O que ficou de fora de propósito
 
 - **Alembic**: as migrations são SQL puro numerado enquanto não há dados em
   produção. Na primeira mudança de schema com dados reais, migrar para Alembic.
