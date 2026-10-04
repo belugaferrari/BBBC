@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, text
 
 from app.api.deps import (
     CurrentMember,
@@ -18,12 +18,31 @@ from app.api.deps import (
     scope_member_id,
 )
 from app.models import Category, Transaction, TransactionTag
-from app.models.enums import TxStatus
+from app.models.enums import TxDirection, TxStatus
 from app.schemas.transactions import TransactionCreate, TransactionOut, TransactionUpdate
 from app.services.categorization_repository import apply_correction, autocategorize
+from app.services.mascara import sem_digitos_sensiveis
 from app.services.queries import note_required_for, spend_by_category, spend_by_member
 
 router = APIRouter(prefix="/transactions", tags=["gastos"])
+
+
+def owned_reembolso(db, reembolso_de_id: UUID, current) -> Transaction:  # noqa: ANN001
+    """O gasto que o reembolso devolve: da propria familia, e SAIDA.
+
+    Apontar um reembolso para outra entrada nao quer dizer nada, e passaria
+    despercebido ate alguem estranhar o consumo do mes - por isso a checagem e
+    aqui, onde da para recusar com uma frase, e nao no relatorio.
+    """
+    gasto = db.get(Transaction, reembolso_de_id)
+    if not gasto or gasto.family_id != current.family_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lancamento nao encontrado")
+    if gasto.direction != TxDirection.SAIDA:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Reembolso so pode apontar para um gasto - o que voce escolheu e uma entrada.",
+        )
+    return gasto
 
 
 @router.get("", response_model=list[TransactionOut])
@@ -115,6 +134,60 @@ def by_category(
     }
 
 
+@router.get("/reembolsaveis")
+def reembolsaveis(
+    current: CurrentMember,
+    db: DbSession,
+    days: int = Query(60, ge=1, le=365),
+    limit: int = Query(40, le=200),
+) -> list[dict]:
+    """Os gastos recentes, com quanto de cada um ja voltou.
+
+    Existe para a tela poder perguntar "reembolso de qual gasto?" com uma lista
+    curta e util em vez de um campo de id. O `reembolsado` vem junto porque a
+    pergunta seguinte e sempre essa: se os amigos ja devolveram a parte deles, o
+    jantar nao esta mais esperando nada.
+    """
+    linhas = db.execute(
+        text(
+            """
+            SELECT t.id, t.booked_on, t.amount, t.description,
+                   c.name AS category_name,
+                   COALESCE((
+                       SELECT SUM(r.amount) FROM transactions r
+                        WHERE r.reembolso_de_id = t.id
+                          AND r.status IN ('EFETIVADA', 'CONCILIADA')
+                   ), 0) AS reembolsado
+              FROM transactions t
+              LEFT JOIN categories c ON c.id = t.category_id
+             WHERE t.family_id = :familia
+               AND t.direction = 'SAIDA'
+               AND t.status IN ('EFETIVADA', 'CONCILIADA')
+               AND COALESCE(c.counts_as_expense, true)
+               AND t.booked_on >= CURRENT_DATE - CAST(:dias AS int)
+             ORDER BY t.booked_on DESC, t.amount DESC
+             LIMIT :limite
+            """
+        ),
+        {"familia": current.family_id, "dias": days, "limite": limit},
+    ).mappings().all()
+
+    return [
+        {
+            "id": linha["id"],
+            "booked_on": linha["booked_on"],
+            "amount": linha["amount"],
+            "description": sem_digitos_sensiveis(linha["description"]),
+            "category_name": linha["category_name"],
+            "reembolsado": linha["reembolsado"],
+            # quanto ainda sobra para ser devolvido, para a tela nao oferecer um
+            # gasto que ja voltou inteiro como se nada tivesse acontecido
+            "falta": max(linha["amount"] - linha["reembolsado"], 0),
+        }
+        for linha in linhas
+    ]
+
+
 @router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
 def create_transaction(
     payload: TransactionCreate, current: CurrentMember, db: DbSession
@@ -158,6 +231,8 @@ def create_transaction(
         owned_donor(db, payload.donor_id, current)
     if payload.donation_for_category_id:
         owned_category(db, payload.donation_for_category_id, current)
+    if payload.reembolso_de_id:
+        owned_reembolso(db, payload.reembolso_de_id, current)
     for tag_id in payload.tags:
         owned_tag(db, tag_id, current)
 
@@ -196,6 +271,8 @@ def update_transaction(
         owned_donor(db, payload.donor_id, current)
     if payload.donation_for_category_id:
         owned_category(db, payload.donation_for_category_id, current)
+    if payload.reembolso_de_id:
+        owned_reembolso(db, payload.reembolso_de_id, current)
 
     data = payload.model_dump(exclude_unset=True, exclude={"learn_rule", "category_id"})
     for field, value in data.items():

@@ -114,12 +114,22 @@ export function DashboardScreen(): React.ReactElement {
   // desconfia. São duas coisas diferentes, e por isso dois números: doação
   // recebida, e o resto (transferência entre contas próprias, devolução).
   const doacoes = Number(cashflow.doacoes);
+  const reembolsos = Number(cashflow.reembolsos ?? 0);
   const outras = Number(cashflow.outras_entradas ?? 0);
-  const foraDaRenda = doacoes + outras;
+  const foraDaRenda = doacoes + reembolsos + outras;
   const cobriu = Number(cashflow.doacoes_aplicadas);
+  // o que voltou de reembolso sai do consumo pelo mesmo motivo que a doação: o
+  // dinheiro saiu da conta, mas não ficou com a casa
+  const voltou = Number(cashflow.reembolsos_aplicados ?? 0);
+  const descontado = cobriu + voltou;
   const avisos: string[] = [];
   if (doacoes > 0) avisos.push(`+ ${money(doacoes)} de doação`);
+  if (reembolsos > 0) avisos.push(`+ ${money(reembolsos)} de reembolso`);
   if (outras > 0) avisos.push(`+ ${money(outras)} que não é renda`);
+  const comoFoiDescontado = [
+    cobriu > 0 ? `${money(cobriu)} foram pagos com doação` : null,
+    voltou > 0 ? `${money(voltou)} voltaram em reembolso` : null,
+  ].filter(Boolean) as string[];
 
   return (
     <ScrollView
@@ -150,11 +160,11 @@ export function DashboardScreen(): React.ReactElement {
         />
         <StatTile
           label="Gastou"
-          value={money(cobriu > 0 ? cashflow.consumo_proprio : cashflow.consumo)}
+          value={money(descontado > 0 ? cashflow.consumo_proprio : cashflow.consumo)}
           tone="alert"
           hint={
-            cobriu > 0
-              ? `${money(cobriu)} foram pagos com doação`
+            comoFoiDescontado.length > 0
+              ? comoFoiDescontado.join(' · ')
               : Number(cashflow.patrimonio) > 0
                 ? `+ ${money(cashflow.patrimonio)} viraram patrimônio`
                 : undefined
@@ -165,6 +175,13 @@ export function DashboardScreen(): React.ReactElement {
         <Text style={styles.avisoDoSaldo}>
           A doação entrou na conta, mas não conta como renda — e o gasto que ela cobriu saiu do
           que a casa gastou. Em Mais › Doações recebidas está a soma do ano, por quem deu.
+        </Text>
+      ) : null}
+      {reembolsos > 0 ? (
+        <Text style={styles.avisoDoSaldo}>
+          O reembolso é dinheiro seu voltando, então não conta como renda — e a parte dos amigos
+          sai do que a casa gastou. O gasto continua inteiro na categoria dele, com o quanto
+          voltou escrito ao lado.
         </Text>
       ) : null}
       {Number(cashflow.credito_no_cartao ?? 0) > 0 ? (

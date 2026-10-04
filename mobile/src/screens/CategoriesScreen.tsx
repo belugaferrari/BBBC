@@ -22,6 +22,7 @@ import { MonthPicker, mesAtualISO } from '@/components/MonthPicker';
 import {
   Botao,
   Card,
+  Chip,
   Field,
   Mensagem,
   ProgressBar,
@@ -47,19 +48,25 @@ export function CategoriesScreen(): React.ReactElement {
   const [criando, setCriando] = useState(false);
   const [nome, setNome] = useState('');
   const [erro, setErro] = useState<string | null>(null);
+  // Qual lado está na tela. A tela nasceu só com gasto, e o buraco apareceu
+  // quando ele foi procurar a categoria de doação: as categorias de ENTRADA
+  // existiam, mas não tinham onde ser vistas - só apareciam na lista do
+  // lançamento, uma por uma. Categoria sem tela é categoria que ninguém acha.
+  const [lado, setLado] = useState<'DESPESA' | 'RECEITA'>('DESPESA');
+  const ehGasto = lado === 'DESPESA';
 
-  const { data, isLoading } = useCategoryOverview(mes);
+  const { data, isLoading } = useCategoryOverview(mes, lado);
   const criar = useCreateCategory();
 
   const { baldes, filhasDe } = useMemo(() => {
     const linhas = data?.categories ?? [];
-    // só a árvore de despesa: receita e transferência não têm meta de gasto
-    const deDespesa = linhas.filter((l) => l.path.startsWith('despesas'));
+    const raiz = ehGasto ? 'despesas' : 'receitas';
+    const doLado = linhas.filter((l) => l.path.startsWith(raiz));
     return {
-      baldes: deDespesa.filter((l) => l.depth === 1),
-      filhasDe: (id: string) => deDespesa.filter((l) => l.parent_id === id),
+      baldes: doLado.filter((l) => l.depth === 1),
+      filhasDe: (id: string) => doLado.filter((l) => l.parent_id === id),
     };
-  }, [data]);
+  }, [data, ehGasto]);
 
   function alternar(id: string): void {
     setAbertas((atual) => {
@@ -78,7 +85,7 @@ export function CategoriesScreen(): React.ReactElement {
     if (!nome.trim()) return;
     setErro(null);
     try {
-      await criar.mutateAsync({ name: nome.trim() });
+      await criar.mutateAsync({ name: nome.trim(), kind: lado });
       setNome('');
       setCriando(false);
     } catch (err) {
@@ -93,20 +100,39 @@ export function CategoriesScreen(): React.ReactElement {
     <Screen>
       <MonthPicker value={mes} onChange={setMes} />
 
+      <View style={styles.lados}>
+        <Chip active={ehGasto} onPress={() => setLado('DESPESA')}>
+          O que sai
+        </Chip>
+        <Chip active={!ehGasto} onPress={() => setLado('RECEITA')}>
+          O que entra
+        </Chip>
+      </View>
+
       <Card>
         <View style={styles.totalLinha}>
           <View>
-            <Text style={styles.totalRotulo}>Gasto no mês</Text>
+            <Text style={styles.totalRotulo}>
+              {ehGasto ? 'Gasto no mês' : 'Entrou no mês'}
+            </Text>
             <Text style={styles.totalValor}>{money(totalGasto)}</Text>
           </View>
-          <View style={styles.totalDireita}>
-            <Text style={styles.totalRotulo}>Somando as metas</Text>
-            <Text style={styles.totalMeta}>
-              {totalMeta > 0 ? money(totalMeta) : 'nenhuma ainda'}
-            </Text>
-          </View>
+          {ehGasto ? (
+            <View style={styles.totalDireita}>
+              <Text style={styles.totalRotulo}>Somando as metas</Text>
+              <Text style={styles.totalMeta}>
+                {totalMeta > 0 ? money(totalMeta) : 'nenhuma ainda'}
+              </Text>
+            </View>
+          ) : null}
         </View>
-        {totalMeta > 0 ? (
+        {!ehGasto ? (
+          <Text style={styles.totalHint}>
+            Aqui não há meta: meta de gasto é um teto, e teto de quanto se pode receber não quer
+            dizer nada. O que esta lista mostra é de onde veio o dinheiro do mês.
+          </Text>
+        ) : null}
+        {ehGasto && totalMeta > 0 ? (
           <>
             <ProgressBar ratio={totalGasto / totalMeta} severity={severidade(totalGasto / totalMeta)} />
             <Text style={styles.totalHint}>
@@ -115,14 +141,14 @@ export function CategoriesScreen(): React.ReactElement {
                 : `${money(totalMeta - totalGasto)} ainda cabem no mês`}
             </Text>
           </>
-        ) : (
+        ) : ehGasto ? (
           <Text style={styles.totalHint}>
             Toque numa categoria para definir a meta mensal dela.
           </Text>
-        )}
+        ) : null}
       </Card>
 
-      <SectionTitle>Categorias</SectionTitle>
+      <SectionTitle>{ehGasto ? 'Categorias' : 'De onde veio'}</SectionTitle>
 
       {isLoading ? (
         <ActivityIndicator color={colors.red} />
@@ -133,6 +159,10 @@ export function CategoriesScreen(): React.ReactElement {
           const meta = Number(balde.cap ?? 0);
           const gasto = Number(balde.spent);
           const usado = meta > 0 ? gasto / meta : 0;
+          // O gasto fica inteiro e o reembolso vem ao lado: a meta mede o que
+          // foi gasto ali, e descontar o que voltou faria a soma das categorias
+          // parar de fechar com o extrato.
+          const voltou = Number(balde.reembolsado ?? 0);
 
           return (
             <View key={balde.id} style={styles.bloco}>
@@ -144,10 +174,15 @@ export function CategoriesScreen(): React.ReactElement {
                 <View style={styles.linhaMain}>
                   <Text style={styles.nome}>{balde.name}</Text>
                   <Text style={styles.detalhe}>
-                    {meta > 0
-                      ? `${money(gasto)} de ${money(meta)} · ${percent(usado)}`
-                      : `${money(gasto)} · sem meta`}
+                    {!ehGasto
+                      ? `${money(gasto)}${balde.transactions > 0 ? ` · ${balde.transactions} ${balde.transactions === 1 ? 'lançamento' : 'lançamentos'}` : ''}`
+                      : meta > 0
+                        ? `${money(gasto)} de ${money(meta)} · ${percent(usado)}`
+                        : `${money(gasto)} · sem meta`}
                   </Text>
+                  {voltou > 0 ? (
+                    <Text style={styles.detalhe}>{money(voltou)} voltaram em reembolso</Text>
+                  ) : null}
                 </View>
                 {filhas.length > 0 ? (
                   <Pressable
@@ -184,6 +219,9 @@ export function CategoriesScreen(): React.ReactElement {
                       <Text style={styles.filhaValor}>
                         {money(filha.spent)}
                         {filha.cap ? ` de ${money(filha.cap)}` : ''}
+                        {Number(filha.reembolsado ?? 0) > 0
+                          ? ` · ${money(filha.reembolsado)} voltaram`
+                          : ''}
                       </Text>
                     </Pressable>
                   ))
@@ -230,6 +268,7 @@ export function CategoriesScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  lados: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   totalLinha: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
   totalDireita: { alignItems: 'flex-end' },
   totalRotulo: { ...typography.caption, color: colors.textFaint },

@@ -302,17 +302,26 @@ def category_overview(
     db: DbSession,
     month: date | None = None,
     depth: int = Query(2, ge=1, le=6),
+    kind: str = Query("DESPESA", pattern="^(DESPESA|RECEITA)$"),
 ) -> dict:
-    """A lista de categorias com meta e gasto do mes, para a tela de categorias.
+    """A lista de categorias com o movimento do mes, para a tela de categorias.
 
     Uma consulta so, em vez de uma por categoria: com quinze categorias e mais
     subcategorias, uma chamada por linha faria a tela abrir em etapas visiveis.
 
-    O gasto de cada linha ja inclui a subarvore dela, entao as linhas NAO podem
+    O valor de cada linha ja inclui a subarvore dela, entao as linhas NAO podem
     ser somadas entre si - 'Transporte' ja contem 'Gasolina'. Os totais aqui
     somam so o nivel 1 (as quinze), que e a unica soma que fecha.
+
+    `kind` escolhe o lado. A tela nascia so com DESPESA, e a consequencia so
+    apareceu quando ele foi procurar a categoria de doacao: as categorias de
+    ENTRADA nao tinham onde ser vistas - existiam, mas so apareciam na lista do
+    lancamento, uma por uma. Categoria que nao tem tela nao tem como ser achada.
     """
     mes = primeiro_do_mes(month or date.today())
+    # Do lado da receita o que se soma e o que ENTROU, e nao ha meta: meta de
+    # gasto e teto, e "teto de quanto posso receber" nao quer dizer nada.
+    direcao = "SAIDA" if kind == "DESPESA" else "ENTRADA"
 
     linhas = db.execute(
         text(
@@ -320,13 +329,31 @@ def category_overview(
             WITH gasto AS (
                 SELECT c.id AS category_id,
                        COALESCE(SUM(t.amount), 0) AS total,
-                       COUNT(t.id)                AS lancamentos
+                       COUNT(t.id)                AS lancamentos,
+                       -- Quanto destes gastos ja voltou em reembolso. Fica ao
+                       -- LADO do total, e nao descontado dele: o jantar de
+                       -- R$ 300 custou R$ 300 em Restaurantes, e e isso que a
+                       -- meta da categoria mede. Quem desconta e o consumo da
+                       -- familia, no Resumo.
+                       --
+                       -- O LEAST e por lancamento porque amigo que devolve mais
+                       -- do que a conta nao esta reembolsando, e sem o teto a
+                       -- linha diria que voltou mais do que saiu.
+                       COALESCE(SUM(
+                           LEAST(
+                               (SELECT COALESCE(SUM(r.amount), 0)
+                                  FROM transactions r
+                                 WHERE r.reembolso_de_id = t.id
+                                   AND r.status IN ('EFETIVADA', 'CONCILIADA')),
+                               t.amount
+                           )
+                       ) FILTER (WHERE t.id IS NOT NULL), 0) AS reembolsado
                   FROM categories c
                   LEFT JOIN categories filha
                          ON filha.family_id = c.family_id AND filha.path <@ c.path
                   LEFT JOIN transactions t
                          ON t.category_id = filha.id
-                        AND t.direction = 'SAIDA'
+                        AND t.direction = CAST(:direcao AS tx_direction)
                         AND t.status IN ('EFETIVADA', 'CONCILIADA')
                         AND COALESCE(filha.counts_as_expense, true)
                         AND date_trunc('month', t.booked_on)
@@ -337,6 +364,7 @@ def category_overview(
             SELECT c.id, c.parent_id, c.name, c.path::text AS path, c.depth,
                    c.kind::text AS kind, c.icon, c.counts_as_expense,
                    g.total AS spent, g.lancamentos AS transactions,
+                   g.reembolsado,
                    b.id AS cap_id, b.amount AS cap
               FROM categories c
               JOIN gasto g ON g.category_id = c.id
@@ -347,12 +375,18 @@ def category_overview(
                     AND (b.ends_on IS NULL OR b.ends_on >= CAST(:mes AS date))
              WHERE c.family_id = :familia
                AND c.is_archived = false
-               AND c.kind = 'DESPESA'
+               AND c.kind = CAST(:tipo AS category_kind)
                AND nlevel(c.path) <= :niveis
              ORDER BY c.sort_order, c.path
             """
         ),
-        {"familia": current.family_id, "mes": mes, "niveis": depth + 1},
+        {
+            "familia": current.family_id,
+            "mes": mes,
+            "niveis": depth + 1,
+            "tipo": kind,
+            "direcao": direcao,
+        },
     ).mappings().all()
 
     itens = [dict(linha) for linha in linhas]
@@ -368,6 +402,7 @@ def category_overview(
 
     return {
         "month": mes,
+        "kind": kind,
         "total_spent": total_gasto,
         "total_cap": total_meta,
         "categories": itens,

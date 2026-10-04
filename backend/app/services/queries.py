@@ -96,6 +96,48 @@ _DOACOES_APLICADAS = f"""
 """
 
 
+# Quanto dos gastos DO MES ja voltou em reembolso.
+#
+# A conta e por gasto, e nao por soma solta, porque o `LEAST` precisa de um teto:
+# amigo que devolve mais do que a conta nao esta reembolsando, esta pagando outra
+# coisa - e abater o excedente faria o mes parecer mais barato do que foi.
+#
+# E o recorte e pela data do GASTO, nao do reembolso: a pergunta que o Resumo
+# responde e "quanto este mes custou para a casa", e o jantar de marco custou o
+# que custou mesmo que os amigos so tenham devolvido em abril.
+#
+# O filtro de "so eu" tambem se ancora no gasto, pelo mesmo motivo: o que esta
+# sendo medido e o consumo de quem pagou. Se ele paga o jantar e o dinheiro cai
+# na conta da Clarissa, o jantar dele custou menos - exigir que as duas pontas
+# fossem da mesma pessoa esconderia o desconto de quem gastou.
+_REEMBOLSOS_APLICADOS = f"""
+    WITH gasto_do_mes AS (
+        SELECT t.id, t.amount
+          FROM transactions t
+          LEFT JOIN categories c ON c.id = t.category_id
+         WHERE t.family_id = :family_id
+           AND t.direction = 'SAIDA'
+           AND t.status IN ('EFETIVADA', 'CONCILIADA')
+           AND COALESCE(c.counts_as_expense, true)
+           AND date_trunc('month', t.booked_on)
+               = date_trunc('month', CAST(:month AS date))
+           {_SCOPE_FILTER}
+    ),
+    voltou AS (
+        SELECT r.reembolso_de_id AS gasto, SUM(r.amount) AS valor
+          FROM transactions r
+         WHERE r.family_id = :family_id
+           AND r.direction = 'ENTRADA'
+           AND r.status IN ('EFETIVADA', 'CONCILIADA')
+           AND r.reembolso_de_id IS NOT NULL
+         GROUP BY 1
+    )
+    SELECT COALESCE(SUM(LEAST(v.valor, g.amount)), 0)
+      FROM gasto_do_mes g
+      JOIN voltou v ON v.gasto = g.id
+"""
+
+
 def monthly_cashflow(
     db: Session, family_id: UUID, month: date, member_id: UUID | None
 ) -> dict:
@@ -130,8 +172,12 @@ def monthly_cashflow(
                     AND c.path <@ 'receitas.doacoes'::ltree), 0)                AS doacoes,
               COALESCE(SUM(t.amount) FILTER (
                   WHERE t.direction = 'ENTRADA'
+                    AND c.path <@ 'receitas.reembolsos'::ltree), 0)             AS reembolsos,
+              COALESCE(SUM(t.amount) FILTER (
+                  WHERE t.direction = 'ENTRADA'
                     AND COALESCE(c.counts_as_income, true) = false
-                    AND NOT COALESCE(c.path <@ 'receitas.doacoes'::ltree, false)), 0)
+                    AND NOT COALESCE(c.path <@ 'receitas.doacoes'::ltree, false)
+                    AND NOT COALESCE(c.path <@ 'receitas.reembolsos'::ltree, false)), 0)
                                                                                 AS outras_entradas,
               COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'SAIDA'),   0) AS outflow,
               COALESCE(SUM(t.amount) FILTER (
@@ -181,6 +227,12 @@ def monthly_cashflow(
             {"family_id": family_id, "month": month, "member_id": member_id},
         ).scalar()
     )
+    devolvido = brl(
+        db.execute(
+            text(_REEMBOLSOS_APLICADOS),
+            {"family_id": family_id, "month": month, "member_id": member_id},
+        ).scalar()
+    )
 
     inflow, outflow = brl(row["inflow"]), brl(row["outflow"])
     # Amortizacao e aporte saem da conta, mas nao sao consumo: sao divida
@@ -202,7 +254,11 @@ def monthly_cashflow(
     # mas nao foi a familia que a pagou. Tirar a doacao da renda sem tirar o gasto
     # que ela cobriu seria trocar um erro por outro, e o novo seria pior, porque
     # faria a familia parecer gastadora todo mes.
-    consumo_proprio = brl(consumo - aplicadas)
+    # O reembolso entra aqui pelo mesmo motivo que a doacao: o dinheiro saiu da
+    # conta, mas nao ficou. A diferenca e de quem era - doacao e dinheiro que
+    # chega de outra pessoa, reembolso e dinheiro dele que volta - e por isso os
+    # dois tem balde proprio em vez de um "nao e renda" so.
+    consumo_proprio = brl(consumo - aplicadas - devolvido)
     savings_rate = (renda - consumo_proprio) / renda if renda else ZERO
 
     return {
@@ -213,6 +269,8 @@ def monthly_cashflow(
         "outras_entradas": outras_entradas,
         "credito_no_cartao": credito_no_cartao,
         "doacoes_aplicadas": aplicadas,
+        "reembolsos": brl(row["reembolsos"]),
+        "reembolsos_aplicados": devolvido,
         "outflow": outflow,
         "consumo": consumo,
         "consumo_proprio": consumo_proprio,

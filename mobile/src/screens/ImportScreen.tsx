@@ -38,6 +38,7 @@ import { confirmImport, uploadStatement } from '@/api/imports';
 import type { Category, ImportPreviewRow, StatementImport } from '@/api/types';
 import { Botao, Card, Field, MoneyValue, SectionTitle } from '@/components/ui';
 import { colors, layout, radius, spacing, typography } from '@/theme';
+import { filtrar } from '@/components/busca';
 import { folhas } from '@/screens/EntryScreen';
 import { dayLabel, money } from '@/theme/format';
 
@@ -426,17 +427,8 @@ function PreviewRow({
   );
 
   const visiveis = useMemo(() => {
-    const termo = busca.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (!termo) return doLado.slice(0, 12);
-    return doLado
-      .filter((f) =>
-        f.caminho
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .includes(termo),
-      )
-      .slice(0, 30);
+    if (!busca.trim()) return doLado.slice(0, 12);
+    return filtrar(doLado, busca, (f) => f.caminho).slice(0, 30);
   }, [doLado, busca]);
 
   return (

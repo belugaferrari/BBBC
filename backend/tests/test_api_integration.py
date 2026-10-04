@@ -118,11 +118,11 @@ def test_arvore_de_categorias_vem_montada(client, family):
     assert {"Receitas", "Despesas"} <= nomes
 
     despesas = next(node for node in roots if node["name"] == "Despesas")
-    saude = next(n for n in despesas["children"] if n["name"] == "Saude")
+    saude = next(n for n in despesas["children"] if n["name"] == "Saúde")
     assert saude["ir_deduction_type"] == "SAUDE"
     assert saude["depth"] == 1
     # a farmacia fica dentro de Saude, mas remedio nao e dedutivel
-    farmacia = next(n for n in saude["children"] if n["name"].startswith("Farmacia"))
+    farmacia = next(n for n in saude["children"] if n["name"].startswith("Farmác"))
     assert farmacia["ir_deduction_type"] == "NENHUMA"
 
 

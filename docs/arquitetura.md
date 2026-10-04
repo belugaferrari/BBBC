@@ -143,7 +143,7 @@ somar tudo num balde só não responde à pergunta que o imposto faz. O limite e
 fica em `families.itcmd_annual_exemption`, **nulo por padrão** — ver o aviso em
 `docs/perguntas-abertas.md`, item 1.9.
 
-### Três baldes de entrada, e não um
+### Quatro baldes de entrada, e não um
 
 `counts_as_income = false` diz "não é renda". Não diz "é doação" — e confundir as
 duas coisas foi o primeiro erro desta parte do sistema. Transferência entre contas
@@ -151,8 +151,15 @@ próprias também não é renda; o crédito do pagamento da fatura, que vem dent
 OFX do cartão, também não. Com um balde só, o Resumo chamaria de **doação dos
 sogros** o pagamento do próprio cartão.
 
-Então o mês devolve `renda`, `doacoes` (pelo **caminho** `receitas.doacoes`) e
-`outras_entradas` (o resto que não é renda). E o cartão fica fora dos três:
+Reembolso é a quarta: **dinheiro dele que volta**, e não dinheiro de outra
+pessoa que chega. Parecidos no efeito sobre o mês, diferentes na origem — e por
+isso balde próprio. No balde da doação, o reembolso do jantar apareceria como
+doação de alguém, e o limite de isenção do ITCMD passaria a contar dinheiro que
+nunca foi doado.
+
+Então o mês devolve `renda`, `doacoes` e `reembolsos` (os dois pelo **caminho**:
+`receitas.doacoes`, `receitas.reembolsos`) e `outras_entradas` (o resto que não é
+renda). E o cartão fica fora dos quatro:
 
 ```sql
 AND NOT (t.direction = 'ENTRADA' AND a.type = 'CARTAO_CREDITO')
@@ -163,6 +170,32 @@ cartão o saldo é dívida, e o que "entra" nela ou paga a dívida ou cancela um
 compra — nunca é dinheiro entrando na família. Depender da categoria estar certa
 seria depender de classificação, e classificação erra; tipo de conta não. O valor
 não desaparece: volta como `credito_no_cartao`, em linha própria.
+
+### Reembolso: o que a casa gastou de verdade
+
+Ele paga R$ 300 do jantar e três amigos devolvem R$ 75 cada. Sem um lugar para
+isso, o mês conta os R$ 300 como gasto da casa **e** os R$ 225 como renda — erra
+duas vezes, e nas duas para o lado de parecer melhor do que foi.
+
+`transactions.reembolso_de_id` liga o dinheiro que voltou **ao gasto** que ele
+devolve. Sem a ligação daria para somar os reembolsos do mês, mas não para saber
+se já passaram do que foi gasto — e reembolso maior que a conta não é reembolso, é
+outra coisa. Daí o mesmo `LEAST` da doação, por lançamento.
+
+Duas decisões que valem estar escritas:
+
+* **o gasto continua inteiro na categoria dele.** O jantar de R$ 300 fica como
+  R$ 300 em Restaurantes, com o quanto voltou escrito ao lado (`reembolsado`, na
+  mesma consulta da tela de categorias). Quem desconta é o **consumo da família**,
+  no Resumo. Misturar os dois critérios daria dois números para a mesma pergunta,
+  e a soma das categorias pararia de fechar com o extrato;
+* **o desconto sai do mês do GASTO, não do mês em que o dinheiro voltou.** O
+  jantar de março custou o que custou em março, mesmo que os amigos só tenham
+  devolvido em abril. O contrário erraria dois meses por um lançamento certo.
+
+A ligação é **opcional** de propósito: o depósito do amigo chega pelo extrato
+antes de alguém dizer de que foi, e exigir o apontamento pararia a importação. Sem
+ele, o dinheiro continua fora da renda — só não desconta nada do consumo.
 
 ## 11. Offline: duas peças com propósitos diferentes
 

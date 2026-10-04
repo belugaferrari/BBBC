@@ -28,6 +28,16 @@ export interface Cashflow {
   credito_no_cartao: string;
   /** quanto da doação de fato cobriu gasto do destino dela, no mês */
   doacoes_aplicadas: string;
+  /** reembolso recebido no mês: é dinheiro dele que volta, não renda */
+  reembolsos: string;
+  /**
+   * quanto dos gastos DESTE mês já voltou em reembolso.
+   *
+   * Diferente de `reembolsos`, que é o que caiu na conta no mês. O jantar de
+   * março que os amigos devolveram em abril custou o que custou em março — e é
+   * de março que ele sai.
+   */
+  reembolsos_aplicados: string;
   /** tudo que saiu da conta */
   outflow: string;
   /** o que foi consumido de verdade */
@@ -310,6 +320,21 @@ export interface TransactionCreate {
   donor_id?: string;
   /** para que a doação foi dada: é o que permite abater o gasto que ela cobriu */
   donation_for_category_id?: string;
+  /** numa entrada de reembolso: qual gasto esse dinheiro devolve */
+  reembolso_de_id?: string;
+}
+
+/** Um gasto recente que pode estar esperando reembolso. */
+export interface GastoReembolsavel {
+  id: string;
+  booked_on: string;
+  amount: string;
+  description: string;
+  category_name: string | null;
+  /** quanto deste gasto já voltou */
+  reembolsado: string;
+  /** quanto ainda falta voltar — zero quando já voltou inteiro */
+  falta: string;
 }
 
 export interface Donor {
@@ -516,11 +541,21 @@ export interface CategoryOverviewRow {
   counts_as_expense: boolean;
   spent: string;
   transactions: number;
+  /**
+   * quanto destes gastos já voltou em reembolso.
+   *
+   * Fica ao LADO do `spent`, e não descontado dele: o jantar de R$ 300 custou
+   * R$ 300 em Restaurantes, e é isso que a meta da categoria mede. Quem
+   * desconta o reembolso é o consumo da família, no Resumo.
+   */
+  reembolsado: string;
   cap_id: string | null;
   cap: string | null;
 }
 
 export interface CategoryOverview {
+  /** de qual lado é esta lista: o que se gasta ou o que entra */
+  kind: 'DESPESA' | 'RECEITA';
   month: string;
   total_spent: string;
   total_cap: string;

@@ -206,11 +206,17 @@ def test_a_arvore_que_o_aplicativo_recebe_diz_qual_categoria_e_doacao(client, ca
     andar(arvore)
     assert achatada["receitas.doacoes"]["counts_as_income"] is False
     assert achatada["receitas.doacoes.familiares"]["counts_as_income"] is False
-    # e a receita de verdade continua sendo renda
+    # e a receita de verdade continua sendo renda. O reembolso fica de fora da
+    # conferencia porque ele TAMBEM nao e renda - e dinheiro dele que volta, nao
+    # dinheiro de outra pessoa que chega. Sao dois baldes de propósito: no balde
+    # da doacao, o reembolso do jantar apareceria como doacao de alguem, e o
+    # limite de isencao do ITCMD passaria a contar dinheiro que nunca foi doado.
     renda = [
         no
         for caminho, no in achatada.items()
-        if no["kind"] == "RECEITA" and not caminho.startswith("receitas.doacoes")
+        if no["kind"] == "RECEITA"
+        and not caminho.startswith("receitas.doacoes")
+        and not caminho.startswith("receitas.reembolsos")
     ]
     assert renda and all(no["counts_as_income"] for no in renda)
 

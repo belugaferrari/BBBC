@@ -24,8 +24,10 @@ import {
   useLancar,
   useMe,
   useMembers,
+  useReembolsaveis,
 } from '@/api/queries';
-import type { Category } from '@/api/types';
+import type { Category, GastoReembolsavel } from '@/api/types';
+import { filtrar } from '@/components/busca';
 import { Botao, Card, Chip, Field, Mensagem, Screen, SectionTitle } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 import { money } from '@/theme/format';
@@ -44,15 +46,15 @@ interface Folha {
    * lançamento morreria num 422 que o usuário não teria como resolver na tela.
    */
   exigeNota: string | null;
-  /**
-   * A categoria é doação recebida: entra na conta, mas não é renda da família.
-   *
-   * Herdada como a exigência de explicação: uma subcategoria criada à mão dentro
-   * de "Doações recebidas" nasce sem a marca, e sem descer a herança o
-   * lançamento viraria renda em silêncio - que é justamente o erro que o
-   * controle de doação existe para evitar.
-   */
+  /** A categoria é doação recebida: entra na conta, mas não é renda da família. */
   ehDoacao: boolean;
+  /** A categoria é reembolso: dinheiro dele voltando, também fora da renda. */
+  ehReembolso: boolean;
+}
+
+/** O nó está nesta raiz da árvore, ou é ela mesma. */
+function dentroDe(path: string, raiz: string): boolean {
+  return path === raiz || path.startsWith(`${raiz}.`);
 }
 
 /** Achata a árvore guardando o caminho legível: "Casa › Mercado". */
@@ -60,20 +62,35 @@ export function folhas(
   categorias: Category[],
   prefixo: string[] = [],
   notaHerdada: string | null = null,
-  doacaoHerdada = false,
 ): Folha[] {
   return categorias.flatMap((categoria) => {
     const caminho = [...prefixo, categoria.name];
     const exigeNota = notaHerdada ?? (categoria.requires_note ? categoria.name : null);
-    const ehDoacao =
-      doacaoHerdada || (categoria.kind === 'RECEITA' && categoria.counts_as_income === false);
-    const filhas = folhas(categoria.children, caminho, exigeNota, ehDoacao);
+    const filhas = folhas(categoria.children, caminho, exigeNota);
     // o nó só é escolhível quando é ponta da árvore: o pai de "Mercado" e
     // "Padaria" é "Alimentação", e lançar em "Alimentação" solta é o que a gente
     // quer evitar
     return filhas.length > 0
       ? filhas
-      : [{ categoria, caminho: caminho.join(' › '), exigeNota, ehDoacao }];
+      : [
+          {
+            categoria,
+            caminho: caminho.join(' › '),
+            exigeNota,
+            // Pelo CAMINHO, e não por `counts_as_income`. Os dois nasceram
+            // juntos - "entrou na conta e não é renda" -, mas hoje três coisas
+            // diferentes carregam essa marca: doação, reembolso e transferência.
+            // Perguntar "quem doou?" num reembolso de jantar não faz sentido, e
+            // gravar o amigo como doador estragaria o relatório do ITCMD.
+            //
+            // O caminho também resolve a herança de graça: uma subcategoria
+            // criada à mão dentro de "Doações recebidas" nasce com o caminho do
+            // pai, então continua sendo doação sem precisar descer marca
+            // nenhuma.
+            ehDoacao: dentroDe(categoria.path, 'receitas.doacoes'),
+            ehReembolso: dentroDe(categoria.path, 'receitas.reembolsos'),
+          },
+        ];
   });
 }
 
@@ -125,6 +142,25 @@ function paraValor(texto: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** "225.00" vira "225,00": o campo de valor lê vírgula, a API fala ponto. */
+function comVirgula(decimal: string): string {
+  return decimal.replace('.', ',');
+}
+
+/** "R$ 300,00 · Restaurantes · R$ 75,00 já voltou" */
+function resumoDoGasto(gasto: GastoReembolsavel): string {
+  const partes = [money(gasto.amount)];
+  if (gasto.category_name) partes.push(gasto.category_name);
+  if (Number(gasto.reembolsado) > 0) {
+    partes.push(
+      Number(gasto.falta) > 0
+        ? `${money(gasto.reembolsado)} já voltou`
+        : 'já voltou inteiro',
+    );
+  }
+  return partes.join(' · ');
+}
+
 function novaChave(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -138,6 +174,7 @@ export function EntryScreen(): React.ReactElement {
   const criarConta = useCreateAccount();
   const { data: doadores } = useDonors();
   const criarDoador = useCreateDonor();
+  const { data: reembolsaveis } = useReembolsaveis();
 
   const [direcao, setDirecao] = useState<Direcao>('SAIDA');
   const [valor, setValor] = useState('');
@@ -153,6 +190,8 @@ export function EntryScreen(): React.ReactElement {
   const [destinoId, setDestinoId] = useState<string | null>(null);
   const [novoDoador, setNovoDoador] = useState('');
   const [pedindoDoador, setPedindoDoador] = useState(false);
+  const [reembolsoDeId, setReembolsoDeId] = useState<string | null>(null);
+  const [buscaGasto, setBuscaGasto] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [feito, setFeito] = useState<string | null>(null);
 
@@ -188,21 +227,8 @@ export function EntryScreen(): React.ReactElement {
     [todasFolhas, direcao],
   );
   const folhasVisiveis = useMemo(() => {
-    const termo = buscaCategoria
-      .trim()
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '');
-    if (!termo) return folhasDoLado.slice(0, 12);
-    return folhasDoLado
-      .filter((f) =>
-        f.caminho
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[̀-ͯ]/g, '')
-          .includes(termo),
-      )
-      .slice(0, 30);
+    if (!buscaCategoria.trim()) return folhasDoLado.slice(0, 12);
+    return filtrar(folhasDoLado, buscaCategoria, (f) => f.caminho).slice(0, 30);
   }, [folhasDoLado, buscaCategoria]);
 
   const categoriaEscolhida = useMemo(
@@ -212,7 +238,24 @@ export function EntryScreen(): React.ReactElement {
   const notaExigidaPor = categoriaEscolhida?.exigeNota ?? null;
   const exigeNota = notaExigidaPor !== null;
   const ehDoacao = direcao === 'ENTRADA' && (categoriaEscolhida?.ehDoacao ?? false);
+  const ehReembolso = direcao === 'ENTRADA' && (categoriaEscolhida?.ehReembolso ?? false);
   const destinos = useMemo(() => gruposDeDespesa(categories ?? []), [categories]);
+
+  // A lista de gastos para "reembolso de qual?". Os que ainda esperam algo vêm
+  // primeiro: o jantar já devolvido inteiro continua na lista (pode ter voltado
+  // mais de um amigo depois), mas não na frente de quem ainda deve.
+  const gastosParaEscolher = useMemo(() => {
+    const todos = reembolsaveis ?? [];
+    const achados = filtrar(todos, buscaGasto, (g) => `${g.description} ${g.category_name ?? ''}`);
+    return [...achados]
+      .sort((a, b) => (Number(b.falta) > 0 ? 1 : 0) - (Number(a.falta) > 0 ? 1 : 0))
+      .slice(0, 15);
+  }, [reembolsaveis, buscaGasto]);
+
+  const gastoDoReembolso = useMemo(
+    () => (reembolsaveis ?? []).find((g) => g.id === reembolsoDeId) ?? null,
+    [reembolsaveis, reembolsoDeId],
+  );
 
   const quantia = paraValor(valor);
   const podeGravar =
@@ -263,10 +306,15 @@ export function EntryScreen(): React.ReactElement {
         // querem dizer nada, e preenchê-los mentiria no relatório do ano
         ...(ehDoacao && doadorId ? { donor_id: doadorId } : {}),
         ...(ehDoacao && destinoId ? { donation_for_category_id: destinoId } : {}),
+        // o reembolso aponta para o gasto que ele devolve - sem isso dá para
+        // somar o que voltou, mas não para saber de qual conta
+        ...(ehReembolso && reembolsoDeId ? { reembolso_de_id: reembolsoDeId } : {}),
       });
       const oQueFoi = ehDoacao
         ? `Doação de ${money(quantia)} em ${paraBR(dataISO)}`
-        : `${direcao === 'SAIDA' ? 'Gasto' : 'Entrada'} de ${money(quantia)} em ${paraBR(dataISO)}`;
+        : ehReembolso
+          ? `Reembolso de ${money(quantia)} em ${paraBR(dataISO)}`
+          : `${direcao === 'SAIDA' ? 'Gasto' : 'Entrada'} de ${money(quantia)} em ${paraBR(dataISO)}`;
       setFeito(
         resultado.enfileirado
           ? // Sem servidor, o lançamento fica no aparelho. Dizer "gravado" aqui
@@ -275,7 +323,11 @@ export function EntryScreen(): React.ReactElement {
             `${oQueFoi}, guardado aqui no celular. Sobe sozinho quando o PC voltar.`
           : ehDoacao
             ? `${oQueFoi}. Não entra na renda do mês.`
-            : `${oQueFoi}.`,
+            : ehReembolso
+              ? reembolsoDeId
+                ? `${oQueFoi}. Não entra na renda, e sai do que a casa gastou.`
+                : `${oQueFoi}. Não entra na renda — mas sem dizer de qual gasto, não desconta nada do mês.`
+              : `${oQueFoi}.`,
       );
       // só o que muda de um lançamento para o outro é limpo
       setValor('');
@@ -542,6 +594,81 @@ export function EntryScreen(): React.ReactElement {
         </>
       ) : null}
 
+      {ehReembolso ? (
+        <>
+          <SectionTitle>Reembolso de qual gasto</SectionTitle>
+          <Card>
+            <Text style={styles.explica}>
+              Este dinheiro voltou para você, então não conta como renda. Dizendo de qual gasto
+              ele é, o mês também para de contar essa parte como consumo da casa: você pagou o
+              jantar inteiro, mas a casa só gastou a sua parte.
+            </Text>
+
+            {gastoDoReembolso ? (
+              <Pressable
+                onPress={() => setReembolsoDeId(null)}
+                accessibilityRole="button"
+                style={styles.escolhida}
+              >
+                <View style={styles.escolhidaBloco}>
+                  <Text style={styles.itemTexto}>
+                    {paraBR(gastoDoReembolso.booked_on)} · {gastoDoReembolso.description}
+                  </Text>
+                  <Text style={styles.explica}>{resumoDoGasto(gastoDoReembolso)}</Text>
+                </View>
+                <Text style={styles.escolhidaTrocar}>trocar</Text>
+              </Pressable>
+            ) : (
+              <>
+                <Field
+                  label=""
+                  value={buscaGasto}
+                  onChangeText={setBuscaGasto}
+                  placeholder="Procurar o gasto…"
+                  autoCapitalize="none"
+                />
+                <ScrollView
+                  style={styles.lista}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {gastosParaEscolher.map((gasto) => (
+                    <Pressable
+                      key={gasto.id}
+                      onPress={() => {
+                        setReembolsoDeId(gasto.id);
+                        setBuscaGasto('');
+                        // o reembolso quase nunca é do valor inteiro, mas quando
+                        // é, o valor certo já fica no campo
+                        if (!valor.trim()) setValor(comVirgula(gasto.falta));
+                      }}
+                      accessibilityRole="button"
+                      style={styles.itemLista}
+                    >
+                      <Text style={styles.itemTexto}>
+                        {paraBR(gasto.booked_on)} · {gasto.description}
+                      </Text>
+                      <Text style={styles.explica}>{resumoDoGasto(gasto)}</Text>
+                    </Pressable>
+                  ))}
+                  {gastosParaEscolher.length === 0 ? (
+                    <Text style={styles.explica}>
+                      {(reembolsaveis ?? []).length === 0
+                        ? 'Nenhum gasto lançado nos últimos dois meses. Lance o gasto primeiro, e depois o que os amigos devolveram.'
+                        : 'Nenhum gasto com esse nome nos últimos dois meses.'}
+                    </Text>
+                  ) : null}
+                </ScrollView>
+                <Text style={styles.explica}>
+                  Pode deixar sem escolher: o dinheiro continua fora da renda, só não desconta
+                  nada do que a casa gastou.
+                </Text>
+              </>
+            )}
+          </Card>
+        </>
+      ) : null}
+
       <Botao onPress={gravar} disabled={!podeGravar}>
         {lancar.isPending
           ? 'Gravando…'
@@ -577,5 +704,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   escolhidaTexto: { ...typography.body, color: colors.text, flex: 1 },
+  escolhidaBloco: { flex: 1 },
   escolhidaTrocar: { ...typography.caption, color: colors.red, fontWeight: '700' },
 });

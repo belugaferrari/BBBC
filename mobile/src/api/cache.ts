@@ -66,6 +66,9 @@ const VALE_GUARDAR = new Set([
   'forecast',
   'doacoes',
   'donors',
+  // para o lançamento de reembolso poder perguntar "de qual gasto?" com o PC
+  // desligado
+  'reembolsaveis',
   'statement-checklist',
 ]);
 

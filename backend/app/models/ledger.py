@@ -90,6 +90,10 @@ class Transaction(PKUuid, TimestampMixin, Base):
     # Para que a doacao foi dada. Permite abater do consumo da familia o que ela
     # cobriu: a escola paga pelos avos nao e gasto da casa.
     donation_for_category_id: Mapped[UUID | None] = uuid_fk("categories.id")
+    # Numa ENTRADA de reembolso: o gasto que ela devolve. Doacao e dinheiro de
+    # outra pessoa que chega; reembolso e dinheiro dele que volta - parecidos no
+    # efeito, diferentes na origem, e por isso campos diferentes.
+    reembolso_de_id: Mapped[UUID | None] = uuid_fk("transactions.id")
 
     applied_rule_id: Mapped[UUID | None] = uuid_fk("categorization_rules.id")
     auto_confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))

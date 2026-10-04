@@ -54,6 +54,8 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 2.5 | Compra parcelada deve aparecer **integral no mês da compra** ou parcela a parcela? | Parcela a parcela (`installment_no` / `installment_total`). O leitor de OFX **ainda não lê** o "PARCELA 01/03" da fatura: o gasto do mês fica certo, mas a Previsão não antecipa as parcelas que faltam. |
 | 2.6 | Na **conferência do extrato**, vale poder escolher o **responsável** linha a linha (hoje é sempre o titular da conta)? | Hoje não dá: o importador usa o dono da conta. Importa para o IR quando a entrada é de um e a conta é do outro. |
 
+| 2.7 | **Reembolso entre amigos**: quando sobra crédito (o amigo devolveu mais do que a sua parte), isso vira o quê? | Hoje o excedente **não abate** além do valor do gasto, e fica como entrada fora da renda sem destino. Se virar comum, cabe um "a receber" de verdade — com nome de quem deve. |
+
 ## 3. Open Finance
 
 | # | Pergunta | O que assumi |

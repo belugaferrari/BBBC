@@ -101,10 +101,10 @@ def test_a_arvore_tem_as_categorias_que_a_familia_pediu(client, familia):
     # As quinze da lista dele, com os nomes dele. A ordem tambem e a dele: a
     # arvore volta na sequencia em que ele escreveu as categorias.
     esperadas = [
-        "Gastos mensais", "Condominio", "Financiamentos", "Educacao", "Saude",
+        "Gastos mensais", "Condomínio", "Financiamentos", "Educação", "Saúde",
         "Transporte", "Mercado", "Restaurantes", "Market places",
-        "Delivery de comida", "Limpeza", "Gastos anuais", "Gastos unicos",
-        "Criacao", "Cla PJ",
+        "Delivery de comida", "Limpeza", "Gastos anuais", "Gastos únicos",
+        "Criação", "Cla PJ",
     ]
     assert set(esperadas) <= nomes, f"faltando: {set(esperadas) - nomes}"
     # Duas categorias do sistema entram no fim da lista (sort_order 8900 e 9000)
@@ -128,7 +128,7 @@ def test_transporte_guarda_as_subcategorias_que_ele_citou(client, familia):
     nomes = {f["name"] for f in transporte["children"]}
     assert {"Transporte por aplicativo", "Gasolina", "Estacionamento"} <= nomes
     # a tag do Sem Parar, que ele citou e nao existia
-    assert "Pedagio e tag" in nomes
+    assert "Pedágio e tag" in nomes
 
     # as tres sairam do primeiro nivel: no primeiro nivel elas duplicariam o
     # gasto de Transporte na soma da tela de categorias
@@ -140,7 +140,7 @@ def test_pagamento_de_fatura_nao_conta_como_gasto(client, familia):
     """A compra no cartao JA e a despesa, lancada no dia dela. Se o pagamento da
     fatura tambem contasse, cada compra entraria duas vezes e o mes dobraria."""
     arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
-    transferencias = next(n for n in arvore if n["name"] == "Transferencias")
+    transferencias = next(n for n in arvore if n["name"] == "Transferências")
 
     assert transferencias["counts_as_expense"] is False
     for filha in transferencias["children"]:
@@ -164,17 +164,17 @@ def test_farmacia_fica_dentro_de_saude_mas_nao_e_dedutivel(client, familia):
     dedutivel; plano e. Sem a separacao, o IR sairia errado."""
     arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
     despesas = next(n for n in arvore if n["name"] == "Despesas")
-    saude = next(f for f in despesas["children"] if f["name"] == "Saude")
+    saude = next(f for f in despesas["children"] if f["name"] == "Saúde")
 
     por_nome = {f["name"]: f for f in saude["children"]}
-    assert por_nome["Farmacia"]["ir_deduction_type"] == "NENHUMA"
-    assert por_nome["Plano de saude"]["ir_deduction_type"] == "SAUDE"
+    assert por_nome["Farmácia"]["ir_deduction_type"] == "NENHUMA"
+    assert por_nome["Plano de saúde"]["ir_deduction_type"] == "SAUDE"
 
 
 def test_material_escolar_nao_e_dedutivel_mas_a_mensalidade_e(client, familia):
     arvore = client.get("/api/v1/categories", headers=familia["headers"]).json()
     despesas = next(n for n in arvore if n["name"] == "Despesas")
-    educacao = next(f for f in despesas["children"] if f["name"] == "Educacao")
+    educacao = next(f for f in despesas["children"] if f["name"] == "Educação")
 
     por_nome = {f["name"]: f for f in educacao["children"]}
     assert por_nome["Materiais"]["ir_deduction_type"] == "NENHUMA"
@@ -239,7 +239,7 @@ def test_o_app_sabe_quando_pedir_o_comentario(client, familia):
     despesas = next(n for n in arvore if n["name"] == "Despesas")
     por_nome = {f["name"]: f for f in despesas["children"]}
 
-    assert por_nome["Gastos unicos"]["requires_note"] is True
+    assert por_nome["Gastos únicos"]["requires_note"] is True
     assert por_nome["Mercado"]["requires_note"] is False
 
 
@@ -251,19 +251,19 @@ def test_o_app_sabe_quando_pedir_o_comentario(client, familia):
         ("UBER   *TRIP HELP.UBER.COM", "Transporte por aplicativo"),
         ("POSTO IPIRANGA LTDA", "Gasolina"),
         ("ESTAPAR ESTACIONAMENTO", "Estacionamento"),
-        ("SEM PARAR MENSALIDADE", "Pedagio e tag"),
+        ("SEM PARAR MENSALIDADE", "Pedágio e tag"),
         ("SUPERMERCADO ANGELONI 023", "Mercado"),
         ("PADARIA SAO JOSE", "Padaria e lanchonete"),
         ("MERCADOLIVRE*COMPRA", "Market places"),
         ("AMAZON BR SERVICOS", "Market places"),
         ("NETFLIX.COM", "Streaming"),
         ("OPENAI *CHATGPT SUBSCR", "IA e softwares"),
-        ("DROGARIA SAO PAULO", "Farmacia"),
-        ("UNIMED SEGUROS SAUDE", "Plano de saude"),
+        ("DROGARIA SAO PAULO", "Farmácia"),
+        ("UNIMED SEGUROS SAUDE", "Plano de saúde"),
         ("COLEGIO SAO JOSE MENSALIDADE", "Escola"),
         ("ENEL DISTRIBUICAO SP", "Luz"),
-        ("COMGAS SP", "Gas"),
-        ("CONDOMINIO EDIFICIO", "Condominio"),
+        ("COMGAS SP", "Gás"),
+        ("CONDOMINIO EDIFICIO", "Condomínio"),
         ("IPVA 2026 DETRAN", "IPVA"),
         ("RI HAPPY BRINQUEDOS", "Brinquedos"),
         ("DARF SIMPLES NACIONAL", "DARF e impostos"),
@@ -408,7 +408,7 @@ def test_gastos_por_categoria_usa_a_arvore_nova(client, familia):
     )
     assert resposta.status_code == 200
     nomes = {g["name"] for g in resposta.json()["categories"]}
-    assert {"Saude", "Educacao", "Mercado"} & nomes
+    assert {"Saúde", "Educação", "Mercado"} & nomes
     assert Decimal(resposta.json()["total"]) > 0
 
 
@@ -470,7 +470,7 @@ def test_patrimonio_nao_polui_o_gasto_por_categoria(client, familia):
     ).json()
 
     nomes = {g["name"] for g in resposta["categories"]}
-    assert "Amortizacao" not in nomes
+    assert "Amortização" not in nomes
     assert "Aporte" not in nomes
     assert "Financiamentos" in nomes   # os juros continuam la
 
@@ -484,7 +484,7 @@ def test_filho_de_unicos_herda_a_exigencia_de_comentario(client, familia):
         category_id=familia["cat"]["despesas.gastos_unicos.moveis_eletro"],
     )
     assert resposta.status_code == 422
-    assert "Gastos unicos" in resposta.json()["detail"]
+    assert "Gastos únicos" in resposta.json()["detail"]
 
 
 def test_filho_de_unicos_passa_com_comentario(client, familia):
@@ -525,4 +525,4 @@ def test_financiamento_separa_juros_de_amortizacao(client, familia):
 
     por_nome = {f["name"]: f for f in financiamento["children"]}
     assert por_nome["Juros"]["counts_as_expense"] is True
-    assert por_nome["Amortizacao"]["counts_as_expense"] is False
+    assert por_nome["Amortização"]["counts_as_expense"] is False

@@ -96,6 +96,9 @@ class TransactionCreate(BaseModel):
     # Para que a doacao foi dada. Permite abater do consumo da familia o que ela
     # cobriu - a escola paga pelos avos nao e gasto da casa.
     donation_for_category_id: UUID | None = None
+    # Para uma ENTRADA de reembolso: qual gasto ela devolve. E o que permite
+    # dizer quanto daquele gasto ja voltou, e nao abater mais do que foi gasto.
+    reembolso_de_id: UUID | None = None
 
 
 class TransactionUpdate(BaseModel):
@@ -110,6 +113,7 @@ class TransactionUpdate(BaseModel):
     ir_document_number: str | None = None
     donor_id: UUID | None = None
     donation_for_category_id: UUID | None = None
+    reembolso_de_id: UUID | None = None
     # dispara o aprendizado de regra de fornecedor
     learn_rule: bool = True
 
@@ -129,4 +133,5 @@ class TransactionOut(ORMModel):
     ir_deduction_member_id: UUID | None = None
     donor_id: UUID | None = None
     donation_for_category_id: UUID | None = None
+    reembolso_de_id: UUID | None = None
     auto_confidence: Decimal | None = None

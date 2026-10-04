@@ -13,12 +13,12 @@ import { colors, layout, radius, spacing, typography } from '@/theme';
 import { money, percent } from '@/theme/format';
 
 const DEDUCTION_LABELS: Record<string, string> = {
-  saude: 'Saude',
-  educacao: 'Educacao',
+  saude: 'Saúde',
+  educacao: 'Educação',
   dependentes: 'Dependentes',
   previdencia_oficial: 'INSS',
   previdencia_privada_pgbl: 'PGBL',
-  pensao_alimenticia: 'Pensao',
+  pensao_alimenticia: 'Pensão',
   livro_caixa: 'Livro-caixa',
   desconto_simplificado: 'Desconto simplificado',
 };

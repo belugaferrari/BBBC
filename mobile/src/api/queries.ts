@@ -18,6 +18,7 @@ import type {
   BenchmarkEvolution,
   CardPrograms,
   Forecast,
+  GastoReembolsavel,
   Holding,
   HoldingKind,
   Member,
@@ -54,12 +55,14 @@ export const queryKeys = {
   netWorth: ['net-worth'] as const,
   holdings: (kind?: HoldingKind) => ['holdings', kind ?? 'todos'] as const,
   cardPrograms: ['card-programs'] as const,
-  categoryOverview: (month: string) => ['category-overview', month] as const,
+  categoryOverview: (month: string, kind = 'DESPESA') =>
+    ['category-overview', month, kind] as const,
   categoryAnalysis: (id: string, month: string) => ['category-analysis', id, month] as const,
   budgetCaps: (month: string) => ['budget-caps', month] as const,
   cardSummary: (month: string) => ['card-summary', month] as const,
   donors: ['donors'] as const,
   doacoes: (year: number) => ['doacoes', year] as const,
+  reembolsaveis: ['reembolsaveis'] as const,
   evolucao: (month: string, scope: string) => ['evolucao', month, scope] as const,
   checklist: (month: string) => ['statement-checklist', month] as const,
 };
@@ -221,6 +224,9 @@ export function useRecategorize() {
       // o cartão também: é de lá que sai a ação de contar (ou não) a fatura
       client.invalidateQueries({ queryKey: ['card-summary'] });
       client.invalidateQueries({ queryKey: ['category-overview'] });
+      // o lançamento pode ser o reembolso de um gasto da lista, ou um gasto novo
+      // que entra nela
+      client.invalidateQueries({ queryKey: queryKeys.reembolsaveis });
     },
   });
 }
@@ -270,10 +276,17 @@ export function useDeductionSimulation(year: number) {
 // ------------------------------------------------- categorias e metas ---
 
 /** Tudo o que a tela de categorias mostra, numa chamada. */
-export function useCategoryOverview(month: string) {
+/**
+ * A lista de categorias com o movimento do mês.
+ *
+ * `kind` escolhe o lado. A tela nasceu só com despesa, e o buraco só apareceu
+ * quando ele foi procurar a categoria de doação: as categorias de ENTRADA não
+ * tinham onde ser vistas.
+ */
+export function useCategoryOverview(month: string, kind: 'DESPESA' | 'RECEITA' = 'DESPESA') {
   return useQuery({
-    queryKey: queryKeys.categoryOverview(month),
-    queryFn: () => api.get<CategoryOverview>('/categories/resumo', { month, depth: 2 }),
+    queryKey: queryKeys.categoryOverview(month, kind),
+    queryFn: () => api.get<CategoryOverview>('/categories/resumo', { month, depth: 2, kind }),
   });
 }
 
@@ -554,6 +567,22 @@ export function useLancar() {
       client.invalidateQueries({ queryKey: ['forecast'] });
       client.invalidateQueries({ queryKey: ['category-overview'] });
     },
+  });
+}
+
+/**
+ * Os gastos recentes que podem estar esperando reembolso, com quanto de cada um
+ * já voltou.
+ *
+ * A tela de lançamento precisa disso para perguntar "reembolso de qual gasto?"
+ * com uma lista curta em vez de um campo de identificador. Sem a ligação, daria
+ * para somar os reembolsos do mês, mas não para saber se já passaram do que foi
+ * gasto — e reembolso maior que a conta não é reembolso, é outra coisa.
+ */
+export function useReembolsaveis() {
+  return useQuery({
+    queryKey: queryKeys.reembolsaveis,
+    queryFn: () => api.get<GastoReembolsavel[]>('/transactions/reembolsaveis'),
   });
 }
 

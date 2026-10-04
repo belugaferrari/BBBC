@@ -157,10 +157,10 @@ def test_gastos_agrupados_por_categoria(client, familia):
 
     grupos = {g["name"]: g for g in dados["categories"]}
     assert float(grupos["Mercado"]["total"]) == 4200.0
-    assert float(grupos["Educacao"]["total"]) == 6800.0
+    assert float(grupos["Educação"]["total"]) == 6800.0
     assert float(grupos["Market places"]["total"]) == 890.0
     # participacao de cada grupo no total de 11.890
-    assert float(grupos["Educacao"]["share"]) == pytest.approx(0.5719, abs=1e-3)
+    assert float(grupos["Educação"]["share"]) == pytest.approx(0.5719, abs=1e-3)
 
 
 def test_profundidade_muda_o_nivel_do_agrupamento(client, familia):
@@ -184,7 +184,7 @@ def test_profundidade_muda_o_nivel_do_agrupamento(client, familia):
 
     # na arvore da familia, Mercado e Educacao ja sao filhos diretos de Despesas
     assert nomes(1) == {"Despesas"}
-    assert nomes(2) == {"Mercado", "Educacao"}
+    assert nomes(2) == {"Mercado", "Educação"}
     assert nomes(3) == {"Mercado", "Escola"}
 
 
