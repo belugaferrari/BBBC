@@ -608,3 +608,44 @@ def test_desfazer_importacao_de_outra_familia_nao_existe(client, casa):
     assert outra.status_code in (401, 422)
     # sem token, nem chega no recurso
     assert client.post(f"/api/v1/imports/{lote['id']}/desfazer").status_code == 401
+
+
+def test_virar_o_extrato_inteiro_de_uma_vez(client, casa):
+    """O botao "inverter o extrato inteiro": um toque em vez de trinta.
+
+    O caminho que a tela usa e este - uma troca por linha, todas de uma vez -,
+    porque assim o servidor nao precisa saber se a inversao veio de um toque ou
+    de trinta, e a volta atras e so mandar menos linhas.
+    """
+    extrato = (
+        "Data;Lancamento;Valor\n"
+        "03/09/2026;POSTO SHELL;-245,90\n"
+        "12/09/2026;IFOOD CLUB;-189,00\n"
+        "15/09/2026;SUPERMERCADO;-600,90\n"
+    )
+    # conta corrente: aqui o sistema NAO inverte sozinho, e o botao e a saida
+    lote = enviar(client, casa, casa["corrente"], extrato, nome="virado.csv")
+    assert [linha["direction"] for linha in lote["preview"]] == ["SAIDA"] * 3
+
+    resposta = client.post(
+        f"/api/v1/imports/{lote['id']}/confirm",
+        json={
+            "direction_overrides": {
+                str(linha["index"]): "ENTRADA" for linha in lote["preview"]
+            }
+        },
+        headers=casa["headers"],
+    )
+    assert resposta.status_code == 200, resposta.text
+
+    lancamentos = client.get(
+        "/api/v1/transactions",
+        params={"start": "2026-09-01", "end": "2026-09-30"},
+        headers=casa["headers"],
+    ).json()
+    viradas = [t for t in lancamentos if t["description"] in
+               ("POSTO SHELL", "IFOOD CLUB", "SUPERMERCADO")]
+    assert len(viradas) == 3
+    assert {t["direction"] for t in viradas} == {"ENTRADA"}
+    # e nenhuma delas conta como gasto do mes
+    assert Decimal(fluxo(client, casa)["consumo"]) == Decimal("0.00")

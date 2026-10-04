@@ -77,6 +77,38 @@ const ACCEPTED = [
   '*/*',
 ];
 
+type Lado = 'ENTRADA' | 'SAIDA';
+type LinhaDoExtrato = { index: number; direction: Lado };
+
+/** Todas as linhas estão do lado contrário ao que o arquivo disse. */
+export function estaTudoVirado(
+  preview: LinhaDoExtrato[],
+  virado: Record<number, Lado>,
+): boolean {
+  if (preview.length === 0) return false;
+  return preview.every((row) => virado[row.index] !== undefined);
+}
+
+/**
+ * O "multiplicar tudo por -1": o que cada linha passa a ser depois do toque.
+ *
+ * O sistema já corrige sozinho a fatura que vem com o sinal da dívida, e cada
+ * linha se vira sozinha no seletor. Isto é o atalho para quando o arquivo
+ * inteiro está ao contrário: um toque em vez de trinta.
+ *
+ * Com tudo já virado, devolve o mapa vazio — virar o extrato errado tem de ser
+ * tão fácil quanto virar o certo, então a volta fica no mesmo botão.
+ */
+export function virarTodasAsLinhas(
+  preview: LinhaDoExtrato[],
+  virado: Record<number, Lado>,
+): Record<number, Lado> {
+  if (estaTudoVirado(preview, virado)) return {};
+  return Object.fromEntries(
+    preview.map((row) => [row.index, row.direction === 'SAIDA' ? 'ENTRADA' : 'SAIDA']),
+  );
+}
+
 function mesAtual(): string {
   const hoje = new Date();
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
@@ -201,6 +233,15 @@ export function ImportScreen(): React.ReactElement {
     } finally {
       setDesfazendo(null);
     }
+  }
+
+  const tudoVirado = Boolean(batch) && estaTudoVirado(batch?.preview ?? [], direcoes);
+
+  function virarTudo(): void {
+    if (!batch) return;
+    setDirecoes(virarTodasAsLinhas(batch.preview, direcoes));
+    // as sugestões eram todas do outro lado
+    setEscolhidas({});
   }
 
   async function escolherArquivo(): Promise<void> {
@@ -455,6 +496,21 @@ export function ImportScreen(): React.ReactElement {
           </View>
         ))}
 
+        <Pressable
+          onPress={virarTudo}
+          accessibilityRole="button"
+          style={[styles.virarTudo, tudoVirado && styles.virarTudoOn]}
+        >
+          <Text style={[styles.virarTudoTexto, tudoVirado && styles.virarTudoTextoOn]}>
+            {tudoVirado ? '↩︎  Desfazer a inversão' : '± Inverter o extrato inteiro'}
+          </Text>
+          <Text style={[styles.virarTudoHint, tudoVirado && styles.virarTudoTextoOn]}>
+            {tudoVirado
+              ? 'Cada linha está do lado contrário ao do arquivo. Toque para voltar.'
+              : 'Troca gasto por entrada em todas as linhas. Os totais abaixo mostram como fica.'}
+          </Text>
+        </Pressable>
+
         {batch.preview.map((row) => (
           <PreviewRow
             key={row.index}
@@ -695,6 +751,17 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   explain: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  virarTudo: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  virarTudoOn: { borderColor: colors.red, backgroundColor: colors.red },
+  virarTudoTexto: { ...typography.body, color: colors.text, fontWeight: '700' },
+  virarTudoHint: { ...typography.caption, color: colors.textMuted, marginTop: 4 },
+  virarTudoTextoOn: { color: colors.white },
   lados: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   lote: {
     flexDirection: 'row',

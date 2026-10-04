@@ -145,14 +145,20 @@ mês em gasto.
 
 ### E se mesmo assim vier do lado errado
 
-Na conferência, abrindo a linha (o botão de categoria), a primeira coisa é
-**"Esta linha é: gasto / entrada"**. Vira ali, antes de gravar. Existe porque
-leiaute de banco não acaba — e porque direção errada, depois de gravada, era o
-único erro sem conserto pela tela.
+Dois botões, do mais grosso para o mais fino:
 
-Virar a linha **esquece a categoria sugerida**: ela era do outro lado, e
-"Salário" num gasto não quer dizer nada. A linha vai para "A definir" se você não
-escolher outra.
+- **"Inverter o extrato inteiro"**, no alto da conferência: troca gasto por
+  entrada em **todas** as linhas de uma vez — o "multiplicar tudo por −1". Os
+  totais no rodapé mostram na hora como fica, e o segundo toque desfaz;
+- **"Esta linha é: gasto / entrada"**, abrindo uma linha (o botão de categoria):
+  para a exceção dentro de um extrato que, no resto, está certo.
+
+Os dois existem porque leiaute de banco não acaba — e porque direção errada,
+depois de gravada, era o único erro sem conserto pela tela.
+
+Virar **esquece as categorias sugeridas**: elas eram do outro lado, e "Salário"
+num gasto não quer dizer nada. O que você não escolher vai para "A definir", que
+aparece no Resumo cobrando até você dizer o que foi.
 
 Uma coisa que a fatura do cartão **ainda não** faz: ler o parcelamento. A
 descrição vem com "PARCELA 01/03", e cada fatura trará a sua parcela — o gasto do
