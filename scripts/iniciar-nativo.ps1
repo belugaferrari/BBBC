@@ -14,7 +14,16 @@
 # PostgreSQL ainda nao subiu, espera; se o cadastro nao existe, escreve o motivo
 # no relato e sai. Primeira instalacao e sempre a mao.
 
-param([switch]$AoLigar)
+# -Atualizar: busca a versao nova ANTES de subir o sistema. So faz sentido junto
+# com -AoLigar, e e o jeito de o computador se manter atualizado sozinho: no boot
+# nao ha nada aberto, entao atualizar nao custa fechar e reabrir janela nenhuma -
+# que e o passo manual que mais incomoda.
+#
+# Falha aqui nunca impede o sistema de subir. Sem internet, com o GitHub fora do
+# ar ou com o download pela metade, o certo e continuar com a versao que ja esta
+# na maquina: ficar sem sistema por causa de uma atualizacao que nao veio seria
+# trocar um incomodo por um problema.
+param([switch]$AoLigar, [switch]$Atualizar)
 
 $ErrorActionPreference = 'Continue'
 $RAIZ = Split-Path -Parent $PSScriptRoot
@@ -121,6 +130,30 @@ function Achar-Psql {
 Write-Host "============================================"
 Write-Host "  BBBC - Financas da familia (sem Docker)"
 Write-Host "============================================"
+
+# ------------------------------------------------------------ Atualizar ---
+# Antes de qualquer coisa, e so quando pedido. O ATUALIZAR em modo silencioso
+# responde pelo codigo de saida: 10 = veio versao nova, 0 = ja estava em dia,
+# qualquer outro = nao deu. Em nenhum dos tres o sistema deixa de subir.
+#
+# Trocar os arquivos enquanto ESTE script roda e seguro: o PowerShell le o
+# arquivo inteiro antes de executar, entao a versao nova dele so vale no proximo
+# boot. E e isso mesmo que se quer - trocar o codigo debaixo dos proprios pes
+# seria a maneira mais criativa de quebrar uma inicializacao.
+if ($Atualizar) {
+    Titulo "0. Procurando versao nova"
+    $atualizador = Join-Path $PSScriptRoot 'atualizar.ps1'
+    if (Test-Path $atualizador) {
+        & $atualizador -Silencioso
+        switch ($LASTEXITCODE) {
+            10      { Ok "Versao nova aplicada. O sistema sobe ja com ela." }
+            0       { Ok "Ja estava na versao mais nova." }
+            default { Aviso "Nao consegui atualizar agora - subindo com a versao que esta aqui." }
+        }
+    } else {
+        Aviso "Nao achei o atualizar.ps1 ao lado deste arquivo."
+    }
+}
 
 # ---------------------------------------------------------------- Python ---
 Titulo "1. Conferindo o Python"

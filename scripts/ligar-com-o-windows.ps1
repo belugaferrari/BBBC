@@ -40,29 +40,51 @@ if (-not (Test-Path $script)) {
 }
 
 $jaLigado = Test-Path $atalho
+$jaAtualiza = $false
+if ($jaLigado) {
+    try {
+        $ws = New-Object -ComObject WScript.Shell
+        $jaAtualiza = ($ws.CreateShortcut($atalho)).Arguments -match '-Atualizar'
+    } catch { }
+}
 
 Titulo "Como esta hoje"
 if ($jaLigado) {
     Ok "O sistema JA liga junto com o Windows."
+    if ($jaAtualiza) {
+        Ok "E JA se atualiza sozinho a cada boot."
+    } else {
+        Write-Host "  Mas nao se atualiza sozinho: a atualizacao continua na sua mao."
+    }
 } else {
     Write-Host "  O sistema NAO liga junto com o Windows - voce abre a mao."
 }
 
 Write-Host ""
-Write-Host "    [1] Ligar junto com o Windows"
-Write-Host "    [2] Nao ligar mais (volta a abrir a mao)"
-Write-Host "    [3] Deixar como esta e sair"
+Write-Host "    [1] Ligar junto com o Windows, e se atualizar sozinho"
+Write-Host "    [2] Ligar junto com o Windows, sem atualizar sozinho"
+Write-Host "    [3] Nao ligar mais (volta a abrir a mao)"
+Write-Host "    [4] Deixar como esta e sair"
+Write-Host ""
+Write-Host "  A 1 e a que tira trabalho seu: toda vez que o computador liga, o" -ForegroundColor White
+Write-Host "  sistema procura versao nova ANTES de subir. No boot nao ha nada" -ForegroundColor White
+Write-Host "  aberto, entao atualizar ali nao custa fechar e reabrir janela" -ForegroundColor White
+Write-Host "  nenhuma - que e o passo chato de hoje." -ForegroundColor White
+Write-Host ""
+Write-Host "  Se a internet estiver fora, ou se a atualizacao falhar, o sistema"
+Write-Host "  sobe mesmo assim, com a versao que ja esta na maquina. O relato"
+Write-Host "  de cada tentativa fica em atualizacao-ao-ligar.log."
 Write-Host ""
 
-$escolha = Read-Host "  Digite 1, 2 ou 3 e aperte Enter [1]"
+$escolha = Read-Host "  Digite 1, 2, 3 ou 4 e aperte Enter [1]"
 if ([string]::IsNullOrWhiteSpace($escolha)) { $escolha = '1' }
 
-if ($escolha -eq '3') {
+if ($escolha -eq '4') {
     Write-Host "  Nada foi alterado."
     Fim 0
 }
 
-if ($escolha -eq '2') {
+if ($escolha -eq '3') {
     if (-not $jaLigado) {
         Write-Host "  Ja nao estava ligado. Nada a fazer."
         Fim 0
@@ -98,7 +120,11 @@ $lnk = $ws.CreateShortcut($atalho)
 $lnk.TargetPath = (Get-Command powershell).Source
 # -WindowStyle Minimized: o sistema sobe sem roubar a tela de quem acabou de
 # ligar o computador. A janela continua existindo, e e ela que segura o servidor.
-$lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$script`" -AoLigar"
+# A escolha de atualizar sozinho mora no proprio atalho, como parametro. Sem
+# arquivo de configuracao: o que decide o comportamento e o que esta escrito no
+# atalho, e da para conferir nas propriedades dele pelo Windows.
+$seAtualiza = if ($escolha -eq '2') { '' } else { ' -Atualizar' }
+$lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$script`" -AoLigar$seAtualiza"
 $lnk.WorkingDirectory = $RAIZ
 $lnk.Description = 'BBBC - sobe o banco e o servidor das financas da familia'
 $lnk.WindowStyle = 7   # minimizada
@@ -109,7 +135,11 @@ if (-not (Test-Path $atalho)) {
     Fim 1
 }
 
-Ok "Pronto. O sistema vai subir sozinho a cada vez que o Windows ligar."
+if ($seAtualiza) {
+    Ok "Pronto. A cada vez que o Windows ligar, o sistema se atualiza e sobe."
+} else {
+    Ok "Pronto. O sistema vai subir sozinho a cada vez que o Windows ligar."
+}
 Write-Host ""
 Write-Host "  O que esperar:" -ForegroundColor White
 Write-Host "    - uma janela minimizada aparece na barra de tarefas; e ela que"

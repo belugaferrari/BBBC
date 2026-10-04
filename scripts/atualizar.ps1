@@ -30,19 +30,54 @@
 # detecta o que esta ligado e, quando ha algo, termina mandando fechar em vez de
 # abrir por cima.
 
+# -Silencioso: modo "o Windows acabou de ligar e ninguem esta olhando". Nao
+# pergunta nada, nao espera Enter, e escreve tudo num relato em vez da tela. E o
+# modo que o INICIAR usa para o computador se atualizar sozinho antes de subir o
+# sistema - o unico momento em que atualizar nao custa fechar e abrir nada,
+# porque ainda nao ha nada aberto.
+#
+# Os codigos de saida sao a resposta para quem chamou:
+#     0  nada mudou (ja estava na versao nova)
+#    10  atualizado
+#     1  nao deu (sem internet, download pela metade, copia falhou)
+param([switch]$Silencioso)
+
 $ErrorActionPreference = 'Continue'
 $RAIZ = Split-Path -Parent $PSScriptRoot
 Set-Location $RAIZ
 
-function Titulo($t) { Write-Host "`n$t" -ForegroundColor White }
-function Ok($t)     { Write-Host "  [ok] $t" -ForegroundColor Green }
-function Erro($t)   { Write-Host "`n[x] $t" -ForegroundColor Red }
-function Aviso($t)  { Write-Host "  [!] $t" -ForegroundColor Yellow }
+$script:Relato = if ($Silencioso) { Join-Path $RAIZ 'atualizacao-ao-ligar.log' } else { $null }
+function Anotar($texto) {
+    if ($script:Relato) {
+        "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $texto" |
+            Add-Content -Path $script:Relato -Encoding utf8
+    }
+}
+
+function Titulo($t) { if (-not $Silencioso) { Write-Host "`n$t" -ForegroundColor White }; Anotar $t }
+function Ok($t)     { if (-not $Silencioso) { Write-Host "  [ok] $t" -ForegroundColor Green }; Anotar "ok: $t" }
+function Erro($t)   { if (-not $Silencioso) { Write-Host "`n[x] $t" -ForegroundColor Red }; Anotar "ERRO: $t" }
+function Aviso($t)  { if (-not $Silencioso) { Write-Host "  [!] $t" -ForegroundColor Yellow }; Anotar "aviso: $t" }
+
+function Dizer($t) {
+    # O texto corrido da tela. No modo silencioso ele nao tem para quem ser dito,
+    # e o que importa ja foi para o relato pelas funcoes acima.
+    if (-not $Silencioso) { Write-Host $t }
+}
 
 function Fim($codigo) {
+    if ($Silencioso) { exit $codigo }
     Write-Host ""
     Read-Host "Aperte Enter para sair"
     exit $codigo
+}
+
+function Perguntar($pergunta, $padrao) {
+    # Pergunta que ninguem pode responder e travamento silencioso: numa janela
+    # minimizada no boot, o Read-Host deixaria o computador esperando para sempre
+    # por um Enter que nao vem. No modo silencioso vale o padrao.
+    if ($Silencioso) { return $padrao }
+    return Read-Host $pergunta
 }
 
 # De onde a versao nova vem. O ramo esta numa variavel porque o nome dele aparece
@@ -122,7 +157,7 @@ if (-not $pareceInstalada) {
     Write-Host "      (a do Desktop, em geral). Atualizar a copia extraida nao"
     Write-Host "      estraga nada, mas tambem nao serve para nada."
     Write-Host ""
-    $segue = Read-Host "  Atualizar esta pasta mesmo assim? (s/n) [n]"
+    $segue = Perguntar "  Atualizar esta pasta mesmo assim? (s/n) [n]" 'n'
     if (-not $segue -or $segue.ToLower() -ne 's') {
         Write-Host "  Nada foi alterado."
         Fim 0
@@ -162,7 +197,7 @@ if ($temGit) {
         Write-Host "      Se voce nao mexeu no codigo de proposito, pode seguir:"
         Write-Host "      vou guardar as alteracoes de lado antes de atualizar."
         Write-Host ""
-        $r = Read-Host "  Seguir? (s/n) [s]"
+        $r = Perguntar "  Seguir? (s/n) [s]" 's'
         if ($r -and $r.ToLower() -ne 's') { Write-Host "  Nada foi alterado."; Fim 0 }
         & git stash push -u -m "antes da atualizacao de $(Get-Date -Format 'yyyy-MM-dd HH:mm')" 2>&1 |
             ForEach-Object { "    $_" }
@@ -195,7 +230,7 @@ if ($temGit) {
         $ProgressPreference = $antes
     } catch {
         Erro "Nao consegui baixar a versao nova."
-        Write-Host "  $($_.Exception.Message)"
+        Aviso $_.Exception.Message
         Write-Host ""
         Write-Host "  Nada foi desmontado - o sistema continua na versao de antes."
         Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue
@@ -253,19 +288,27 @@ if ($temGit) {
 if (-not $novidade) {
     Titulo "Nada mudou"
     Aviso "Esta pasta ja estava na versao mais nova do $REPO_RAMO."
-    Write-Host ""
-    Write-Host "  Se voce foi avisado de uma novidade e ela nao apareceu, ela" -ForegroundColor White
-    Write-Host "  provavelmente ainda nao entrou no ${REPO_RAMO}: fica esperando" -ForegroundColor White
-    Write-Host "  aprovacao num 'pull request'." -ForegroundColor White
-    Write-Host ""
-    Write-Host "    1. abra https://github.com/belugaferrari/BBBC/pulls"
-    Write-Host "    2. clique no pull request aberto"
-    Write-Host "    3. clique em 'Merge pull request' e confirme"
-    Write-Host "    4. rode este ATUALIZAR de novo"
-    Write-Host ""
-    Write-Host "  Nao precisa fechar nem reabrir nada: o sistema que esta no ar"
-    Write-Host "  continua sendo o mesmo de antes, e esta correto."
+    Dizer ""
+    Dizer "  Se voce foi avisado de uma novidade e ela nao apareceu, ela"
+    Dizer "  provavelmente ainda nao entrou no ${REPO_RAMO}: fica esperando"
+    Dizer "  aprovacao num 'pull request'."
+    Dizer ""
+    Dizer "    1. abra https://github.com/belugaferrari/BBBC/pulls"
+    Dizer "    2. clique no pull request aberto"
+    Dizer "    3. clique em 'Merge pull request' e confirme"
+    Dizer "    4. rode este ATUALIZAR de novo"
+    Dizer ""
+    Dizer "  Nao precisa fechar nem reabrir nada: o sistema que esta no ar"
+    Dizer "  continua sendo o mesmo de antes, e esta correto."
     Fim 0
+}
+
+# No modo silencioso quem chamou e o INICIAR, no boot, e o resto daqui para
+# baixo e conversa com gente: o que fazer com as janelas abertas (nao ha
+# nenhuma) e se quer abrir agora (vai abrir em seguida de qualquer jeito).
+if ($Silencioso) {
+    Ok "Versao nova aplicada antes de o sistema subir."
+    Fim 10
 }
 
 Titulo "Pronto"
@@ -304,7 +347,7 @@ if ($sistemaEstavaNoAr -or $appEstavaNoAr) {
 }
 
 Write-Host ""
-$r = Read-Host "  Abrir o BBBC agora? (s/n) [s]"
+$r = Perguntar "  Abrir o BBBC agora? (s/n) [s]" 'n'
 if ($r -and $r.ToLower() -ne 's') {
     Write-Host "  Quando quiser: ABRIR-BBBC-windows.bat"
     Fim 0

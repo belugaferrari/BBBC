@@ -247,6 +247,31 @@ aplicativo só mostra. Fechou, o app perde o chão.
 
 ---
 
+## Atualizar sozinho (o jeito de não pensar nisso)
+
+Em **`LIGAR-COM-O-WINDOWS.bat`**, a opção **1** faz duas coisas: o sistema sobe
+junto com o Windows **e procura versão nova antes de subir**.
+
+É o único momento em que atualizar não custa nada: no boot ainda não há janela
+aberta, então não existe aquele "feche as duas janelas e abra de novo". Você liga
+o computador e o sistema já está na versão nova.
+
+Se a internet estiver fora, ou se a atualização falhar por qualquer motivo, **o
+sistema sobe mesmo assim**, com a versão que já está na máquina — ficar sem
+sistema por causa de uma atualização que não veio seria trocar um incômodo por um
+problema. O relato de cada tentativa fica em `atualizacao-ao-ligar.log`, ao lado
+dos arquivos do BBBC.
+
+A opção **2** liga junto com o Windows sem atualizar sozinho, e a **3** desliga
+tudo isso. Dá para trocar de ideia quando quiser, rodando o arquivo de novo — ele
+diz, na abertura, como está hoje.
+
+> Isso vale para o **sistema no computador**. O aplicativo instalado no celular
+> (o APK) continua sendo atualizado à mão, gerando de novo — não há como um
+> aplicativo do Android se trocar sozinho sem loja.
+
+---
+
 ## Quando eu avisar que há novidade
 
 Baixe o ZIP de novo e substitua a pasta. **Não refaz nada do que já foi feito:**
