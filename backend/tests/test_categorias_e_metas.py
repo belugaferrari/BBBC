@@ -284,7 +284,14 @@ def test_meta_de_outra_familia_nao_e_minha(client, casa):
 # -------------------------------------------------------- analise -----------
 @pytest.fixture(scope="module")
 def com_historico(client, casa):
-    """Gasolina em catorze meses, com outubro do ano passado bem maior."""
+    """Gasolina em catorze meses, com outubro do ano passado bem maior.
+
+    Na CONTA CORRENTE, e nao no cartao, de proposito: no cartao o mes do gasto
+    passou a ser o da fatura que o cobra (a compra de 15 de setembro sai da
+    conta em outubro), e isso e assunto dos testes do cartao, la embaixo. Aqui o
+    que esta sendo medido e a leitura da categoria - meta, mesmo mes do ano
+    passado, doze meses -, e ela nao deve depender de qual conta pagou.
+    """
     valores = {
         "2025-10-15": 900, "2025-11-15": 520, "2025-12-15": 610,
         "2026-01-15": 480, "2026-02-15": 500, "2026-03-15": 530,
@@ -294,7 +301,7 @@ def com_historico(client, casa):
     }
     for dia, valor in valores.items():
         lancar(
-            client, casa, casa["cartao"], booked_on=dia, amount=str(valor),
+            client, casa, casa["conta"], booked_on=dia, amount=str(valor),
             direction="SAIDA", description="AUTO POSTO IPIRANGA",
             category_id=casa["cat"]["despesas.transporte.gasolina"],
         )
@@ -407,10 +414,32 @@ def test_o_resumo_nao_soma_a_categoria_com_as_filhas_dela(client, com_historico)
 
 
 # ------------------------------------------------- cartao de credito --------
-def test_o_gasto_do_cartao_sai_das_compras_e_nao_da_fatura(client, com_historico):
-    """"preciso saber quanto foi gasto no cartao de credito, para controle
-    pessoal e para controle de pontos"."""
+@pytest.fixture(scope="module")
+def com_cartao(client, com_historico):
+    """Uma compra no cartao em 20 de setembro.
+
+    Sem dia de fechamento cadastrado, a fatura que a cobra vence em 10 de
+    outubro - entao esta compra e gasto de OUTUBRO.
+    """
     casa = com_historico
+    lancar(
+        client, casa, casa["cartao"], booked_on="2026-09-20", amount="350.00",
+        direction="SAIDA", description="SUPERMERCADO NO CARTAO",
+        category_id=casa["cat"]["despesas.mercado"],
+    )
+    return casa
+
+
+def test_o_gasto_do_cartao_conta_no_mes_da_fatura_que_o_cobra(client, com_cartao):
+    """"preciso saber quanto foi gasto no cartao de credito, para controle
+    pessoal e para controle de pontos".
+
+    E o mes e o da FATURA: "o valor so e contabilizado como gasto no mes em que
+    ele efetivamente saiu da conta". A compra de 20 de setembro e cobrada na
+    fatura que vence em outubro, entao ela pesa em outubro - que e tambem o mes
+    em que o dinheiro sai da conta corrente para pagar essa fatura.
+    """
+    casa = com_cartao
     resumo = client.get(
         "/api/v1/cards/summary",
         params={"month": "2026-10-01"},
@@ -420,16 +449,24 @@ def test_o_gasto_do_cartao_sai_das_compras_e_nao_da_fatura(client, com_historico
     assert len(resumo["cards"]) == 1
     nubank = resumo["cards"][0]
     assert nubank["name"] == "Nubank"
-    # a gasolina de outubro foi no cartao
     assert float(nubank["spent"]) == 350.0
     # a base de pontos e o que foi gasto, nao o que foi faturado
     assert float(nubank["points_base"]) == 350.0
 
+    # e em setembro, o mes da compra, o cartao nao tem gasto nenhum: nada saiu
+    # da conta por causa dela naquele mes
+    setembro = client.get(
+        "/api/v1/cards/summary",
+        params={"month": "2026-09-01"},
+        headers=casa["headers"],
+    ).json()
+    assert float(setembro["cards"][0]["spent"]) == 0.0
 
-def test_pagar_a_fatura_nao_soma_no_gasto_do_cartao(client, com_historico):
+
+def test_pagar_a_fatura_nao_soma_no_gasto_do_cartao(client, com_cartao):
     """A compra ja foi lancada no dia dela. Contando a fatura tambem, cada
     compra entraria duas vezes e o mes dobraria."""
-    casa = com_historico
+    casa = com_cartao
     antes = client.get(
         "/api/v1/cards/summary",
         params={"month": "2026-10-01"},

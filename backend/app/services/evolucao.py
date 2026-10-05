@@ -34,8 +34,12 @@ ZERO = Decimal("0.00")
 
 # Gasto que conta como consumo: saiu, esta efetivado, e nao e transferencia
 # patrimonial (amortizacao, aporte, pagamento de fatura).
+# O dia e o do CAIXA, nao o da compra - e de proposito. A curva do mes tem de
+# terminar no mesmo numero do Resumo, senao sao duas respostas para a mesma
+# pergunta. A consequencia e que a fatura do cartao aparece como um degrau no dia
+# do vencimento, que e exatamente o que acontece com o saldo da conta.
 _POR_DIA = """
-    SELECT EXTRACT(DAY FROM t.booked_on)::int AS dia,
+    SELECT EXTRACT(DAY FROM t.paid_on)::int AS dia,
            SUM(t.amount)                      AS total
       FROM transactions t
       LEFT JOIN categories c ON c.id = t.category_id
@@ -43,7 +47,7 @@ _POR_DIA = """
        AND t.direction = 'SAIDA'
        AND t.status IN ('EFETIVADA', 'CONCILIADA')
        AND COALESCE(c.counts_as_expense, true)
-       AND date_trunc('month', t.booked_on) = date_trunc('month', CAST(:mes AS date))
+       AND date_trunc('month', t.paid_on) = date_trunc('month', CAST(:mes AS date))
        AND (CAST(:member_id AS uuid) IS NULL
             OR t.owner_member_id = CAST(:member_id AS uuid))
      GROUP BY 1

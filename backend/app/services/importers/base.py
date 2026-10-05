@@ -10,6 +10,7 @@ from uuid import UUID
 
 from app.models.enums import TxDirection
 from app.services.categorization import normalize
+from app.services.parcelas import ler_parcela
 
 
 @dataclass(frozen=True)
@@ -48,9 +49,17 @@ class StatementParseError(ValueError):
 def fingerprint(account_id: UUID, tx: ParsedTransaction) -> str:
     """Impressao digital estavel de um lancamento importado.
 
-    Usa data, valor, direcao e a descricao normalizada. E o que impede a mesma
-    linha de entrar duas vezes quando os extratos de dois meses se sobrepoem,
-    ou quando o mesmo arquivo e enviado de novo.
+    Usa data, valor, direcao, a descricao normalizada e - quando houver - a
+    parcela. E o que impede a mesma linha de entrar duas vezes quando os
+    extratos de dois meses se sobrepoem, ou quando o mesmo arquivo e enviado de
+    novo.
+
+    A PARCELA entra por um motivo que custou um bug: `normalize` apaga os
+    digitos da descricao, porque e isso que faz "DROGARIA SAO PAULO 4471" casar
+    com o fornecedor. So que, com os digitos fora, "MAGAZINE PARCELA 01/03" e
+    "MAGAZINE PARCELA 02/03" viram o mesmo texto - e, como as duas faturas
+    repetem a data e o valor da compra, a segunda parcela era recusada em
+    silencio como "ja importado antes". Todo mes a parcela daquele mes sumia.
 
     Nao entra no calculo: o texto original (que muda de acordo com o formato
     exportado) nem o saldo (que depende do que veio antes no extrato).
@@ -59,6 +68,7 @@ def fingerprint(account_id: UUID, tx: ParsedTransaction) -> str:
         # quando o banco fornece um id proprio (FITID do OFX), ele e soberano
         base = f"{account_id}|doc|{tx.document}"
     else:
+        parcela = ler_parcela(tx.description)
         base = "|".join(
             [
                 str(account_id),
@@ -66,6 +76,7 @@ def fingerprint(account_id: UUID, tx: ParsedTransaction) -> str:
                 f"{tx.amount:.2f}",
                 tx.direction.value,
                 normalize(tx.description),
+                f"{parcela.numero}/{parcela.total}" if parcela else "",
             ]
         )
     return hashlib.sha256(base.encode("utf-8")).hexdigest()[:40]

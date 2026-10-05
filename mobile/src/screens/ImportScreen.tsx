@@ -46,7 +46,7 @@ import { Botao, Card, Field, MoneyValue, SectionTitle } from '@/components/ui';
 import { colors, layout, radius, spacing, typography } from '@/theme';
 import { filtrar } from '@/components/busca';
 import { folhas } from '@/screens/EntryScreen';
-import { dayLabel, money } from '@/theme/format';
+import { dayLabel, mesLabel, money } from '@/theme/format';
 
 type Phase = 'escolha' | 'lendo' | 'conferencia' | 'gravando' | 'pronto';
 
@@ -173,6 +173,7 @@ export function ImportScreen(): React.ReactElement {
   }, [opcoes]);
 
   const conta = accountId ?? accounts?.[0]?.id ?? null;
+  const contaEscolhida = (accounts ?? []).find((c) => c.id === conta) ?? null;
 
   const totals = useMemo(() => {
     if (!batch) return { entrada: 0, saida: 0 };
@@ -391,11 +392,40 @@ export function ImportScreen(): React.ReactElement {
               >
                 <Text style={[styles.accountText, ativa && { color: colors.white }]}>
                   {account.name}
+                  {account.type === 'CARTAO_CREDITO' ? ' · cartão' : ''}
                 </Text>
               </Pressable>
             );
           })}
         </View>
+
+        {contaEscolhida?.type === 'CARTAO_CREDITO' ? (
+          <Card>
+            <Text style={styles.checklistTitle}>Este extrato é de cartão de crédito</Text>
+            <Text style={styles.explain}>
+              As compras vão aparecer no dia em que foram feitas, mas só contam como gasto no
+              mês em que a fatura é paga — que é quando o dinheiro sai da conta. Compra
+              parcelada conta uma parcela por mês, e as que ainda não vieram aparecem como
+              compromisso.
+            </Text>
+            {contaEscolhida.statement_close_day && contaEscolhida.statement_due_day ? (
+              <Text style={styles.explain}>
+                {`Fatura fecha dia ${contaEscolhida.statement_close_day} e vence dia ${contaEscolhida.statement_due_day}. A conferência mostra, linha por linha, em que mês cada compra vai contar.`}
+              </Text>
+            ) : (
+              <>
+                <Text style={styles.explain}>
+                  Os dias da fatura deste cartão não estão cadastrados, então estou supondo que
+                  ela fecha no fim do mês e vence no dia 10 do mês seguinte — ou seja, a compra
+                  de setembro conta em outubro. Com os dias certos, o mês fica exato.
+                </Text>
+                <Botao tom="secundario" onPress={() => navigation.navigate('Contas')}>
+                  Informar os dias da fatura
+                </Botao>
+              </>
+            )}
+          </Card>
+        ) : null}
 
         <Card style={{ marginTop: spacing.lg }}>
           <SectionTitle>Enviar extrato</SectionTitle>
@@ -656,7 +686,21 @@ function PreviewRow({
           <Text style={styles.rowTitle} numberOfLines={1}>
             {row.description}
           </Text>
-          <Text style={styles.rowSubtitle}>{dayLabel(row.booked_on)}</Text>
+          <Text style={styles.rowSubtitle}>
+            {dayLabel(row.booked_on)}
+            {row.paid_on.slice(0, 7) !== row.booked_on.slice(0, 7)
+              ? ` · conta em ${mesLabel(row.paid_on)}`
+              : ''}
+          </Text>
+          {row.installment_total ? (
+            <Text style={styles.rowSubtitle}>
+              {`parcela ${row.installment_no} de ${row.installment_total}`}
+              {row.valor_da_compra ? ` · compra de ${money(row.valor_da_compra)}` : ''}
+              {row.parcelas_faltando > 0
+                ? ` · faltam ${row.parcelas_faltando}`
+                : ' · é a última'}
+            </Text>
+          ) : null}
           {row.duplicate_reason ? (
             <Text style={styles.duplicate}>{row.duplicate_reason}</Text>
           ) : null}

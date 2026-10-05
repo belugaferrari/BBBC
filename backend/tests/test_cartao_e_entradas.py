@@ -104,9 +104,9 @@ def lancar(client, casa, conta: str, **kw):
     return resposta.json()
 
 
-def fluxo(client, casa) -> dict:
+def fluxo(client, casa, mes: str = MES) -> dict:
     return client.get(
-        "/api/v1/dashboard", params={"month": MES}, headers=casa["headers"]
+        "/api/v1/dashboard", params={"month": mes}, headers=casa["headers"]
     ).json()["cashflow"]
 
 
@@ -233,7 +233,13 @@ def test_contar_como_gasto_fecha_o_buraco(client, casa):
 
 def test_quando_a_fatura_chega_depois_a_duplicata_e_apontada(client, casa):
     """A mesma linha que fechava o buraco passa a ser duplicata no dia em que as
-    compras entram. Sem este aviso, o mes contaria o cartao duas vezes."""
+    compras entram. Sem este aviso, o mes contaria o cartao duas vezes.
+
+    A compra e de AGOSTO porque e ela que a fatura paga em setembro cobra - e,
+    com o mes do caixa, e ela que aparece como gasto de setembro. Lancar a
+    compra em setembro seria montar um caso que nao acontece: a compra do dia 3
+    de setembro so e cobrada na fatura seguinte.
+    """
     pagamento = lancar(
         client, casa, casa["corrente"], amount="4320.15",
         description="PAGTO FATURA CARTAO 5544",
@@ -243,7 +249,7 @@ def test_quando_a_fatura_chega_depois_a_duplicata_e_apontada(client, casa):
 
     lancar(
         client, casa, casa["cartao"], amount="245.90", description="POSTO SHELL",
-        booked_on="2026-09-03", category_id=casa["cat"]["despesas.transporte.gasolina"],
+        booked_on="2026-08-03", category_id=casa["cat"]["despesas.transporte.gasolina"],
     )
     c = cartao(client, casa)
     assert [d["id"] for d in c["possible_duplicates"]] == [pagamento["id"]]
@@ -252,14 +258,18 @@ def test_quando_a_fatura_chega_depois_a_duplicata_e_apontada(client, casa):
 
 def test_com_as_compras_importadas_o_pagamento_nao_conta(client, casa):
     """O caminho certo, e o que o sistema faz sozinho quando a fatura e
-    importada: a compra conta, o pagamento nao."""
+    importada: a compra conta, o pagamento nao.
+
+    As compras sao de agosto: sao elas que a fatura paga em setembro cobra, e e
+    por isso que pesam em setembro.
+    """
     lancar(
         client, casa, casa["cartao"], amount="245.90", description="POSTO SHELL",
-        booked_on="2026-09-03", category_id=casa["cat"]["despesas.transporte.gasolina"],
+        booked_on="2026-08-03", category_id=casa["cat"]["despesas.transporte.gasolina"],
     )
     lancar(
         client, casa, casa["cartao"], amount="189.00", description="IFOOD",
-        booked_on="2026-09-12", category_id=casa["cat"]["despesas.delivery"],
+        booked_on="2026-08-12", category_id=casa["cat"]["despesas.delivery"],
     )
     lancar(
         client, casa, casa["corrente"], amount="4320.15",
@@ -400,19 +410,28 @@ def test_a_inversao_e_dita_na_tela(client, casa):
     assert any("cartao" in aviso.lower() for aviso in lote["warnings"])
 
 
-def test_a_fatura_importada_vira_gasto_do_mes_de_verdade(client, casa):
-    """Do arquivo ate o Resumo, sem ninguem corrigir nada na mao."""
+def test_a_fatura_importada_vira_gasto_no_mes_em_que_ela_e_paga(client, casa):
+    """Do arquivo ate o Resumo, sem ninguem corrigir nada na mao.
+
+    As compras sao de setembro e pesam em OUTUBRO: sem dia de fechamento
+    cadastrado, a fatura que as cobra vence em 10 de outubro, e e nesse dia que
+    o dinheiro sai da conta. Em setembro o Resumo nao mostra nada - naquele mes
+    nao saiu nada da conta por causa dessas compras.
+    """
     lote = enviar(client, casa, casa["cartao"], FATURA_COM_SINAL_DA_DIVIDA)
     confirmado = client.post(
         f"/api/v1/imports/{lote['id']}/confirm", json={}, headers=casa["headers"]
     )
     assert confirmado.status_code == 200, confirmado.text
 
-    f = fluxo(client, casa)
-    assert Decimal(f["consumo"]) == Decimal("1035.80")
+    setembro = fluxo(client, casa)
+    assert Decimal(setembro["consumo"]) == Decimal("0.00")
+
+    outubro = fluxo(client, casa, mes="2026-10-01")
+    assert Decimal(outubro["consumo"]) == Decimal("1035.80")
     # e nada disso virou renda
-    assert Decimal(f["renda"]) == Decimal("0.00")
-    assert Decimal(f["inflow"]) == Decimal("0.00")
+    assert Decimal(outubro["renda"]) == Decimal("0.00")
+    assert Decimal(outubro["inflow"]) == Decimal("0.00")
 
 
 def test_o_extrato_da_conta_corrente_nao_e_invertido(client, casa):
@@ -552,14 +571,15 @@ def test_desfazer_apaga_os_lancamentos_daquele_arquivo(client, casa):
     client.post(
         f"/api/v1/imports/{lote['id']}/confirm", json={}, headers=casa["headers"]
     ).raise_for_status()
-    assert Decimal(fluxo(client, casa)["consumo"]) == Decimal("1035.80")
+    # outubro: as compras de setembro sao cobradas na fatura que vence la
+    assert Decimal(fluxo(client, casa, mes="2026-10-01")["consumo"]) == Decimal("1035.80")
 
     resposta = client.post(
         f"/api/v1/imports/{lote['id']}/desfazer", headers=casa["headers"]
     )
     assert resposta.status_code == 200, resposta.text
     assert resposta.json()["lancamentos_apagados"] == 3
-    assert Decimal(fluxo(client, casa)["consumo"]) == Decimal("0.00")
+    assert Decimal(fluxo(client, casa, mes="2026-10-01")["consumo"]) == Decimal("0.00")
 
 
 def test_desfazer_nao_toca_no_que_foi_lancado_a_mao(client, casa):
@@ -577,7 +597,9 @@ def test_desfazer_nao_toca_no_que_foi_lancado_a_mao(client, casa):
         f"/api/v1/imports/{lote['id']}/desfazer", headers=casa["headers"]
     ).raise_for_status()
 
+    # o lancamento a mao foi na conta corrente, entao continua em setembro
     assert Decimal(fluxo(client, casa)["consumo"]) == Decimal("80.00")
+    assert Decimal(fluxo(client, casa, mes="2026-10-01")["consumo"]) == Decimal("0.00")
 
 
 def test_depois_de_desfazer_o_mesmo_arquivo_entra_de_novo(client, casa):
@@ -596,7 +618,7 @@ def test_depois_de_desfazer_o_mesmo_arquivo_entra_de_novo(client, casa):
     client.post(
         f"/api/v1/imports/{segundo['id']}/confirm", json={}, headers=casa["headers"]
     ).raise_for_status()
-    assert Decimal(fluxo(client, casa)["consumo"]) == Decimal("1035.80")
+    assert Decimal(fluxo(client, casa, mes="2026-10-01")["consumo"]) == Decimal("1035.80")
 
 
 def test_desfazer_importacao_de_outra_familia_nao_existe(client, casa):

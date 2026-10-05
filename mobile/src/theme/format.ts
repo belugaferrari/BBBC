@@ -29,6 +29,12 @@ export function monthLabel(iso: string): string {
   return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 }
 
+/** "outubro" — o mês sem o ano, para frases curtas dentro de uma linha. */
+export function mesLabel(iso: string): string {
+  const date = new Date(`${iso.slice(0, 10)}T12:00:00`);
+  return date.toLocaleDateString('pt-BR', { month: 'long' });
+}
+
 export function dayLabel(iso: string): string {
   const date = new Date(`${iso.slice(0, 10)}T12:00:00`);
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });

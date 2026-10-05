@@ -50,10 +50,11 @@ Cada item traz o que assumi, para você só confirmar ou corrigir.
 | 2.1 | **Nomes e datas de nascimento das filhas** | Cadastradas como "Filha 1" e "Filha 2". |
 | 2.2 | Vocês querem ver **os gastos um do outro** por completo, ou cada um tem uma parte privada? | Visão familiar mostra tudo; o filtro "só eu" é conveniência, não privacidade. Se quiserem gasto privado de verdade, é uma regra a mais no filtro. |
 | 2.3 | Quais **bancos, cartões e corretoras** entram? | Nenhum pré-cadastrado. |
-| 2.4 | Cartão de crédito: querem ver por **competência** (data da compra) ou por **caixa** (data da fatura)? | Ambas as datas existem (`booked_on` / `paid_on`); o dashboard usa competência. |
-| 2.5 | Compra parcelada deve aparecer **integral no mês da compra** ou parcela a parcela? | Parcela a parcela (`installment_no` / `installment_total`). O leitor de OFX **ainda não lê** o "PARCELA 01/03" da fatura: o gasto do mês fica certo, mas a Previsão não antecipa as parcelas que faltam. |
+| 2.4 | ~~Cartão de crédito: querem ver por **competência** (data da compra) ou por **caixa** (data da fatura)?~~ | **Respondido: por caixa.** "O valor só é contabilizado como gasto no mês em que ele efetivamente saiu da conta." A compra aparece no dia dela e conta no mês da fatura. Ver `arquitetura.md` §12. |
+| 2.5 | ~~Compra parcelada deve aparecer **integral no mês da compra** ou parcela a parcela?~~ | **Respondido: parcela a parcela, em todos os meses em que ela está viva.** O leitor já lê "PARCELA 02/10" da descrição, e as parcelas que faltam viram compromisso na Previsão. |
 | 2.6 | Na **conferência do extrato**, vale poder escolher o **responsável** linha a linha (hoje é sempre o titular da conta)? | Hoje não dá: o importador usa o dono da conta. Importa para o IR quando a entrada é de um e a conta é do outro. |
 
+| 2.7a | **Parcela em conta corrente**: um carnê debitado todo mês, com "1/3" na descrição, deve virar compromisso como no cartão? | Hoje **não**: só no cartão as parcelas que faltam são gravadas. Em extrato de conta corrente, "1/3" tanto pode ser carnê quanto um número que o banco escreveu por outro motivo — e inventar gastos futuros a partir de um palpite é pior que não inventar nenhum. |
 | 2.7 | **Reembolso entre amigos**: quando sobra crédito (o amigo devolveu mais do que a sua parte), isso vira o quê? | Hoje o excedente **não abate** além do valor do gasto, e fica como entrada fora da renda sem destino. Se virar comum, cabe um "a receber" de verdade — com nome de quem deve. |
 
 ## 3. Open Finance

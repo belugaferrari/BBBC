@@ -177,6 +177,11 @@ export function DashboardScreen(): React.ReactElement {
           que a casa gastou. Em Mais › Doações recebidas está a soma do ano, por quem deu.
         </Text>
       ) : null}
+      {Number(cashflow.gasto_no_cartao ?? 0) > 0 ? (
+        <Text style={styles.avisoDoSaldo}>
+          {`${money(cashflow.gasto_no_cartao)} deste mês são a fatura do cartão: compras feitas antes, que só agora saíram da conta. O gasto conta no mês em que o dinheiro sai — é o que faz este número bater com o seu extrato.`}
+        </Text>
+      ) : null}
       {reembolsos > 0 ? (
         <Text style={styles.avisoDoSaldo}>
           O reembolso é dinheiro seu voltando, então não conta como renda — e a parte dos amigos

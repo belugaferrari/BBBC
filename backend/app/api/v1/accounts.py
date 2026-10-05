@@ -68,6 +68,12 @@ class AccountOut(ORMModel):
     owner_member_id: UUID
     current_balance: Decimal
     credit_limit: Decimal | None = None
+    # Os dias da fatura saem do servidor porque a tela precisa deles para dizer,
+    # ANTES de o extrato ser confirmado, em que mes cada compra vai contar. Sem
+    # eles a conta e feita assim mesmo, supondo fatura que fecha no fim do mes e
+    # vence no dia 10 - e a tela avisa que esta supondo.
+    statement_close_day: int | None = None
+    statement_due_day: int | None = None
     is_shared: bool
     is_business: bool
     is_archived: bool

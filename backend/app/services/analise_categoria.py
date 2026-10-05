@@ -78,7 +78,7 @@ def serie_mensal(
                 SELECT path FROM categories WHERE id = :category_id
             ),
             gastos AS (
-                SELECT date_trunc('month', t.booked_on)::date AS mes,
+                SELECT date_trunc('month', t.paid_on)::date AS mes,
                        SUM(t.amount) AS total,
                        COUNT(*)      AS lancamentos
                   FROM transactions t
@@ -86,8 +86,8 @@ def serie_mensal(
                  WHERE t.family_id = :family_id
                    AND {_FILTRO_GASTO}
                    AND c.path <@ (SELECT path FROM alvo)
-                   AND t.booked_on >= CAST(:inicio AS date)
-                   AND t.booked_on < (CAST(:fim AS date) + interval '1 month')
+                   AND t.paid_on >= CAST(:inicio AS date)
+                   AND t.paid_on < (CAST(:fim AS date) + interval '1 month')
                    -- CAST obrigatorio: sem ele o Postgres nao consegue
                    -- inferir o tipo do parametro num `$1 IS NULL` solto, e a
                    -- consulta inteira falha com "could not determine data type"

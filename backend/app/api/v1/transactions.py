@@ -20,6 +20,7 @@ from app.api.deps import (
 from app.models import Category, Transaction, TransactionTag
 from app.models.enums import TxDirection, TxStatus
 from app.schemas.transactions import TransactionCreate, TransactionOut, TransactionUpdate
+from app.services.caixa import caixa_da_conta
 from app.services.categorization_repository import apply_correction, autocategorize
 from app.services.mascara import sem_digitos_sensiveis
 from app.services.queries import note_required_for, spend_by_category, spend_by_member
@@ -61,7 +62,13 @@ def list_transactions(
 ) -> list[Transaction]:
     filters = [
         Transaction.family_id == current.family_id,
-        Transaction.booked_on.between(start, end),
+        # O periodo e o do CAIXA: a compra de 25 de setembro feita no cartao
+        # aparece na lista de OUTUBRO, que e o mes em que ela saiu da conta e o
+        # mes em que ela pesa no Resumo. A linha mostra as duas datas quando
+        # elas diferem - a lista e a mesma coisa que o Resumo, vista de perto, e
+        # duas respostas diferentes para "quanto foi outubro" seria pior do que
+        # a surpresa de encontrar o jantar de setembro aqui.
+        Transaction.paid_on.between(start, end),
         Transaction.status != TxStatus.IGNORADA,
     ]
     owner = scope_member_id(current, scope)
@@ -242,6 +249,9 @@ def create_transaction(
         ir_year=payload.booked_on.year,
         **payload.model_dump(exclude={"tags", "owner_member_id"}),
         owner_member_id=payload.owner_member_id or account.owner_member_id,
+        # quando o dinheiro sai: no cartao, o vencimento da fatura que cobra
+        # esta compra; em qualquer outra conta, o proprio dia
+        paid_on=caixa_da_conta(account, payload.booked_on, payload.direction),
     )
     if not tx.category_id:
         autocategorize(db, current.family_id, tx)

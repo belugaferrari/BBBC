@@ -83,11 +83,13 @@ export function CardsScreen(): React.ReactElement {
       <MonthPicker value={mes} onChange={setMes} />
 
       <Card>
-        <Text style={styles.rotulo}>Comprado no cartão neste mês</Text>
+        <Text style={styles.rotulo}>Cartão neste mês</Text>
         <Text style={styles.valor}>{money(total)}</Text>
         <Text style={styles.hint}>
-          É a soma das compras feitas no mês, e não o valor da fatura — a fatura
-          que chega agora cobra compras do mês passado.
+          É o que sai da conta neste mês por causa do cartão: as compras que a fatura deste
+          mês cobra. A compra de 25 de setembro entra aqui em outubro, que é quando o dinheiro
+          de fato sai — e é por isso que este número dá para conferir contra o extrato do
+          banco.
         </Text>
       </Card>
 
@@ -108,8 +110,8 @@ export function CardsScreen(): React.ReactElement {
                   <Text style={styles.nome}>{cartao.name}</Text>
                   <Text style={styles.detalhe}>
                     {cartao.transactions === 1
-                      ? '1 compra'
-                      : `${cartao.transactions} compras`}
+                      ? '1 compra nesta fatura'
+                      : `${cartao.transactions} compras nesta fatura`}
                     {cartao.statement_due_day
                       ? ` · vence dia ${cartao.statement_due_day}`
                       : ''}

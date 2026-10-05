@@ -29,8 +29,21 @@ class Transaction(PKUuid, TimestampMixin, Base):
     category_id: Mapped[UUID | None] = uuid_fk("categories.id")
     merchant_id: Mapped[UUID | None] = uuid_fk("merchants.id")
 
+    # Quando ACONTECEU: o dia da compra, o que esta no extrato, o que ele lembra.
     booked_on: Mapped[date] = mapped_column(Date, nullable=False)
-    paid_on: Mapped[date | None] = mapped_column(Date)
+    # Quando o DINHEIRO SAI da conta, e o mes que o Resumo conta. Em conta
+    # corrente e o mesmo dia; no cartao e o vencimento da fatura que cobra a
+    # compra. Ver app/services/caixa.py.
+    #
+    # O padrao e `booked_on` porque e a resposta certa para tudo que nao e
+    # cartao - e porque uma coluna NOT NULL sem padrao transformaria qualquer
+    # caminho esquecido num erro de banco no meio de uma gravacao. Quem sabe
+    # mais (a importacao, o lancamento manual) passa o valor calculado.
+    paid_on: Mapped[date] = mapped_column(
+        Date,
+        nullable=False,
+        default=lambda contexto: contexto.get_current_parameters()["booked_on"],
+    )
     # sempre positivo; o sinal vem de `direction`
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     direction: Mapped[TxDirection] = mapped_column(

@@ -80,7 +80,10 @@ class TransactionCreate(BaseModel):
     direction: TxDirection
     description: str
     category_id: UUID | None = None
-    paid_on: date | None = None
+    # A data de caixa NAO vem de fora: quem decide e o servidor, lendo o tipo da
+    # conta e os dias da fatura (ver app/services/caixa.py). Deixar o cliente
+    # mandar abriria a porta para um gasto de cartao contar no mes errado por
+    # engano de uma tela - e o mes errado e invisivel depois de gravado.
     notes: str | None = None
     status: TxStatus = TxStatus.EFETIVADA
     tags: list[UUID] = Field(default_factory=list)
@@ -124,6 +127,10 @@ class TransactionOut(ORMModel):
     owner_member_id: UUID  # responsavel pelo gasto
     category_id: UUID | None
     booked_on: date
+    # Quando o dinheiro sai da conta. Igual a `booked_on` em tudo que nao e
+    # compra no cartao; no cartao, o vencimento da fatura que cobra a compra -
+    # e e ESTE mes que o Resumo conta.
+    paid_on: date
     amount: Decimal
     direction: TxDirection
     description: str
@@ -134,4 +141,8 @@ class TransactionOut(ORMModel):
     donor_id: UUID | None = None
     donation_for_category_id: UUID | None = None
     reembolso_de_id: UUID | None = None
+    # "parcela 2 de 10": o que a tela precisa para dizer que esta compra ainda
+    # vai aparecer em oito meses
+    installment_no: int | None = None
+    installment_total: int | None = None
     auto_confidence: Decimal | None = None

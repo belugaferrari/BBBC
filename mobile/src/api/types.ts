@@ -28,6 +28,14 @@ export interface Cashflow {
   credito_no_cartao: string;
   /** quanto da doação de fato cobriu gasto do destino dela, no mês */
   doacoes_aplicadas: string;
+  /**
+   * quanto do gasto deste mês veio da FATURA do cartão.
+   *
+   * É uma parte do `consumo`, não um número à parte: são compras feitas antes
+   * que só agora saíram da conta. Existe para a tela poder explicar por que o
+   * mês tem um gasto que não foi feito neste mês.
+   */
+  gasto_no_cartao: string;
   /** reembolso recebido no mês: é dinheiro dele que volta, não renda */
   reembolsos: string;
   /**
@@ -137,12 +145,17 @@ export interface Transaction {
   account_id: string;
   owner_member_id: string;
   category_id: string | null;
+  /** o dia da compra */
   booked_on: string;
+  /** o dia em que o dinheiro sai da conta — o mês que o Resumo conta */
+  paid_on: string;
   amount: string;
   direction: 'ENTRADA' | 'SAIDA' | 'TRANSFERENCIA';
   description: string;
   status: string;
   source: string;
+  installment_no: number | null;
+  installment_total: number | null;
   auto_confidence: string | null;
   ir_deduction_member_id: string | null;
 }
@@ -228,7 +241,16 @@ export interface TaxAssessment {
 
 export interface ImportPreviewRow {
   index: number;
+  /** o dia da compra: o que está no extrato, o que você lembra */
   booked_on: string;
+  /**
+   * o dia em que esse valor sai da conta — e o mês em que ele vai contar.
+   *
+   * Em conta corrente é o mesmo dia. No cartão é o vencimento da fatura que
+   * cobra a compra, e por isso aparece na conferência: o mês em que o gasto vai
+   * pesar tem de estar visível ANTES de confirmar.
+   */
+  paid_on: string;
   amount: string;
   direction: 'ENTRADA' | 'SAIDA';
   description: string;
@@ -246,6 +268,13 @@ export interface ImportPreviewRow {
    */
   suggested_is_pending: boolean;
   confidence: string | null;
+  /** "parcela 2 de 10", quando a descrição diz isso */
+  installment_no: number | null;
+  installment_total: number | null;
+  /** quanto a compra inteira custou, somadas as parcelas (estimativa honesta) */
+  valor_da_compra: string | null;
+  /** quantas parcelas ainda vão cair depois desta */
+  parcelas_faltando: number;
   selected: boolean;
 }
 
@@ -293,6 +322,10 @@ export interface Account {
   owner_member_id: string;
   current_balance: string;
   credit_limit: string | null;
+  /** dia em que a fatura fecha — só em cartão, e só se tiver sido cadastrado */
+  statement_close_day: number | null;
+  /** dia em que a fatura vence: é nele que o dinheiro sai da conta */
+  statement_due_day: number | null;
   is_shared: boolean;
   /** conta da empresa: o saldo nao entra no patrimonio da familia */
   is_business: boolean;

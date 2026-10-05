@@ -15,13 +15,14 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Account, Category, StatementImport, Transaction
 from app.models.enums import AccountType, SocioFlow, TxDirection, TxSource, TxStatus
+from app.services.caixa import caixa_da_parcela, meses_depois
 from app.services.categorization import (
     Rule,
     TransactionFacts,
@@ -32,6 +33,7 @@ from app.services.categorization_repository import categoria_padrao, load_rules
 from app.services.importers import fatura
 from app.services.importers.base import ParsedTransaction, fingerprint
 from app.services.importers.detect import parse_statement
+from app.services.parcelas import Parcela, ler_parcela, numerar, raiz_da_descricao
 from app.services.socio import (
     CONTRAPARTIDA_PADRAO,
     CONTRAPARTIDAS,
@@ -57,17 +59,38 @@ def _find_equivalent(db: Session, account_id: UUID, tx: ParsedTransaction) -> Tr
     voce ja importou o mesmo periodo em outro formato (o OFX traz FITID e o CSV
     nao, entao a impressao digital muda e so a equivalencia salva).
     """
-    return db.scalar(
-        select(Transaction).where(
-            Transaction.account_id == account_id,
-            Transaction.amount == tx.amount,
-            Transaction.direction == tx.direction,
-            Transaction.booked_on.between(
-                tx.booked_on - timedelta(days=MANUAL_MATCH_WINDOW_DAYS),
-                tx.booked_on + timedelta(days=MANUAL_MATCH_WINDOW_DAYS),
-            ),
+    filtros = [
+        Transaction.account_id == account_id,
+        Transaction.amount == tx.amount,
+        Transaction.direction == tx.direction,
+        # A parcela PREVISTA nao e um lancamento repetido: ela e o lugar que
+        # esta linha vem ocupar. Tratada como duplicata, a parcela de verdade
+        # chegaria desmarcada na conferencia e o mes ficaria com a previsao no
+        # lugar do fato - com o valor certo e o status errado, que e a forma
+        # mais discreta de errar.
+        Transaction.status != TxStatus.PREVISTA,
+        Transaction.booked_on.between(
+            tx.booked_on - timedelta(days=MANUAL_MATCH_WINDOW_DAYS),
+            tx.booked_on + timedelta(days=MANUAL_MATCH_WINDOW_DAYS),
+        ),
+    ]
+
+    # Duas parcelas da mesma compra sao gemeas em tudo o que esta olhado aqui:
+    # mesma conta, mesmo valor, e a MESMA data da compra, que as faturas
+    # repetem. So o numero da parcela as distingue - e sem este filtro a
+    # parcela 2 chegaria marcada como "voce ja lancou este valor", desmarcada,
+    # e sumiria do mes. Parcela contra lancamento sem parcela continua casando:
+    # e o caso de quem digitou a compra a mao antes de a fatura chegar.
+    parcela = ler_parcela(tx.description)
+    if parcela:
+        filtros.append(
+            or_(
+                Transaction.installment_no == parcela.numero,
+                Transaction.installment_no.is_(None),
+            )
         )
-    )
+
+    return db.scalar(select(Transaction).where(*filtros))
 
 
 def build_preview(
@@ -152,14 +175,34 @@ def build_preview(
         # lugar visivel para o pendente que categoria nenhuma.
         sugerida = match.category_id if match else a_definir.get(tx.direction)
 
+        # "PARCELA 02/10" na descricao: a linha vale R$ 300, mas a COMPRA foi de
+        # R$ 3.000 - e ainda faltam oito meses dela. A tela de conferencia
+        # mostra as duas coisas, porque uma parcela solta nao conta nenhuma.
+        parcela = ler_parcela(tx.description)
+
         preview.append(
             {
                 "index": index,
                 "booked_on": tx.booked_on.isoformat(),
+                # Quando este valor sai da conta. No cartao e o vencimento da
+                # fatura, e e o mes em que o Resumo vai contar - entao tem de
+                # estar na tela ANTES de confirmar.
+                "paid_on": caixa_da_parcela(
+                    account,
+                    tx.booked_on,
+                    tx.direction,
+                    parcela.numero if parcela else None,
+                ).isoformat(),
                 "amount": str(tx.amount),
                 "direction": tx.direction.value,
                 "description": tx.description,
                 "document": tx.document,
+                "installment_no": parcela.numero if parcela else None,
+                "installment_total": parcela.total if parcela else None,
+                "valor_da_compra": (
+                    str(parcela.valor_da_compra(tx.amount)) if parcela else None
+                ),
+                "parcelas_faltando": parcela.quantas_faltam if parcela else 0,
                 "fingerprint": digital,
                 "duplicate": duplicate_reason is not None,
                 "duplicate_reason": duplicate_reason,
@@ -205,6 +248,83 @@ def build_preview(
     db.add(row)
     db.flush()
     return row
+
+
+def _previsao_que_esta_parcela_vem_ocupar(
+    db: Session, account_id: UUID, descricao: str, parcela: Parcela
+) -> Transaction | None:
+    """A parcela prevista que esta linha de fatura vem substituir.
+
+    Quando a fatura de outubro trouxe "PARCELA 02/10", o sistema criou as oito
+    seguintes como PREVISTA, cada uma no mes em que vai cair. Agora chegou a
+    fatura de novembro com a "03/10": ela e a mesma parcela, de verdade. Sem
+    reconhecer isso, o mes de novembro teria as duas - a prevista e a real - e
+    contaria a parcela duas vezes.
+
+    O casamento e por conta, numero da parcela, total e RAIZ da descricao: as
+    duas linhas falam da mesma compra, mas escrevem a parcela de jeitos
+    diferentes ("PARCELA 03/10" contra "(3/10)").
+    """
+    candidatas = db.scalars(
+        select(Transaction).where(
+            Transaction.account_id == account_id,
+            Transaction.status == TxStatus.PREVISTA,
+            Transaction.installment_no == parcela.numero,
+            Transaction.installment_total == parcela.total,
+        )
+    ).all()
+    raiz = raiz_da_descricao(descricao)
+    for candidata in candidatas:
+        if raiz_da_descricao(candidata.description) == raiz:
+            return candidata
+    return None
+
+
+def _prever_as_parcelas_que_faltam(
+    db: Session, base: Transaction, parcela: Parcela
+) -> int:
+    """Cria as proximas parcelas como PREVISTA, cada uma no mes em que vai cair.
+
+    "Contas parceladas devem aparecer em todos os meses em que ainda estao
+    vigentes as parcelas." Cada fatura futura vai trazer a parcela dela, mas ate
+    la essas faturas nao existem - e o compromisso ja existe. Elas nascem
+    PREVISTA porque e o que sao: dinheiro que vai sair, e que ainda nao saiu.
+
+    Toda consulta de dinheiro do sistema filtra por EFETIVADA/CONCILIADA, entao
+    nenhuma delas entra no gasto de mes nenhum por engano - elas aparecem onde
+    compromisso aparece, que e a Previsao.
+    """
+    criadas = 0
+    for numero in range(parcela.numero + 1, parcela.total + 1):
+        seguinte = Parcela(numero=numero, total=parcela.total)
+        db.add(
+            Transaction(
+                family_id=base.family_id,
+                account_id=base.account_id,
+                owner_member_id=base.owner_member_id,
+                category_id=base.category_id,
+                # a compra continua sendo a mesma, no dia em que foi feita
+                booked_on=base.booked_on,
+                paid_on=meses_depois(base.paid_on, numero - parcela.numero),
+                amount=base.amount,
+                direction=base.direction,
+                description=numerar(base.description, seguinte),
+                description_norm=normalize(numerar(base.description, seguinte)),
+                status=TxStatus.PREVISTA,
+                source=base.source,
+                import_id=base.import_id,
+                # Sem impressao digital: ela identifica uma linha de extrato, e
+                # esta nao veio de nenhuma. Repeti-la bateria no indice unico.
+                import_fingerprint=None,
+                installment_no=numero,
+                installment_total=parcela.total,
+                installment_group=base.installment_group,
+                ir_year=base.booked_on.year,
+                socio_flow=base.socio_flow,
+            )
+        )
+        criadas += 1
+    return criadas
 
 
 def _direcao_conferida(
@@ -320,6 +440,25 @@ def confirm_import(
             )
         description = item["description"]
         da_empresa = bool(getattr(account, "is_business", False))
+        # "PARCELA 02/10": esta linha e um pedaco de uma compra maior, e as
+        # outras oito ainda vao cair. Ver app/services/parcelas.py.
+        #
+        # So no CARTAO as parcelas que faltam viram compromisso gravado. Num
+        # extrato de conta corrente, "1/3" tanto pode ser um carne quanto um
+        # numero que o banco escreveu por outro motivo - e inventar dois gastos
+        # futuros a partir de um palpite e pior do que nao inventar nenhum. A
+        # leitura da parcela continua valendo para a tela, em qualquer conta.
+        parcela = ler_parcela(description) if direction == TxDirection.SAIDA else None
+        e_cartao = account.type == AccountType.CARTAO_CREDITO
+        parcela_a_prever = parcela if (parcela and e_cartao) else None
+        paid_on = caixa_da_parcela(
+            account, booked_on, direction, parcela.numero if parcela else None
+        )
+        prevista = (
+            _previsao_que_esta_parcela_vem_ocupar(db, account.id, description, parcela)
+            if parcela_a_prever
+            else None
+        )
 
         lancamento = Transaction(
             family_id=row.family_id,
@@ -327,6 +466,7 @@ def confirm_import(
             owner_member_id=account.owner_member_id,
             category_id=category_id,
             booked_on=booked_on,
+            paid_on=paid_on,
             amount=amount,
             direction=direction,
             description=description,
@@ -338,9 +478,30 @@ def confirm_import(
             ir_year=booked_on.year,
             auto_confidence=Decimal(confianca) if confianca else None,
             socio_flow=SocioFlow.PESSOAL_VIA_EMPRESA if da_empresa else None,
+            installment_no=parcela.numero if parcela else None,
+            installment_total=parcela.total if parcela else None,
+            # as parcelas de uma compra andam juntas por este identificador
+            installment_group=(
+                prevista.installment_group
+                if prevista
+                else (uuid4() if parcela_a_prever else None)
+            ),
         )
         db.add(lancamento)
         created += 1
+
+        if parcela_a_prever:
+            if prevista is not None:
+                # A parcela de verdade chegou: a previsao sai de cena, com as
+                # irmas dela intactas. Apagar e melhor que marcar como
+                # cumprida - uma previsao cumprida nao e dado nenhum, e duas
+                # linhas para a mesma parcela e exatamente o que se quer evitar.
+                db.delete(prevista)
+            else:
+                # primeira vez que esta compra aparece: as parcelas que faltam
+                # viram compromisso, cada uma no mes em que vai sair
+                db.flush()
+                _prever_as_parcelas_que_faltam(db, lancamento, parcela_a_prever)
 
         # So despesa gera par. Uma ENTRADA na conta da empresa confirmada como
         # minha ja e o dinheiro chegando (pro-labore, lucro): criar contrapartida
@@ -360,6 +521,9 @@ def confirm_import(
                     owner_member_id=account.owner_member_id,
                     category_id=contra_cat.id if contra_cat else None,
                     booked_on=booked_on,
+                    # a contrapartida acompanha a despesa que ela cobre: as duas
+                    # tem de cair no mesmo mes, ou o caixa da familia balanca
+                    paid_on=lancamento.paid_on,
                     amount=amount,
                     direction=TxDirection.ENTRADA,
                     description=f"Pago pela empresa: {description}",

@@ -226,7 +226,17 @@ export function ExpensesScreen(): React.ReactElement {
                   {item.description}
                 </Text>
                 <Text style={styles.rowSubtitle}>
+                  {/* A data da COMPRA, que é a que ele lembra. O mês desta
+                      lista é o do caixa, então quando os dois diferem (compra
+                      no cartão) a linha diz de onde ela veio — senão o jantar
+                      de setembro aparecendo em outubro seria um susto. */}
                   {dayLabel(item.booked_on)}
+                  {item.paid_on && item.paid_on.slice(0, 7) !== item.booked_on.slice(0, 7)
+                    ? ' · na fatura'
+                    : ''}
+                  {item.installment_total
+                    ? ` · parcela ${item.installment_no}/${item.installment_total}`
+                    : ''}
                   {' · '}
                   {item.category_id
                     ? categoryName.get(item.category_id) ?? 'Categoria'

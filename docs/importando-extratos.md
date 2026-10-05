@@ -160,9 +160,47 @@ Virar **esquece as categorias sugeridas**: elas eram do outro lado, e "Salário"
 num gasto não quer dizer nada. O que você não escolher vai para "A definir", que
 aparece no Resumo cobrando até você dizer o que foi.
 
-Uma coisa que a fatura do cartão **ainda não** faz: ler o parcelamento. A
-descrição vem com "PARCELA 01/03", e cada fatura trará a sua parcela — o gasto do
-mês fica certo —, mas a **Previsão não antecipa** as parcelas que faltam.
+### Em que mês a compra do cartão conta
+
+No dia em que foi feita ela **aparece**; no mês em que a fatura é paga ela
+**conta**. São coisas diferentes, e o sistema guarda as duas:
+
+- a **data da compra** fica na linha — é o que você lembra;
+- o **mês do gasto** é o do vencimento da fatura que cobra aquela compra.
+
+Então a compra de 25 de setembro entra no Resumo de **outubro**, junto com o
+resto da fatura, que é quando o dinheiro sai da conta. É o que faz o mês do
+sistema bater com o seu extrato bancário.
+
+Para a conta ficar exata, cadastre em **Contas** o **dia de fechamento** e o
+**dia de vencimento** do cartão. Sem eles o sistema supõe fatura fechando no fim
+do mês e vencendo no dia 10 do seguinte — e avisa que está supondo. Com eles, a
+diferença aparece onde importa: comprou dia 24 com fechamento no 25, conta na
+fatura deste mês; comprou dia 26, só na do mês que vem.
+
+Na conferência, cada linha diz em que mês vai contar antes de você confirmar.
+
+### Compra parcelada
+
+Cada fatura cobra **uma** parcela, e cada parcela sai da conta no vencimento da
+fatura dela. Importando fatura a fatura, as parcelas se distribuem pelos meses
+sozinhas — não é o sistema que espalha, é assim que elas acontecem.
+
+Quando a descrição traz **"PARCELA 02/10"**, a conferência mostra duas coisas que
+a linha sozinha não conta:
+
+- **quanto foi a compra inteira** (R$ 300 × 10 = R$ 3.000);
+- **quantas ainda faltam** — e elas já ficam marcadas como **compromisso**, cada
+  uma no mês em que vai cair. Aparecem na **Previsão**, não no gasto do mês: o
+  dinheiro ainda não saiu.
+
+Quando a fatura seguinte chega com a "03/10", ela **ocupa o lugar** daquela
+previsão em vez de somar junto.
+
+O leitor é desconfiado por escolha: "IFOOD 02/10" é um pedido do dia 2 de
+outubro, não a segunda de dez parcelas. Número solto só é lido como parcela
+quando o total não pode ser um mês (13 em diante); fora isso, a descrição precisa
+dizer "PARCELA", "PARC" ou "2 de 10".
 
 ## Desfazer uma importação
 

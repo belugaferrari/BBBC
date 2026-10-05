@@ -1,4 +1,16 @@
-"""Consultas agregadas. SQL explicito onde o ORM atrapalharia a leitura."""
+"""Consultas agregadas. SQL explicito onde o ORM atrapalharia a leitura.
+
+O MES, aqui, e sempre o do `paid_on` - o dia em que o dinheiro SAI DA CONTA -, e
+nunca o do `booked_on`, que e o dia em que a compra aconteceu. Em conta corrente
+os dois sao iguais; no cartao, a compra de 25 de setembro sai da conta no
+vencimento da fatura de outubro, e e em outubro que ela pesa.
+
+E a regra que ele pediu, e a razao e que o Resumo precisa fechar com o extrato
+bancario - o documento contra o qual ele confere. Uma compra parcelada cai
+sozinha nesse desenho: cada fatura cobra uma parcela, e cada parcela sai da conta
+no vencimento da sua fatura, entao as parcelas se distribuem pelos meses sem
+ninguem espalhar nada. Ver app/services/caixa.py.
+"""
 
 from __future__ import annotations
 
@@ -68,7 +80,7 @@ _DOACOES_APLICADAS = f"""
            AND t.direction = 'ENTRADA'
            AND t.status IN ('EFETIVADA', 'CONCILIADA')
            AND t.donation_for_category_id IS NOT NULL
-           AND date_trunc('month', t.booked_on)
+           AND date_trunc('month', t.paid_on)
                = date_trunc('month', CAST(:month AS date))
            {_SCOPE_FILTER}
          GROUP BY 1
@@ -86,7 +98,7 @@ _DOACOES_APLICADAS = f"""
                 AND g.direction = 'SAIDA'
                 AND g.status IN ('EFETIVADA', 'CONCILIADA')
                 AND COALESCE(filha.counts_as_expense, true)
-                AND date_trunc('month', g.booked_on)
+                AND date_trunc('month', g.paid_on)
                     = date_trunc('month', CAST(:month AS date))
          GROUP BY r.categoria
     )
@@ -119,7 +131,7 @@ _REEMBOLSOS_APLICADOS = f"""
            AND t.direction = 'SAIDA'
            AND t.status IN ('EFETIVADA', 'CONCILIADA')
            AND COALESCE(c.counts_as_expense, true)
-           AND date_trunc('month', t.booked_on)
+           AND date_trunc('month', t.paid_on)
                = date_trunc('month', CAST(:month AS date))
            {_SCOPE_FILTER}
     ),
@@ -182,7 +194,15 @@ def monthly_cashflow(
               COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'SAIDA'),   0) AS outflow,
               COALESCE(SUM(t.amount) FILTER (
                   WHERE t.direction = 'SAIDA'
-                    AND COALESCE(c.counts_as_expense, true) = false), 0)        AS patrimonio
+                    AND COALESCE(c.counts_as_expense, true) = false), 0)        AS patrimonio,
+              -- Quanto do consumo deste mes veio da FATURA do cartao: compras
+              -- feitas antes, que so agora sairam da conta. Nao soma em nada - e
+              -- uma parte do `consumo`, e existe para a tela poder explicar por
+              -- que o mes tem um gasto que ele nao fez neste mes.
+              COALESCE(SUM(t.amount) FILTER (
+                  WHERE t.direction = 'SAIDA'
+                    AND a.type = 'CARTAO_CREDITO'
+                    AND COALESCE(c.counts_as_expense, true)), 0)                AS gasto_no_cartao
               FROM transactions t
               LEFT JOIN categories c ON c.id = t.category_id
               JOIN accounts a ON a.id = t.account_id
@@ -191,7 +211,7 @@ def monthly_cashflow(
                AND t.direction <> 'TRANSFERENCIA'
                -- credito em conta de cartao nao e dinheiro entrando na familia
                AND NOT (t.direction = 'ENTRADA' AND a.type = 'CARTAO_CREDITO')
-               AND date_trunc('month', t.booked_on) = date_trunc('month', CAST(:month AS date))
+               AND date_trunc('month', t.paid_on) = date_trunc('month', CAST(:month AS date))
                {_SCOPE_FILTER}
             """
         ),
@@ -212,7 +232,7 @@ def monthly_cashflow(
                    AND t.direction = 'ENTRADA'
                    AND a.type = 'CARTAO_CREDITO'
                    AND t.status IN ('EFETIVADA', 'CONCILIADA')
-                   AND date_trunc('month', t.booked_on)
+                   AND date_trunc('month', t.paid_on)
                        = date_trunc('month', CAST(:month AS date))
                    {_SCOPE_FILTER}
                 """
@@ -269,6 +289,8 @@ def monthly_cashflow(
         "outras_entradas": outras_entradas,
         "credito_no_cartao": credito_no_cartao,
         "doacoes_aplicadas": aplicadas,
+        # parte do `consumo`: a fatura do cartao que venceu neste mes
+        "gasto_no_cartao": brl(row["gasto_no_cartao"]),
         "reembolsos": brl(row["reembolsos"]),
         "reembolsos_aplicados": devolvido,
         "outflow": outflow,
@@ -296,7 +318,7 @@ def sankey_rows(db: Session, family_id: UUID, month: date, member_id: UUID | Non
              WHERE t.family_id = :family_id
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
                AND t.direction <> 'TRANSFERENCIA'
-               AND date_trunc('month', t.booked_on) = date_trunc('month', CAST(:month AS date))
+               AND date_trunc('month', t.paid_on) = date_trunc('month', CAST(:month AS date))
                {_SCOPE_FILTER}
              GROUP BY 1, 2, 3
             """
@@ -336,7 +358,7 @@ def spend_by_budget_cap(db: Session, family_id: UUID, month: date) -> list[dict]
                         WHERE t.family_id = b.family_id
                           AND t.direction = 'SAIDA'
                           AND t.status IN ('EFETIVADA', 'CONCILIADA')
-                          AND date_trunc('month', t.booked_on)
+                          AND date_trunc('month', t.paid_on)
                               = date_trunc('month', CAST(:month AS date))
                           AND (b.member_id IS NULL OR t.owner_member_id = b.member_id)
                           AND (CASE WHEN b.includes_descendants
@@ -452,7 +474,7 @@ def spend_by_category(
                  WHERE t.family_id = :family_id
                    AND t.direction = 'SAIDA'
                    AND t.status IN ('EFETIVADA', 'CONCILIADA')
-                   AND t.booked_on BETWEEN :start AND :end
+                   AND t.paid_on BETWEEN :start AND :end
                    -- amortizacao e aporte saem da conta, mas nao sao consumo
                    AND COALESCE(c.counts_as_expense, true)
                    {_SCOPE_FILTER}
@@ -513,7 +535,7 @@ def spend_by_member(
                      ON t.owner_member_id = m.id
                     AND t.direction = 'SAIDA'
                     AND t.status IN ('EFETIVADA', 'CONCILIADA')
-                    AND t.booked_on BETWEEN :start AND :end
+                    AND t.paid_on BETWEEN :start AND :end
              WHERE m.family_id = :family_id
                AND m.password_hash IS NOT NULL
              GROUP BY 1, 2, 3
@@ -590,7 +612,7 @@ def pendentes_de_categoria(
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
                AND t.direction <> 'TRANSFERENCIA'
                AND (t.category_id IS NULL OR c.slug = 'a_definir')
-               AND date_trunc('month', t.booked_on)
+               AND date_trunc('month', t.paid_on)
                    = date_trunc('month', CAST(:month AS date))
                {_SCOPE_FILTER}
             """

@@ -60,10 +60,10 @@ def card_summary(
 ) -> dict:
     """Gasto no cartao no mes, por cartao, e o que pode estar contado em dobro.
 
-    O gasto e a soma das COMPRAS lancadas nas contas do tipo cartao de credito -
-    e nao o valor da fatura. Os dois quase nunca sao iguais: a fatura que chega
-    em novembro cobra compras de outubro, e e o mes da compra que importa para
-    saber onde o dinheiro foi.
+    "Gasto no mes" aqui e o que SAI DA CONTA no mes - a fatura que vence nele -,
+    e nao as compras feitas nele. A compra de 25 de setembro entra no numero de
+    outubro, junto com o resto da fatura que a cobra. E o mesmo criterio do
+    Resumo, e e o que permite conferir contra o extrato bancario.
     """
     mes = primeiro_do_mes(month or date.today())
 
@@ -79,7 +79,7 @@ def card_summary(
                      ON t.account_id = a.id
                     AND t.direction = 'SAIDA'
                     AND t.status IN ('EFETIVADA', 'CONCILIADA')
-                    AND date_trunc('month', t.booked_on)
+                    AND date_trunc('month', t.paid_on)
                         = date_trunc('month', CAST(:mes AS date))
                     AND t.id NOT IN (
                         SELECT t2.id FROM transactions t2
@@ -108,18 +108,20 @@ def card_summary(
              WHERE t.family_id = :familia
                AND c.path <@ 'transferencias.pagamento_cartao'::ltree
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
-               AND date_trunc('month', t.booked_on)
+               AND date_trunc('month', t.paid_on)
                    = date_trunc('month', CAST(:mes AS date))
             """
         ),
         {"familia": current.family_id, "mes": mes},
     ).scalar_one()
 
-    # Quanto de compra de cartao o sistema conhece na janela que a fatura paga
-    # neste mes cobre: o mes anterior e este. A fatura que vence em outubro cobra
-    # compras de setembro (e o comeco de outubro, se o fechamento for no meio do
-    # mes), entao comparar so dentro do mes do pagamento acusaria buraco todo
-    # mes, inclusive quando nao ha nenhum.
+    # Quanto de compra de cartao o sistema conhece para a fatura deste mes.
+    #
+    # A janela de dois meses que existia aqui nao e mais necessaria, e esse e o
+    # ganho do `paid_on`: a compra de setembro cobrada na fatura de outubro JA
+    # esta carimbada com outubro, entao comparar dentro do mes e exato - antes
+    # era preciso varrer o mes anterior e este, e ainda assim o corte do
+    # fechamento ficava no chute.
     compras_na_janela = db.execute(
         text(
             """
@@ -132,8 +134,8 @@ def card_summary(
                AND t.direction = 'SAIDA'
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
                AND COALESCE(c.counts_as_expense, true)
-               AND t.booked_on >= (CAST(:mes AS date) - INTERVAL '1 month')
-               AND t.booked_on < (CAST(:mes AS date) + INTERVAL '1 month')
+               AND date_trunc('month', t.paid_on)
+                   = date_trunc('month', CAST(:mes AS date))
             """
         ),
         {"familia": current.family_id, "mes": mes},
@@ -150,7 +152,7 @@ def card_summary(
              WHERE t.family_id = :familia
                AND c.path = 'despesas.cartao_sem_detalhe'::ltree
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
-               AND date_trunc('month', t.booked_on)
+               AND date_trunc('month', t.paid_on)
                    = date_trunc('month', CAST(:mes AS date))
             """
         ),
@@ -173,7 +175,7 @@ def card_summary(
                AND a.type <> 'CARTAO_CREDITO'
                AND (c.path <@ 'transferencias.pagamento_cartao'::ltree
                     OR c.path = 'despesas.cartao_sem_detalhe'::ltree)
-               AND date_trunc('month', t.booked_on)
+               AND date_trunc('month', t.paid_on)
                    = date_trunc('month', CAST(:mes AS date))
              ORDER BY t.amount DESC
             """
@@ -205,7 +207,7 @@ def card_summary(
                AND a.type <> 'CARTAO_CREDITO'
                AND NOT (c.path = 'despesas.cartao_sem_detalhe'::ltree
                         AND :compras_conhecidas = 0)
-               AND date_trunc('month', t.booked_on)
+               AND date_trunc('month', t.paid_on)
                    = date_trunc('month', CAST(:mes AS date))
                AND (
                    lower(t.description) LIKE :jeito1
@@ -251,8 +253,7 @@ def card_summary(
         "total_spent": brl(total),
         "cards": cartoes,
         "bill_paid": brl(fatura_paga),
-        # Quanto de compra de cartao o sistema conhece na janela que a fatura
-        # cobre (mes anterior e este).
+        # Quanto de compra de cartao o sistema conhece para a fatura deste mes.
         "purchases_known": brl(compras_na_janela),
         "sem_detalhe": brl(sem_detalhe),
         "gap": buraco,

@@ -356,7 +356,7 @@ def category_overview(
                         AND t.direction = CAST(:direcao AS tx_direction)
                         AND t.status IN ('EFETIVADA', 'CONCILIADA')
                         AND COALESCE(filha.counts_as_expense, true)
-                        AND date_trunc('month', t.booked_on)
+                        AND date_trunc('month', t.paid_on)
                             = date_trunc('month', CAST(:mes AS date))
                  WHERE c.family_id = :familia
                  GROUP BY c.id

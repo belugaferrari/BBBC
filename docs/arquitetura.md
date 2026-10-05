@@ -241,7 +241,82 @@ sistema**. O servidor não está na internet: 5G perfeito com o PC desligado é
 offline, e provedor caído com o PC ligado é online. O único sinal honesto é se a
 última requisição obteve resposta — então é o cliente HTTP que alimenta o estado.
 
-## 12. O servidor roda no Windows da casa, e isso é uma restrição
+## 12. Duas datas por lançamento, e o mês é o do caixa
+
+> "O extrato do cartão vem com a data da efetivação da compra, não com a data do
+> pagamento do cartão. (…) o valor só é contabilizado como gasto no mês em que
+> ele efetivamente saiu da conta."
+
+Todo lançamento guarda **duas** datas:
+
+| | o que é | onde aparece |
+|---|---|---|
+| `booked_on` | quando **aconteceu** — o dia da compra | na linha, na lista, é o que ele lembra |
+| `paid_on` | quando o **dinheiro sai** da conta | é o **mês** de tudo que fala de dinheiro |
+
+Em conta corrente as duas são iguais. No cartão, `paid_on` é o **vencimento da
+fatura que cobra aquela compra** — `app/services/caixa.py` faz essa conta em dois
+passos: qual fatura pega a compra (a que fecha depois dela) e quando essa fatura
+vence. Sem os dias cadastrados, supõe fatura fechando no fim do mês e vencendo no
+dia 10 do seguinte, que é o caso mais comum e o que ele descreveu.
+
+A razão de ser `paid_on` e não `booked_on`: **o Resumo precisa fechar com o
+extrato bancário**, que é o documento contra o qual ele confere. Com o mês da
+compra, o Resumo e o extrato nunca batem, e a diferença não é um erro que se
+possa achar — é estrutural.
+
+O preço é um estranhamento: a compra de 25 de setembro aparece na lista de
+**outubro**. A linha carrega a data da compra justamente para isso não virar
+susto.
+
+### A regra existe duas vezes, e há um teste para isso
+
+A migration 0017 precisa carregar as linhas que já existiam, e migration é SQL
+puro — então a conta vive também como `bbbc_fatura_que_cobra(...)` no banco. Duas
+implementações da mesma regra divergem com o tempo, a não ser que alguém compare:
+`test_mes_do_caixa.py` roda as duas sobre uma grade de datas e configurações e
+exige que concordem em todas.
+
+### Parcelamento: cada fatura cobra uma parcela
+
+> "Contas parceladas devem aparecer em todos os meses em que ainda estão vigentes
+> as parcelas (não apenas no mês de contratação)."
+
+Isso cai sozinho no desenho acima: cada fatura traz a parcela daquele mês, e cada
+parcela sai da conta no vencimento da **sua** fatura. Importando fatura a fatura,
+as parcelas se distribuem pelos meses sem ninguém espalhar nada — porque foi
+assim que elas aconteceram. A conta de `paid_on` da parcela *n* é a fatura da
+compra mais *n−1* meses, porque a fatura repete a data da compra em toda parcela.
+
+O que a leitura de **"PARCELA 02/10"** na descrição acrescenta
+(`app/services/parcelas.py`) são duas coisas que nenhuma linha sozinha conta:
+**quanto foi a compra inteira** (parcela × total) e **o que ainda vem** — as
+parcelas que faltam nascem como `PREVISTA`, cada uma no mês em que vai cair.
+Compromisso não é gasto: toda consulta de dinheiro filtra `EFETIVADA/CONCILIADA`,
+então elas aparecem na Previsão e em lugar nenhum do realizado.
+
+Três armadilhas que custaram bug e hoje têm teste:
+
+1. **`normalize` apaga dígitos** (é o que faz "DROGARIA SÃO PAULO 4471" casar com
+   o fornecedor). Com os dígitos fora, "PARCELA 01/03" e "PARCELA 02/03" viravam
+   o mesmo texto — e, como as faturas repetem data e valor, a segunda parcela era
+   recusada em silêncio como "já importado". **Todo mês a parcela daquele mês
+   sumia.** A parcela entra na impressão digital.
+2. **A parcela 2 parecia duplicata da 1** na checagem de equivalência (mesma
+   conta, mesmo valor, mesma data da compra). Agora o número da parcela separa as
+   duas.
+3. **A previsão da parcela 3 parecia duplicata da parcela 3 real.** Previsão não
+   é lançamento repetido: é o lugar que o fato vem ocupar — e, quando ocupa, ela
+   sai de cena.
+
+E o leitor de parcela é **desconfiado de propósito**: "IFOOD 02/10" é um pedido do
+dia 2 de outubro, não a segunda de dez parcelas. Número solto só vale quando o
+total não pode ser um mês (13 em diante); nos outros casos, exige a palavra
+("PARCELA", "PARC") ou o "de" por extenso. Errar para menos custa uma informação
+na tela; errar para mais inventa uma compra de dez vezes o valor **e mais oito
+gastos futuros**.
+
+## 13. O servidor roda no Windows da casa, e isso é uma restrição
 
 Não é detalhe de instalação: muda o que o código pode supor. O ambiente de
 desenvolvimento é Linux, onde quase tudo é UTF-8 por padrão; a máquina que de
@@ -267,7 +342,7 @@ acento numa mensagem de erro não pode derrubar o próprio relato do que deu
 errado — o pior caso tem de ser um caractere torto, nunca uma janela que fecha
 sem explicação.
 
-## 13. O que ficou de fora de propósito
+## 14. O que ficou de fora de propósito
 
 - **Alembic**: as migrations são SQL puro numerado enquanto não há dados em
   produção. Na primeira mudança de schema com dados reais, migrar para Alembic.

@@ -23,6 +23,7 @@ from app.integrations.openfinance.base import (
 )
 from app.models import Account, BankConnection, Institution, SyncLog, Transaction
 from app.models.enums import TxSource, TxStatus
+from app.services.caixa import caixa_da_conta
 from app.services.categorization import normalize
 from app.services.categorization_repository import autocategorize
 from app.services.mascara import sigla_instituicao
@@ -163,6 +164,7 @@ def sync_connection(
             account_id=account.id,
             owner_member_id=account.owner_member_id,
             booked_on=item.booked_on,
+            paid_on=caixa_da_conta(account, item.booked_on, item.direction),
             amount=item.amount,
             direction=item.direction,
             description=item.description,

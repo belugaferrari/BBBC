@@ -115,15 +115,15 @@ def build_events(
         text(
             f"""
             SELECT t.description, t.amount, t.direction::text AS direction,
-                   t.booked_on, t.installment_no, t.installment_total,
+                   t.paid_on, t.installment_no, t.installment_total,
                    c.path::text AS category_path, c.name AS category_name
               FROM transactions t
               LEFT JOIN categories c ON c.id = t.category_id
              WHERE t.family_id = :family_id
                AND t.direction <> 'TRANSFERENCIA'
                AND t.status IN ('PREVISTA', 'PENDENTE', 'EFETIVADA', 'CONCILIADA')
-               AND t.booked_on >= :inicio
-               AND t.booked_on < :fim
+               AND t.paid_on >= :inicio
+               AND t.paid_on < :fim
                {escopo}
             """
         ),
@@ -137,7 +137,9 @@ def build_events(
             rotulo = f"{rotulo} ({linha['installment_no']}/{linha['installment_total']})"
         eventos.append(
             ForecastEvent(
-                month=month_start(linha["booked_on"]),
+                # o mes do evento e o do caixa: a parcela de marco pesa em
+                # marco, mesmo que a compra tenha sido em setembro
+                month=month_start(linha["paid_on"]),
                 kind=FlowKind.ESPERADO,
                 direction=TxDirection(linha["direction"]),
                 amount=Decimal(linha["amount"]),
@@ -157,7 +159,7 @@ def build_events(
     historico = db.execute(
         text(
             f"""
-            SELECT date_trunc('month', t.booked_on)::date AS mes,
+            SELECT date_trunc('month', t.paid_on)::date AS mes,
                    c.path::text AS category_path,
                    c.name       AS category_name,
                    SUM(t.amount) AS total
@@ -166,8 +168,8 @@ def build_events(
              WHERE t.family_id = :family_id
                AND t.direction = 'SAIDA'
                AND t.status IN ('EFETIVADA', 'CONCILIADA')
-               AND t.booked_on >= :inicio_historico
-               AND t.booked_on < :inicio
+               AND t.paid_on >= :inicio_historico
+               AND t.paid_on < :inicio
                {escopo}
              GROUP BY 1, 2, 3
             """
