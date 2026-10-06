@@ -24,6 +24,10 @@ escolha, não esquecimento — o lançamento do gasto é o único que não pode 
 porque gasto em dinheiro não lançado na hora não é lançado nunca. Os outros você
 faz sentado, com o PC ligado.
 
+A **tranca por biometria** continua valendo sem o PC: quem prova quem é, ali, é o
+próprio aparelho. Com o servidor desligado o aplicativo abre, pede a digital e
+mostra a última cópia dos números — nessa ordem.
+
 ## O que NÃO funciona — e é importante saber antes
 
 **No Expo Go (o QR code), o aplicativo não ABRE com o PC desligado.**

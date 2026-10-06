@@ -24,7 +24,8 @@ export interface MoreScreenProps {
       | 'Previsoes'
       | 'Investimentos'
       | 'Doacoes'
-      | 'IR',
+      | 'IR'
+      | 'Seguranca',
   ) => void;
 }
 
@@ -99,6 +100,16 @@ export function MoreScreen({ aoEscolher }: MoreScreenProps): React.ReactElement 
           title="Imposto de Renda"
           subtitle="Projeção do ano, completo contra simplificado"
           onPress={() => aoEscolher('IR')}
+        />
+      </Card>
+
+      <SectionTitle>Segurança</SectionTitle>
+      <Card>
+        <MenuRow
+          icon="⚿"
+          title="Tranca do aplicativo"
+          subtitle="Biometria ao abrir, e o que ela protege"
+          onPress={() => aoEscolher('Seguranca')}
         />
       </Card>
 

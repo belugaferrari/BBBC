@@ -27,6 +27,7 @@ import { CardsScreen } from '@/screens/CardsScreen';
 import { CategoriesScreen } from '@/screens/CategoriesScreen';
 import { CategoryDetailScreen } from '@/screens/CategoryDetailScreen';
 import { CalendarScreen } from '@/screens/CalendarScreen';
+import { SecurityScreen } from '@/screens/SecurityScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
 import { DonationsScreen } from '@/screens/DonationsScreen';
 import { EntryScreen } from '@/screens/EntryScreen';
@@ -50,6 +51,7 @@ type StackParams = {
   // a tela de categoria empilha sobre si mesma: de "Transporte" para
   // "Gasolina" e de volta, com o mes escolhido vindo junto
   Categoria: { id: string; nome: string; mes: string };
+  Seguranca: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -182,6 +184,11 @@ export function RootNavigator(): React.ReactElement {
           name="Categoria"
           component={CategoryDetailScreen}
           options={{ title: 'Categoria' }}
+        />
+        <Stack.Screen
+          name="Seguranca"
+          component={SecurityScreen}
+          options={{ title: 'Segurança' }}
         />
         <Stack.Screen name="Investimentos" component={InvestmentsScreen} />
         <Stack.Screen

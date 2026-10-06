@@ -9,6 +9,7 @@ import { ApiError, getToken } from '@/api/client';
 import { assinarConexao } from '@/api/conexao';
 import { subirFila } from '@/api/fila';
 import { registrarAparelho } from '@/api/push';
+import { Tranca } from '@/components/Tranca';
 import { RootNavigator } from '@/navigation/RootNavigator';
 import { LoginScreen } from '@/screens/LoginScreen';
 
@@ -94,7 +95,12 @@ export default function App(): React.ReactElement | null {
       <SafeAreaProvider>
         <StatusBar style="light" />
         {authenticated ? (
-          <RootNavigator />
+          // A tranca só cobre quem já está dentro: na tela de login não há o
+          // que esconder, e pedir biometria ali seria uma porta a mais para
+          // atravessar antes de chegar na porta.
+          <Tranca>
+            <RootNavigator />
+          </Tranca>
         ) : (
           <LoginScreen onSuccess={() => setAuthenticated(true)} />
         )}

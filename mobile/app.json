@@ -30,6 +30,12 @@
     },
     "plugins": [
       [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Para destravar o BBBC e ver as contas da casa."
+        }
+      ],
+      [
         "expo-notifications",
         {
           "color": "#E11D2E"

@@ -11,6 +11,8 @@ ser o de um app de banco, não o de um app de lista de compras.
 | Senha | `bcrypt` com salt por usuário, custo padrão 12. O segredo passa por SHA-256 antes, porque o bcrypt trunca em 72 bytes. A senha nunca é gravada nem logada. |
 | Sessão | JWT assinado (HS256) com expiração. O app guarda no **Keychain (iOS) / Keystore (Android)** via `expo-secure-store`, não em `AsyncStorage`. |
 | 401 no cliente | Token inválido ou expirado é apagado do dispositivo automaticamente. |
+| **Tranca do aplicativo** | Biometria (digital, rosto ou a senha de tela) ao abrir, e ao voltar depois de **um minuto** fora. **Ligada por padrão.** Desliga em Mais › Segurança. Aparelho sem nada cadastrado não tranca — trancaria a pessoa do lado de fora dos próprios dados. |
+| Na tela | Nenhuma tela mostra nome completo, nome do banco, agência ou número de conta. O extrato é identificado pelo período, e o número que venha grudado no nome da conta é apagado **antes de gravar**. |
 | **Autorização** | Todo id que chega pelo corpo ou pela query (conta, categoria, tag, membro, meta) é resolvido contra a família do token. Responde **404**, não 403: um 403 confirmaria que aquele id existe. |
 | Credencial bancária | **Nunca passa pela nossa base.** O provedor de Open Finance guarda o vínculo; persistimos só o id do item e a validade do consentimento. |
 | Webhook | Sem assinatura HMAC válida, o evento é gravado para auditoria e **descartado** — nunca processado. |
@@ -34,6 +36,10 @@ Em ordem de importância:
    no DDL marcando isso). Se for guardar CPF, cifrar em repouso ou não guardar.
 5. **Segundo fator.** Para um app com o patrimônio da família inteira, vale um
    TOTP no login. Não está feito.
+5b. **Esconder a tela na troca de aplicativos.** A tranca cobre o aplicativo
+   aberto, mas a miniatura que o Android/iOS guarda ao alternar entre apps ainda
+   mostra a última tela. Resolve-se com `FLAG_SECURE` no Android e uma cobertura
+   no iOS; não está feito.
 6. **Rotação de token.** O JWT dura 30 dias e não há refresh nem revogação: se
    um aparelho for perdido, hoje a saída é trocar o `SECRET_KEY` (o que desloga
    os dois).
