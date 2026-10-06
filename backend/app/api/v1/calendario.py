@@ -70,6 +70,9 @@ def calendario(
             "reservas": saldos["liquid"],
             "investido": saldos["invested"],
             "divida_no_cartao": saldos["credit_card_debt"],
+            # fora do patrimonio, e dito em voz alta: o dinheiro da empresa nao
+            # e da familia, mas tambem nao pode sumir da tela
+            "na_empresa": saldos["na_empresa"],
             "mes_anterior": anterior,
             "gastos_mes_anterior": fechado["consumo_proprio"],
         },

@@ -29,6 +29,7 @@ export interface Calendario {
     reservas: string;
     investido: string;
     divida_no_cartao: string;
+    na_empresa: string;
     /** o último mês FECHADO: o corrente não serve de comparação */
     mes_anterior: string;
     gastos_mes_anterior: string;
@@ -93,6 +94,14 @@ export interface Balances {
   credit_card_debt: string;
   invested: string;
   net_worth: string;
+  /**
+   * o saldo das contas da empresa.
+   *
+   * Fica FORA do patrimônio e das reservas: o dinheiro da empresa tem sócio,
+   * tem imposto para sair de lá, e some no dia em que a empresa gastar. Vem em
+   * linha própria para não parecer que o sistema perdeu um saldo.
+   */
+  na_empresa: string;
 }
 
 export interface SankeyNode {

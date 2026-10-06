@@ -133,6 +133,9 @@ export function CalendarScreen(): React.ReactElement {
             <Linha rotulo="Patrimônio" valor={data.hoje.patrimonio} forte />
             <Linha rotulo="Reservas (dá para usar hoje)" valor={data.hoje.reservas} />
             <Linha rotulo="Investido" valor={data.hoje.investido} />
+            {Number(data.hoje.na_empresa) !== 0 ? (
+              <Linha rotulo="Na empresa (fora do patrimônio)" valor={data.hoje.na_empresa} />
+            ) : null}
             {Number(data.hoje.divida_no_cartao) > 0 ? (
               <Linha
                 rotulo="Fatura em aberto"
@@ -146,6 +149,9 @@ export function CalendarScreen(): React.ReactElement {
               tom="saida"
             />
             <Text style={styles.nota}>
+              O dinheiro que está na empresa aparece separado de propósito: ele tem sócio e tem
+              imposto para sair de lá, então somá-lo ao patrimônio inflaria justamente o número
+              que serve para decidir se dá para comprar alguma coisa.{'\n\n'}
               O mês anterior é o último fechado — o mês corrente ainda está acontecendo, e
               comparar com ele no dia 3 não diz nada.
             </Text>

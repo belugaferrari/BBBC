@@ -190,6 +190,9 @@ def net_worth(
                   WHERE type = 'CARTAO_CREDITO' AND current_balance < 0), 0)  AS dividas
               FROM accounts
              WHERE family_id = :family_id AND is_archived = false
+               -- a conta da empresa nao e patrimonio da familia (migration
+               -- 0007); o saldo dela aparece em "na empresa", no Resumo
+               AND is_business = false
             """
         ),
         {"family_id": current.family_id},

@@ -64,6 +64,9 @@ const VALE_GUARDAR = new Set([
   'by-category',
   'net-worth',
   'forecast',
+  // o ano inteiro: e a tela que mais justifica abrir o aplicativo sem o PC,
+  // porque e a que nao depende de nada que tenha acontecido hoje
+  'calendario',
   'doacoes',
   'donors',
   // para o lançamento de reembolso poder perguntar "de qual gasto?" com o PC

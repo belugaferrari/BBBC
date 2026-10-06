@@ -248,6 +248,11 @@ export function DashboardScreen(): React.ReactElement {
           hint={`Investido ${money(balances.invested)}`}
         />
       </View>
+      {Number(balances.na_empresa ?? 0) !== 0 ? (
+        <Text style={styles.avisoDoSaldo}>
+          {`Fora destes dois: ${money(balances.na_empresa)} na conta da empresa. Esse dinheiro tem sócio e tem imposto para sair de lá — somá-lo ao patrimônio inflaria justamente o número que serve para decidir se dá para comprar alguma coisa. O que a empresa paga de conta sua continua contando como gasto da casa, linha a linha, na conferência do extrato.`}
+        </Text>
+      ) : null}
       {!mesAtual ? (
         <Text style={styles.avisoDoSaldo}>
           Estes dois são o saldo de hoje, e não o de {monthLabel(month)} — o saldo

@@ -332,6 +332,27 @@ deixou de estar disponível — não são consumo, mas são saída.
 É o mesmo par de números que o **Calendário** usa, e de propósito: o ano é a
 soma dos meses, e dois critérios diferentes fariam a conta não fechar.
 
+### O dinheiro da empresa não é o dinheiro da família
+
+As contas pessoais **somam** — é para isso que elas existem, e a pergunta "quanto
+gastei em janeiro" não depende de qual delas pagou. A conta da **empresa** é a
+única que não entra nos saldos: ela tem sócio, tem imposto para sair de lá, e
+some no dia em que a empresa gastar. Somada ao patrimônio, inflava justamente o
+número que serve para decidir se dá para comprar alguma coisa.
+
+Isso estava prometido desde a migration 0007, no comentário da própria coluna
+(*"o saldo não entra no patrimônio da família"*), e nunca tinha sido
+implementado. O erro ficava escondido enquanto a conta fosse cadastrada com o
+tipo **PJ** — PJ não cai em nenhum dos baldes que o patrimônio soma. Bastava
+cadastrá-la como **conta corrente**, que é o que ela é, para o saldo inteiro
+entrar. E a tela de Contas, que sempre somou só as pessoais, mostrava outro
+número: duas respostas para a mesma pergunta.
+
+O saldo não desaparece: volta em `na_empresa`, em linha própria, como já
+acontece com o crédito do cartão. O que a empresa paga de conta pessoal continua
+contando como gasto da casa — isso é triado linha a linha na importação, com a
+contrapartida que impede o caixa de cair (ver `app/services/socio.py`).
+
 ## 13. O servidor roda no Windows da casa, e isso é uma restrição
 
 Não é detalhe de instalação: muda o que o código pode supor. O ambiente de

@@ -36,6 +36,7 @@ def consolidated_balances(db: Session, family_id: UUID, member_id: UUID | None) 
         text(
             """
             SELECT a.type::text AS type,
+                   a.is_business,
                    SUM(a.current_balance) AS total,
                    COUNT(*)               AS accounts
               FROM accounts a
@@ -43,13 +44,29 @@ def consolidated_balances(db: Session, family_id: UUID, member_id: UUID | None) 
                AND a.is_archived = false
                AND (CAST(:member_id AS uuid) IS NULL
                     OR a.owner_member_id = CAST(:member_id AS uuid) OR a.is_shared)
-             GROUP BY a.type
+             GROUP BY a.type, a.is_business
             """
         ),
         {"family_id": family_id, "member_id": member_id},
     ).mappings().all()
 
-    by_type = {r["type"]: brl(r["total"] or 0) for r in rows}
+    # A CONTA DA EMPRESA fica de fora, e isso estava prometido desde a migration
+    # 0007 ("o saldo nao entra no patrimonio da familia") sem nunca ter sido
+    # feito. O dinheiro da empresa nao e da familia: ele tem socio, tem imposto
+    # para sair de la, e some no dia em que a empresa gastar. Somado ao
+    # patrimonio, inflava justamente o numero que serve para decidir se da para
+    # comprar alguma coisa.
+    #
+    # Enquanto a conta fosse do tipo "PJ" o erro nao aparecia - PJ nao cai em
+    # nenhum dos baldes somados abaixo. Bastava cadastrar a conta da empresa
+    # como conta corrente, que e o que ela e, para o saldo inteiro entrar.
+    na_empresa = sum((brl(r["total"] or 0) for r in rows if r["is_business"]), ZERO)
+    by_type: dict[str, Decimal] = {}
+    for r in rows:
+        if r["is_business"]:
+            continue
+        by_type[r["type"]] = by_type.get(r["type"], ZERO) + brl(r["total"] or 0)
+
     liquid = sum(
         (v for k, v in by_type.items() if k in {"CONTA_CORRENTE", "POUPANCA", "DINHEIRO"}),
         ZERO,
@@ -62,6 +79,10 @@ def consolidated_balances(db: Session, family_id: UUID, member_id: UUID | None) 
         "credit_card_debt": brl(card_debt),
         "invested": brl(invested),
         "net_worth": brl(liquid + invested - card_debt),
+        # O dinheiro que esta na empresa. Nao entra em nada acima, e esta aqui
+        # para a tela poder dizer onde ele esta - em vez de ele sumir, que e o
+        # jeito mais rapido de alguem achar que o sistema perdeu um saldo.
+        "na_empresa": brl(na_empresa),
     }
 
 
