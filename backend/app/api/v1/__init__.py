@@ -6,6 +6,7 @@ from app.api.v1 import (
     accounts,
     auth,
     avisos,
+    calendario,
     cartoes,
     categories,
     dashboard,
@@ -28,6 +29,7 @@ api_router.include_router(categories.router)
 api_router.include_router(transactions.router)
 api_router.include_router(imports.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(calendario.router)
 api_router.include_router(planning.router)
 api_router.include_router(forecast.router)
 api_router.include_router(patrimonio.router)

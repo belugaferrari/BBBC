@@ -316,6 +316,22 @@ total não pode ser um mês (13 em diante); nos outros casos, exige a palavra
 na tela; errar para mais inventa uma compra de dez vezes o valor **e mais oito
 gastos futuros**.
 
+### "Sobrou no mês" não pode contar o cartão duas vezes
+
+Consequência direta da mudança acima, e ela derruba o número mais visível do
+app. A compra no cartão e a fatura que a paga passaram a cair no **mesmo mês** —
+e as duas são saída no extrato. `outflow` soma as duas; usá-lo em "sobrou no
+mês" mostraria o dobro do gasto, **todo mês com cartão**.
+
+Então o mês devolve também `saiu_do_bolso` e `entrou_no_bolso`: o que de fato
+saiu e entrou, **fora o dinheiro que só mudou de lugar** (pagamento de fatura,
+transferência entre contas próprias). O `net` é a diferença entre os dois.
+Amortização e aporte continuam contando como saída: o dinheiro saiu mesmo, e
+deixou de estar disponível — não são consumo, mas são saída.
+
+É o mesmo par de números que o **Calendário** usa, e de propósito: o ano é a
+soma dos meses, e dois critérios diferentes fariam a conta não fechar.
+
 ## 13. O servidor roda no Windows da casa, e isso é uma restrição
 
 Não é detalhe de instalação: muda o que o código pode supor. O ambiente de

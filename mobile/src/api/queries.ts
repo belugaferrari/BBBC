@@ -11,6 +11,7 @@ import type {
   Account,
   AccountCreate,
   BudgetCapRow,
+  Calendario,
   CardSummary,
   CategoryAnalysis,
   CategoryOverview,
@@ -53,6 +54,7 @@ export const queryKeys = {
   byCategory: (params: object) => ['by-category', params] as const,
   forecast: (months: number, scope: ScopeType) => ['forecast', months, scope] as const,
   netWorth: ['net-worth'] as const,
+  calendario: (year: number, scope: Scope) => ['calendario', year, scope] as const,
   holdings: (kind?: HoldingKind) => ['holdings', kind ?? 'todos'] as const,
   cardPrograms: ['card-programs'] as const,
   categoryOverview: (month: string, kind = 'DESPESA') =>
@@ -189,6 +191,14 @@ export function useEvolucao(month: string, scope: Scope) {
   return useQuery({
     queryKey: queryKeys.evolucao(month, scope),
     queryFn: () => api.get<Evolucao>('/dashboard/evolucao', { month, scope }),
+  });
+}
+
+/** O ano inteiro: doze meses, o acumulado e o retrato de hoje. */
+export function useCalendario(year: number, scope: Scope) {
+  return useQuery({
+    queryKey: queryKeys.calendario(year, scope),
+    queryFn: () => api.get<Calendario>('/calendario', { year, scope }),
   });
 }
 

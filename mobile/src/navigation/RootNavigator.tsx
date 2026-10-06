@@ -26,6 +26,7 @@ import { AccountsScreen } from '@/screens/AccountsScreen';
 import { CardsScreen } from '@/screens/CardsScreen';
 import { CategoriesScreen } from '@/screens/CategoriesScreen';
 import { CategoryDetailScreen } from '@/screens/CategoryDetailScreen';
+import { CalendarScreen } from '@/screens/CalendarScreen';
 import { DashboardScreen } from '@/screens/DashboardScreen';
 import { DonationsScreen } from '@/screens/DonationsScreen';
 import { EntryScreen } from '@/screens/EntryScreen';
@@ -106,6 +107,15 @@ function Abas(): React.ReactElement {
         options={{
           title: 'Resumo',
           tabBarIcon: ({ focused }) => <TabIcon label="◱" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Calendario"
+        component={CalendarScreen}
+        options={{
+          title: 'Calendário',
+          tabBarLabel: 'Ano',
+          tabBarIcon: ({ focused }) => <TabIcon label="▦" focused={focused} />,
         }}
       />
       <Tab.Screen

@@ -192,6 +192,25 @@ def monthly_cashflow(
                     AND NOT COALESCE(c.path <@ 'receitas.reembolsos'::ltree, false)), 0)
                                                                                 AS outras_entradas,
               COALESCE(SUM(t.amount) FILTER (WHERE t.direction = 'SAIDA'),   0) AS outflow,
+              -- O que de fato SAIU do bolso da familia, sem o dinheiro que so
+              -- mudou de lugar. A linha de pagamento da fatura e o caso que
+              -- obriga: a compra do cartao ja esta contada como gasto, e a
+              -- fatura que a paga e a MESMA despesa saindo da conta corrente.
+              -- Somar as duas - e e isso que `outflow` faz - conta o cartao
+              -- inteiro duas vezes, e desde que o mes passou a ser o do caixa
+              -- as duas caem no mesmo mes.
+              --
+              -- Amortizacao e aporte CONTINUAM aqui: o dinheiro saiu mesmo,
+              -- e deixou de estar disponivel. Eles nao sao consumo, mas sao
+              -- saida.
+              COALESCE(SUM(t.amount) FILTER (
+                  WHERE t.direction = 'SAIDA'
+                    AND NOT COALESCE(c.path <@ 'transferencias'::ltree, false)), 0)
+                                                                                AS saiu_do_bolso,
+              COALESCE(SUM(t.amount) FILTER (
+                  WHERE t.direction = 'ENTRADA'
+                    AND NOT COALESCE(c.path <@ 'transferencias'::ltree, false)), 0)
+                                                                                AS entrou_no_bolso,
               COALESCE(SUM(t.amount) FILTER (
                   WHERE t.direction = 'SAIDA'
                     AND COALESCE(c.counts_as_expense, true) = false), 0)        AS patrimonio,
@@ -294,12 +313,84 @@ def monthly_cashflow(
         "reembolsos": brl(row["reembolsos"]),
         "reembolsos_aplicados": devolvido,
         "outflow": outflow,
+        # o que saiu e o que entrou de verdade, sem o dinheiro que so mudou de
+        # lugar (pagamento de fatura, transferencia entre contas proprias)
+        "saiu_do_bolso": brl(row["saiu_do_bolso"]),
+        "entrou_no_bolso": brl(row["entrou_no_bolso"]),
         "consumo": consumo,
         "consumo_proprio": consumo_proprio,
         "patrimonio": patrimonio,
-        "net": brl(inflow - outflow),
+        # "sobrou no mes". Fora as transferencias dos dois lados: a fatura paga
+        # e a mesma despesa que as compras dela, e somar as duas fazia o mes
+        # parecer o dobro de caro - agora que compra e fatura caem no mesmo mes,
+        # todo mes com cartao estaria errado.
+        "net": brl(brl(row["entrou_no_bolso"]) - brl(row["saiu_do_bolso"])),
         "savings_rate": Decimal(savings_rate).quantize(Decimal("0.0001")),
     }
+
+
+def year_calendar(
+    db: Session, family_id: UUID, year: int, member_id: UUID | None
+) -> list[dict]:
+    """Quanto entrou e quanto saiu em cada mes do ano.
+
+    "Uma tela com 12 retangulos com as abreviacoes de cada mes mostrando ali
+    quanto entrou e o quanto saiu em cada mes."
+
+    Os dois numeros sao os mesmos do Resumo - `entrou_no_bolso` e
+    `saiu_do_bolso` -, e nao o extrato bruto. Transferencia entre contas
+    proprias e pagamento de fatura ficam de fora dos dois lados: a fatura e a
+    mesma despesa que as compras dela, e soma-las faria o ano inteiro parecer o
+    dobro do que foi.
+
+    Os doze meses vem sempre, inclusive os vazios e os que ainda nao
+    aconteceram. Um calendario com buracos obriga quem le a contar nos dedos
+    qual mes e qual.
+    """
+    linhas = db.execute(
+        text(
+            f"""
+            SELECT date_trunc('month', t.paid_on)::date AS mes,
+                   COALESCE(SUM(t.amount) FILTER (
+                       WHERE t.direction = 'ENTRADA'
+                         AND NOT COALESCE(c.path <@ 'transferencias'::ltree, false)
+                   ), 0) AS entrou,
+                   COALESCE(SUM(t.amount) FILTER (
+                       WHERE t.direction = 'SAIDA'
+                         AND NOT COALESCE(c.path <@ 'transferencias'::ltree, false)
+                   ), 0) AS saiu
+              FROM transactions t
+              LEFT JOIN categories c ON c.id = t.category_id
+              JOIN accounts a ON a.id = t.account_id
+             WHERE t.family_id = :family_id
+               AND t.status IN ('EFETIVADA', 'CONCILIADA')
+               AND t.direction <> 'TRANSFERENCIA'
+               -- credito em conta de cartao nao e dinheiro entrando na familia
+               AND NOT (t.direction = 'ENTRADA' AND a.type = 'CARTAO_CREDITO')
+               AND EXTRACT(YEAR FROM t.paid_on) = :ano
+               {_SCOPE_FILTER}
+             GROUP BY 1
+            """
+        ),
+        {"family_id": family_id, "ano": year, "member_id": member_id},
+    ).mappings().all()
+
+    por_mes = {linha["mes"]: linha for linha in linhas}
+    calendario = []
+    for mes in range(1, 13):
+        primeiro = date(year, mes, 1)
+        linha = por_mes.get(primeiro)
+        entrou = brl(linha["entrou"]) if linha else ZERO
+        saiu = brl(linha["saiu"]) if linha else ZERO
+        calendario.append(
+            {
+                "month": primeiro,
+                "entrou": entrou,
+                "saiu": saiu,
+                "net": brl(entrou - saiu),
+            }
+        )
+    return calendario
 
 
 def sankey_rows(db: Session, family_id: UUID, month: date, member_id: UUID | None) -> list[FlowRow]:

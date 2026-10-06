@@ -277,6 +277,8 @@ def seed_default_rules(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
     from app.services.default_rules import (
         CATALOG_RULE_CONFIDENCE,
         DEFAULT_MERCHANT_RULES,
+        DEFAULT_PREFIX_RULES,
+        PRIORIDADE_PLATAFORMA,
         prioridade_de,
     )
 
@@ -289,7 +291,14 @@ def seed_default_rules(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
     }
 
     criadas = 0
-    for padrao, caminho in DEFAULT_MERCHANT_RULES:
+    do_catalogo = [(p, c, "CONTEM") for p, c in DEFAULT_MERCHANT_RULES]
+    # As de prefixo entram com a mesma prioridade das de plataforma: quando o
+    # banco escreve "Ifd*camarada", o prefixo e a leitura mais precisa que
+    # existe daquela linha, e tem de ganhar de qualquer palavra solta que
+    # tambem apareca no meio do texto.
+    do_catalogo += [(p, c, "PREFIXO") for p, c in DEFAULT_PREFIX_RULES]
+
+    for padrao, caminho, tipo in do_catalogo:
         categoria = caminhos.get(caminho)
         if categoria is None:
             continue
@@ -299,15 +308,18 @@ def seed_default_rules(db, family_id: UUID) -> int:  # noqa: ANN001 - Session
                 INSERT INTO categorization_rules
                     (family_id, match_type, pattern, category_id, priority,
                      confidence, is_learned)
-                VALUES (:family_id, 'CONTEM', :pattern, :category_id, :priority,
-                        :confidence, false)
+                VALUES (:family_id, :match_type, :pattern, :category_id,
+                        :priority, :confidence, false)
                 """
             ),
             {
                 "family_id": family_id,
+                "match_type": tipo,
                 "pattern": padrao,
                 "category_id": categoria,
-                "priority": prioridade_de(padrao),
+                "priority": (
+                    PRIORIDADE_PLATAFORMA if tipo == "PREFIXO" else prioridade_de(padrao)
+                ),
                 "confidence": CATALOG_RULE_CONFIDENCE,
             },
         )

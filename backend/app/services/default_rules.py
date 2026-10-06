@@ -37,6 +37,9 @@ DEFAULT_MERCHANT_RULES: list[tuple[str, str]] = [
 
     # --- delivery de comida (antes de 'uber', de proposito) -------------------
     ("ifood", "despesas.delivery"),
+    # como a fatura do Itau escreve o iFood; o casamento certo e por prefixo
+    # (DEFAULT_PREFIX_RULES), e este aqui pega a forma escrita por extenso
+    ("ifd", "despesas.delivery"),
     ("rappi", "despesas.delivery"),
     ("uber eats", "despesas.delivery"),
     ("99food", "despesas.delivery"),
@@ -46,6 +49,10 @@ DEFAULT_MERCHANT_RULES: list[tuple[str, str]] = [
     ("zedelivery", "despesas.delivery"),
     ("ze delivery", "despesas.delivery"),
     ("daki", "despesas.delivery"),
+
+    # --- restaurantes que so se reconhecem pelo nome da empresa ---------------
+    # Razao social no lugar do nome fantasia e o normal na fatura de cartao.
+    ("casottisouzaltda", "despesas.restaurantes.restaurante"),
 
     # --- transporte por aplicativo --------------------------------------------
     ("uber", "despesas.transporte.aplicativo"),
@@ -300,6 +307,33 @@ CATALOG_RULE_CONFIDENCE = "0.600"
 # se ele discordar uma vez, a correcao dele e que passa a valer.
 PRIORIDADE_PLATAFORMA = 80
 
+# ---------------------------------------------------------------------------
+# Regras que casam pelo COMECO da descricao
+# ---------------------------------------------------------------------------
+# Algumas marcas se reconhecem pelas primeiras letras e por mais nada. O cartao
+# escreve "Acm Alphaville Barueri Bra" para a academia dele - e "Alphaville Sao
+# Paulo Bra", sem o Acm, e outra coisa inteiramente. Procurar "acm" no meio do
+# texto encontraria as duas, e qualquer outra palavra que tenha essas tres
+# letras; casar pelo comeco encontra so a primeira.
+#
+# Sao poucos de proposito. Prefixo e mais arriscado que palavra inteira: o
+# banco muda o leiaute, a descricao ganha um prefixo novo na frente, e a regra
+# para de casar em silencio. Entao so entra aqui o que NAO da para reconhecer
+# de outro jeito.
+DEFAULT_PREFIX_RULES: list[tuple[str, str]] = [
+    # "ACM Alphaville" - a academia dele. Sem o prefixo, "acm" pegaria texto no
+    # meio de outras palavras.
+    ("acm", "despesas.gastos_mensais.academia"),
+    # "Ifd*camarada", "Ifd*organizacao": e como a fatura do Itau escreve o
+    # iFood. O nome do restaurante vem depois, e e o aplicativo que define a
+    # natureza do gasto - uma padaria pedida pelo iFood continua sendo delivery.
+    ("ifd", "despesas.delivery"),
+    # "Sam S Tambore" - o Sam's Club. O apostrofo some na normalizacao.
+    ("sam s", "despesas.mercado"),
+    # "Beep Saude" - atendimento e exames em casa.
+    ("beep", "despesas.saude.consultas_exames"),
+]
+
 # "REND PAGO APLIC AUT MAIS" e o terceiro caso, e nao e sobre plataforma: a
 # descricao casa com 'rend pago' (a receita) e com 'aplic aut' (a transferencia),
 # e as duas tem nove letras. Empate exato e pior que erro: a resposta passa a
@@ -307,7 +341,7 @@ PRIORIDADE_PLATAFORMA = 80
 PADROES_DE_PLATAFORMA = frozenset({
     "rend pago",
     # aplicativos de entrega: o nome do restaurante vem na descricao
-    "ifood", "rappi", "uber eats", "99food", "99 food", "cheeta", "aiqfome",
+    "ifood", "ifd", "rappi", "uber eats", "99food", "99 food", "cheeta", "aiqfome",
     "zedelivery", "ze delivery", "daki",
     # pagamento de fatura: "PAGAMENTO FATURA CARTAO MERCADO PAGO" nao e compra
     # em market place, e contar a fatura como gasto dobraria o mes

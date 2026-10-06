@@ -283,3 +283,39 @@ def test_a_categoria_tambem_segue_o_mes_do_caixa(client, casa):
 
     assert restaurantes("2026-09-01") == Decimal("0.00")
     assert restaurantes("2026-10-01") == Decimal("300.00")
+
+
+@pytestmark_integracao
+def test_o_sobrou_do_mes_nao_conta_o_cartao_duas_vezes(client, casa):
+    """O numero mais visivel do app, e o que a mudanca de mes poe em risco.
+
+    A compra no cartao e a fatura que a paga passaram a cair no MESMO mes - e as
+    duas sao saida de dinheiro no extrato. Somando as duas, todo mes com cartao
+    mostraria o dobro do gasto em "sobrou no mes". O que mudou de lugar (a
+    fatura paga, a transferencia entre contas) sai dos dois lados da conta.
+    """
+    lancar(
+        client, casa, casa["corrente"], booked_on="2026-10-05", amount="10000.00",
+        direction="ENTRADA", description="PRO LABORE",
+        category_id=casa["cat"]["receitas.ativa_fixa.pro_labore"],
+    )
+    # a compra de setembro: cobrada na fatura que vence em 05/10
+    lancar(
+        client, casa, casa["cartao"], booked_on="2026-09-20", amount="3000.00",
+        category_id=casa["cat"]["despesas.mercado"],
+    )
+    # e a fatura sendo paga, no mesmo mes
+    lancar(
+        client, casa, casa["corrente"], booked_on="2026-10-05", amount="3000.00",
+        description="PAGAMENTO FATURA CARTAO",
+        category_id=casa["cat"]["transferencias.pagamento_cartao"],
+    )
+
+    painel = client.get(
+        "/api/v1/dashboard", params={"month": "2026-10-01"}, headers=casa["headers"]
+    ).json()["cashflow"]
+
+    assert Decimal(painel["consumo"]) == Decimal("3000.00")
+    assert Decimal(painel["saiu_do_bolso"]) == Decimal("3000.00")
+    # 10.000 de entrada menos 3.000 de gasto - e nao menos 6.000
+    assert Decimal(painel["net"]) == Decimal("7000.00")

@@ -10,6 +10,31 @@ export interface AuthToken {
   full_name: string;
 }
 
+/** Um mês do calendário: o que entrou e o que saiu, líquido de transferências. */
+export interface MesDoCalendario {
+  month: string;
+  entrou: string;
+  saiu: string;
+  net: string;
+}
+
+export interface Calendario {
+  year: number;
+  scope: Scope;
+  /** sempre doze, inclusive os vazios — calendário com buraco se lê errado */
+  months: MesDoCalendario[];
+  ano: { entrou: string; saiu: string; net: string };
+  hoje: {
+    patrimonio: string;
+    reservas: string;
+    investido: string;
+    divida_no_cartao: string;
+    /** o último mês FECHADO: o corrente não serve de comparação */
+    mes_anterior: string;
+    gastos_mes_anterior: string;
+  };
+}
+
 export interface Cashflow {
   month: string;
   /** tudo que entrou na conta, doação incluída */
@@ -48,6 +73,10 @@ export interface Cashflow {
   reembolsos_aplicados: string;
   /** tudo que saiu da conta */
   outflow: string;
+  /** o que saiu do bolso: sem pagamento de fatura nem transferência entre contas */
+  saiu_do_bolso: string;
+  /** o que entrou no bolso, pelo mesmo critério */
+  entrou_no_bolso: string;
   /** o que foi consumido de verdade */
   consumo: string;
   /** o consumo que foi a família que pagou (fora o que a doação cobriu) */
