@@ -11,6 +11,7 @@ from __future__ import annotations
 import csv
 import io
 import unicodedata
+from datetime import date
 from decimal import Decimal
 
 from app.models.enums import TxDirection
@@ -20,6 +21,7 @@ from app.services.importers.base import (
     StatementParseError,
 )
 from app.services.importers.parsing import looks_like_date, parse_amount, parse_date
+from app.services.parcelas import ler_parcela
 
 _DATE_HEADERS = {"data", "data lancamento", "data do lancamento", "date",
                  "data movimento", "data da compra", "dt"}
@@ -30,6 +32,15 @@ _DEBIT_HEADERS = {"debito", "saida", "debit", "pagamento"}
 _CREDIT_HEADERS = {"credito", "entrada", "credit", "recebimento"}
 _BALANCE_HEADERS = {"saldo", "balance"}
 _DOCUMENT_HEADERS = {"documento", "doc", "numero do documento", "identificador", "id"}
+# A fatura do Itau traz o parcelamento em coluna propria ("Parcela 2 de 10"), e
+# nao dentro da descricao. Sem ler a coluna, a parcela antiga cobrada nesta
+# fatura entrava como se fosse compra do mes dela - e ia parar num mes em que
+# nada saiu da conta.
+_INSTALLMENT_HEADERS = {"parcelamento", "parcela", "parcelas"}
+# O cabecalho da fatura diz quando ela vence, e isso vale mais do que qualquer
+# conta a partir do dia de fechamento: todas as compras do arquivo sao cobradas
+# nesse dia.
+_VENCIMENTO_HEADERS = {"vencimento", "vencimento da fatura", "data de vencimento"}
 
 
 def _slug(text: str) -> str:
@@ -55,6 +66,8 @@ def _detect_columns(header: list[str]) -> dict[str, int]:
             found["balance"] = index
         elif name in _DOCUMENT_HEADERS and "document" not in found:
             found["document"] = index
+        elif name in _INSTALLMENT_HEADERS and "installment" not in found:
+            found["installment"] = index
     return found
 
 
@@ -125,6 +138,8 @@ def montar_extrato(rows: list[list[str]], file_format: str = "CSV") -> ParsedSta
             "cabecalho nao reconhecido; as colunas foram deduzidas pelo conteudo"
         )
 
+    statement.vencimento = _achar_vencimento(rows[:start] if start else rows[:10])
+
     for row in rows[start:]:
         parsed = _parse_row(row, columns, statement)
         if parsed:
@@ -135,6 +150,40 @@ def montar_extrato(rows: list[list[str]], file_format: str = "CSV") -> ParsedSta
             "nenhuma linha com data e valor reconheciveis - confira o separador e o formato"
         )
     return statement
+
+
+def _achar_vencimento(cabecalho: list[list[str]]) -> date | None:
+    """A data de vencimento escrita no cabecalho da fatura.
+
+    A fatura do cartao e o unico extrato que diz, no proprio arquivo, quando o
+    dinheiro vai sair da conta - e dizer isso e o trabalho inteiro que o resto
+    do sistema faz por aproximacao. Vale muito mais do que a conta pelo dia de
+    fechamento: aquela e um palpite calibrado, esta e o documento.
+
+    Duas formas, porque bancos escrevem das duas:
+
+      * rotulo em uma celula e a data em outra, na mesma coluna de uma linha
+        abaixo - e como o Itau monta a tabela do topo;
+      * rotulo e data na mesma celula ou lado a lado ("Vencimento: 09/01/2026").
+    """
+    colunas_do_rotulo: list[int] = []
+    for linha in cabecalho:
+        for indice, celula in enumerate(linha):
+            if _slug(celula) in _VENCIMENTO_HEADERS:
+                colunas_do_rotulo.append(indice)
+                # na mesma linha, a primeira data a direita do rotulo serve
+                for adiante in linha[indice + 1 :]:
+                    if looks_like_date(adiante):
+                        try:
+                            return parse_date(adiante)
+                        except ValueError:
+                            pass
+            elif colunas_do_rotulo and indice in colunas_do_rotulo and looks_like_date(celula):
+                try:
+                    return parse_date(celula)
+                except ValueError:
+                    continue
+    return None
 
 
 def _detect_positional(rows: list[list[str]]) -> dict[str, int]:
@@ -213,6 +262,10 @@ def _parse_row(
     if cell("balance") and _is_amount(cell("balance")):
         balance = parse_amount(cell("balance"))
 
+    # "Parcela 2 de 10" na coluna propria. O leitor e o mesmo que le a parcela
+    # escrita dentro da descricao - a diferenca e so onde o banco escreveu.
+    parcela = ler_parcela(cell("installment")) if cell("installment") else None
+
     return ParsedTransaction(
         booked_on=booked_on,
         amount=amount,
@@ -220,5 +273,7 @@ def _parse_row(
         description=cell("description") or "Lancamento importado",
         document=cell("document") or None,
         balance_after=balance,
+        installment_no=parcela.numero if parcela else None,
+        installment_total=parcela.total if parcela else None,
         raw_line=";".join(row)[:500],
     )

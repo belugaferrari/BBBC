@@ -23,6 +23,11 @@ class ParsedTransaction:
     description: str
     document: str | None = None       # FITID do OFX, numero do documento no CSV
     balance_after: Decimal | None = None
+    # "Parcela 2 de 10", quando o extrato traz isso em COLUNA PROPRIA - que e
+    # como a fatura do Itau entrega. Ler so a descricao perdia essas linhas, e
+    # com elas a unica pista de que aquele valor e pedaco de uma compra maior.
+    installment_no: int | None = None
+    installment_total: int | None = None
     raw_line: str = ""
 
 
@@ -32,6 +37,14 @@ class ParsedStatement:
     transactions: list[ParsedTransaction] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     account_hint: str | None = None    # agencia/conta encontrada no arquivo
+    # O VENCIMENTO DA FATURA, quando o proprio arquivo diz qual e.
+    #
+    # E a informacao mais valiosa de uma fatura de cartao, e ela vem escrita no
+    # cabecalho: "Vencimento 09/01/2026". Com ela, nao e preciso adivinhar em
+    # que mes cada compra sai da conta a partir do dia do fechamento - todas as
+    # compras daquele arquivo sao cobradas naquele dia, por definicao. E o que
+    # transforma a data de caixa de palpite em leitura.
+    vencimento: date | None = None
 
     @property
     def period_start(self) -> date | None:

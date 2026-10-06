@@ -15,9 +15,10 @@
  * "hoje" no próprio rótulo. Os alertas, que também são do agora, saem da tela.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -29,7 +30,12 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { useDashboard, useEvolucao } from '@/api/queries';
+import {
+  useCategoryOverview,
+  useDashboard,
+  useEvolucao,
+  useTransactions,
+} from '@/api/queries';
 import { AvisoDeConexao } from '@/components/AvisoDeConexao';
 import type { Scope } from '@/api/types';
 import { MonthPicker, mesAtualISO } from '@/components/MonthPicker';
@@ -44,11 +50,25 @@ import {
 } from '@/components/ui';
 import { EvolucaoChart } from '@/components/EvolucaoChart';
 import { colors, layout, severityColor, spacing, typography } from '@/theme';
-import { money, monthLabel, percent } from '@/theme/format';
+import { dayLabel, money, monthLabel, percent } from '@/theme/format';
+
+/** O primeiro e o último dia do mês, que é o recorte das duas listas. */
+function janelaDoMes(mesISO: string): { start: string; end: string } {
+  const [ano, mes] = mesISO.slice(0, 7).split('-').map(Number);
+  const ultimo = new Date(ano, mes, 0).getDate();
+  return {
+    start: `${mesISO.slice(0, 7)}-01`,
+    end: `${mesISO.slice(0, 7)}-${String(ultimo).padStart(2, '0')}`,
+  };
+}
 
 export function DashboardScreen(): React.ReactElement {
   const navigation = useNavigation<
-    NativeStackNavigationProp<{ Cartoes: undefined }>
+    NativeStackNavigationProp<{
+      Cartoes: undefined;
+      Gastos: undefined;
+      Categoria: { id: string; nome: string; mes: string };
+    }>
   >();
   const [scope, setScope] = useState<Scope>('familia');
   const [month, setMonth] = useState(mesAtualISO);
@@ -58,6 +78,28 @@ export function DashboardScreen(): React.ReactElement {
   const width = Math.min(larguraDaTela, layout.maxWidth);
   const { data, isLoading, refetch, isRefetching, error } = useDashboard(month, scope);
   const { data: evolucao } = useEvolucao(month, scope);
+  // O mês inteiro, para as duas listas de baixo: para onde o dinheiro foi, e
+  // cada lançamento. Ele pediu as duas coisas na tela do mês - "um resumo de
+  // gastos por categoria dentro daquele mês e abaixo todos os gastos daquele
+  // mês listados para conferência" - e não havia nem uma nem outra aqui.
+  const janela = useMemo(() => janelaDoMes(month), [month]);
+  const { data: porCategoria } = useCategoryOverview(month);
+  const { data: lancamentos } = useTransactions({ ...janela, scope });
+
+  const baldes = useMemo(
+    () =>
+      (porCategoria?.categories ?? [])
+        .filter((c) => c.depth === 1 && Number(c.spent) > 0)
+        .sort((a, b) => Number(b.spent) - Number(a.spent)),
+    [porCategoria],
+  );
+  const doMes = useMemo(
+    () =>
+      [...(lancamentos ?? [])].sort((a, b) =>
+        b.booked_on.localeCompare(a.booked_on),
+      ),
+    [lancamentos],
+  );
 
   // O seletor de mes fica FORA do if de carregamento, e isso nao e detalhe: com
   // ele dentro, um mes que ainda esta carregando - ou que nao carregou - deixava
@@ -277,6 +319,85 @@ export function DashboardScreen(): React.ReactElement {
         </Card>
       )}
 
+      <SectionTitle>Para onde o dinheiro foi</SectionTitle>
+      <Card>
+        {baldes.length === 0 ? (
+          <Text style={styles.semMeta}>
+            Nenhum gasto em {monthLabel(month)} ainda.
+          </Text>
+        ) : (
+          <>
+            {baldes.map((balde) => (
+              <Pressable
+                key={balde.id}
+                onPress={() =>
+                  navigation.navigate('Categoria', {
+                    id: balde.id,
+                    nome: balde.name,
+                    mes: month,
+                  })
+                }
+                accessibilityRole="button"
+                style={styles.linhaCategoria}
+              >
+                <Text style={styles.categoriaNome} numberOfLines={1}>
+                  {balde.name}
+                </Text>
+                <Text style={styles.categoriaValor}>{money(balde.spent)}</Text>
+              </Pressable>
+            ))}
+            <Text style={styles.pendentesHint}>
+              Cada linha já inclui as subcategorias dela. Toque para abrir.
+            </Text>
+          </>
+        )}
+      </Card>
+
+      <SectionTitle>
+        {doMes.length === 1
+          ? '1 lançamento no mês'
+          : `${doMes.length} lançamentos no mês`}
+      </SectionTitle>
+      <Card>
+        {doMes.length === 0 ? (
+          <Text style={styles.semMeta}>
+            Nada lançado em {monthLabel(month)}. Importe um extrato ou lance à mão.
+          </Text>
+        ) : (
+          doMes.map((item) => (
+            <View key={item.id} style={styles.linhaLancamento}>
+              <View style={styles.lancamentoMain}>
+                <Text style={styles.lancamentoNome} numberOfLines={1}>
+                  {item.description}
+                </Text>
+                <Text style={styles.lancamentoData}>
+                  {dayLabel(item.booked_on)}
+                  {item.paid_on && item.paid_on.slice(0, 7) !== item.booked_on.slice(0, 7)
+                    ? ' · veio na fatura'
+                    : ''}
+                  {item.installment_total
+                    ? ` · parcela ${item.installment_no}/${item.installment_total}`
+                    : ''}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.lancamentoValor,
+                  item.direction === 'ENTRADA' && styles.lancamentoEntrada,
+                ]}
+              >
+                {item.direction === 'SAIDA' ? '−' : '+'}
+                {money(item.amount)}
+              </Text>
+            </View>
+          ))
+        )}
+      </Card>
+
+      <Botao tom="secundario" onPress={() => navigation.navigate('Gastos')}>
+        Conferir e corrigir os lançamentos
+      </Botao>
+
       <Botao tom="secundario" onPress={() => navigation.navigate('Cartoes')}>
         Ver o cartão de crédito do mês
       </Botao>
@@ -285,6 +406,30 @@ export function DashboardScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  linhaCategoria: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  categoriaNome: { ...typography.body, color: colors.text, flex: 1 },
+  categoriaValor: { ...typography.body, color: colors.text, fontWeight: '700' },
+  linhaLancamento: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  lancamentoMain: { flex: 1 },
+  lancamentoNome: { ...typography.caption, color: colors.text },
+  lancamentoData: { ...typography.caption, color: colors.textFaint, marginTop: 1 },
+  lancamentoValor: { ...typography.caption, color: colors.red, fontWeight: '700' },
+  lancamentoEntrada: { color: colors.white },
   pendentesTitulo: { ...typography.body, color: colors.text, fontWeight: '700' },
   pendentesValor: { ...typography.title, color: colors.red, marginTop: 2 },
   pendentesHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },

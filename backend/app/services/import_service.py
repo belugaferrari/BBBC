@@ -13,7 +13,7 @@ Passo 2 (`confirm_import`): grava o que o usuario escolheu.
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -137,6 +137,25 @@ def build_preview(
         for direcao in (TxDirection.SAIDA, TxDirection.ENTRADA)
     }
 
+    # O VENCIMENTO DA FATURA, quando o arquivo diz qual e.
+    #
+    # Toda compra de uma fatura sai da conta no mesmo dia: o dia em que a fatura
+    # e paga. Sabendo esse dia, nao ha o que calcular - e some de uma vez a
+    # classe inteira de erro de "em que mes isto cai", inclusive a parcela
+    # antiga, cuja data de compra e de meses atras e nao diz nada sobre quando
+    # ela e cobrada.
+    vencimento_da_fatura = (
+        statement.vencimento
+        if statement.vencimento and account.type == AccountType.CARTAO_CREDITO
+        else None
+    )
+    if vencimento_da_fatura:
+        statement.warnings.append(
+            f"A fatura diz que vence em {vencimento_da_fatura:%d/%m/%Y}: todas as "
+            "compras deste arquivo contam nesse mes, que e quando o dinheiro sai "
+            "da conta."
+        )
+
     preview: list[dict] = []
     duplicates = 0
 
@@ -175,10 +194,11 @@ def build_preview(
         # lugar visivel para o pendente que categoria nenhuma.
         sugerida = match.category_id if match else a_definir.get(tx.direction)
 
-        # "PARCELA 02/10" na descricao: a linha vale R$ 300, mas a COMPRA foi de
-        # R$ 3.000 - e ainda faltam oito meses dela. A tela de conferencia
-        # mostra as duas coisas, porque uma parcela solta nao conta nenhuma.
-        parcela = ler_parcela(tx.description)
+        # A parcela, venha ela de onde vier: de uma coluna propria do extrato
+        # (a fatura do Itau traz "Parcela 2 de 10" assim) ou escrita dentro da
+        # descricao. A linha vale R$ 300, mas a COMPRA foi de R$ 3.000 - e ainda
+        # faltam oito meses dela.
+        parcela = parcela_da_linha(tx)
 
         preview.append(
             {
@@ -187,11 +207,8 @@ def build_preview(
                 # Quando este valor sai da conta. No cartao e o vencimento da
                 # fatura, e e o mes em que o Resumo vai contar - entao tem de
                 # estar na tela ANTES de confirmar.
-                "paid_on": caixa_da_parcela(
-                    account,
-                    tx.booked_on,
-                    tx.direction,
-                    parcela.numero if parcela else None,
+                "paid_on": _quando_sai_da_conta(
+                    account, tx, parcela, vencimento_da_fatura
                 ).isoformat(),
                 "amount": str(tx.amount),
                 "direction": tx.direction.value,
@@ -248,6 +265,41 @@ def build_preview(
     db.add(row)
     db.flush()
     return row
+
+
+def parcela_da_linha(tx: ParsedTransaction) -> Parcela | None:
+    """A parcela desta linha, da coluna propria ou da descricao.
+
+    A coluna vem primeiro porque e o banco afirmando, e nao o leitor deduzindo
+    de um texto que tambem pode ser uma data.
+    """
+    if tx.installment_no and tx.installment_total:
+        return Parcela(numero=tx.installment_no, total=tx.installment_total)
+    return ler_parcela(tx.description)
+
+
+def _quando_sai_da_conta(
+    account: Account,
+    tx: ParsedTransaction,
+    parcela: Parcela | None,
+    vencimento_da_fatura: date | None,
+) -> date:
+    """O dia em que o dinheiro desta linha sai da conta.
+
+    Com o vencimento escrito no arquivo, nao ha conta a fazer: toda COMPRA de
+    uma fatura e cobrada no dia em que a fatura e paga, seja ela de ontem ou a
+    sexta parcela de algo comprado ano passado. E o que conserta, de uma vez, a
+    parcela antiga que caia num mes em que nada saiu da conta.
+
+    O credito dentro da fatura e a excecao: a linha "Pagamento Efetuado" e o
+    pagamento da fatura ANTERIOR, e aconteceu no dia dela. Carimba-la com este
+    vencimento seria mover para ca um dinheiro que saiu no mes passado.
+    """
+    if vencimento_da_fatura and tx.direction == TxDirection.SAIDA:
+        return vencimento_da_fatura
+    return caixa_da_parcela(
+        account, tx.booked_on, tx.direction, parcela.numero if parcela else None
+    )
 
 
 def _previsao_que_esta_parcela_vem_ocupar(
@@ -371,6 +423,7 @@ def confirm_import(
     selected_indexes: list[int] | None = None,
     category_overrides: dict[int, UUID] | None = None,
     direction_overrides: dict[int, str] | None = None,
+    vencimento_da_fatura: date | None = None,
     contrapartidas: dict[int, str] | None = None,
 ) -> StatementImport:
     """Grava os lancamentos escolhidos na tela de conferencia.
@@ -440,20 +493,37 @@ def confirm_import(
             )
         description = item["description"]
         da_empresa = bool(getattr(account, "is_business", False))
-        # "PARCELA 02/10": esta linha e um pedaco de uma compra maior, e as
-        # outras oito ainda vao cair. Ver app/services/parcelas.py.
+        # A parcela que a conferencia ja tinha lido - da coluna propria do
+        # extrato ou da descricao. Ver app/services/parcelas.py.
         #
         # So no CARTAO as parcelas que faltam viram compromisso gravado. Num
         # extrato de conta corrente, "1/3" tanto pode ser um carne quanto um
         # numero que o banco escreveu por outro motivo - e inventar dois gastos
         # futuros a partir de um palpite e pior do que nao inventar nenhum. A
         # leitura da parcela continua valendo para a tela, em qualquer conta.
-        parcela = ler_parcela(description) if direction == TxDirection.SAIDA else None
+        parcela = (
+            Parcela(numero=item["installment_no"], total=item["installment_total"])
+            if item.get("installment_no") and item.get("installment_total")
+            else None
+        )
         e_cartao = account.type == AccountType.CARTAO_CREDITO
         parcela_a_prever = parcela if (parcela and e_cartao) else None
-        paid_on = caixa_da_parcela(
-            account, booked_on, direction, parcela.numero if parcela else None
-        )
+
+        # A data de caixa e a que ELE VIU na conferencia - nao uma conta refeita
+        # agora. O que foi conferido e o que e gravado; recalcular aqui abriria
+        # a porta para o mes mudar entre a tela e o banco, que e a surpresa mais
+        # cara que este sistema pode dar.
+        #
+        # Duas excecoes: ele trocou o vencimento da fatura na tela, ou virou o
+        # lado da linha (e ai a data de caixa de antes era a da outra direcao).
+        if vencimento_da_fatura and direction == TxDirection.SAIDA and e_cartao:
+            paid_on = vencimento_da_fatura
+        elif item.get("paid_on") and direction == TxDirection(item["direction"]):
+            paid_on = datetime.fromisoformat(item["paid_on"]).date()
+        else:
+            paid_on = caixa_da_parcela(
+                account, booked_on, direction, parcela.numero if parcela else None
+            )
         prevista = (
             _previsao_que_esta_parcela_vem_ocupar(db, account.id, description, parcela)
             if parcela_a_prever

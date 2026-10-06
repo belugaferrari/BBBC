@@ -324,3 +324,118 @@ def test_a_parcela_que_falta_aparece_na_previsao(client, casa):
     assert any("3/3" in rotulo for rotulo in rotulos.get("2026-12-01", []))
     # e janeiro, que ja passou da ultima, nao tem nenhuma
     assert not any("/3" in rotulo for rotulo in rotulos.get("2027-01-01", []))
+
+
+# ---------------------------------------------------------------------------
+# A fatura de verdade, com o vencimento escrito nela
+# ---------------------------------------------------------------------------
+def test_o_vencimento_do_arquivo_manda_no_mes(client, casa):
+    """"Nao sei como ele deduziu que esse cartao foi pago em jan26 (eu nao
+    informei nada, nao sei de onde veio a informacao)."
+
+    Vinha de uma conta: dia da compra mais o fechamento do cartao. A fatura, no
+    entanto, DIZ quando vence - e com isso nao ha nada a deduzir. Todas as
+    compras do arquivo contam no mes em que a fatura e paga, inclusive a parcela
+    de uma compra de meses atras, cuja data de compra nao diz nada sobre quando
+    ela e cobrada.
+    """
+    from tests.test_importador_xlsx import FATURA_ITAU, _planilha
+
+    resposta = client.post(
+        "/api/v1/imports",
+        data={"account_id": casa["cartao"]},
+        files={"file": ("fatura.xlsx", _planilha(FATURA_ITAU), "application/octet-stream")},
+        headers=casa["headers"],
+    )
+    assert resposta.status_code == 201, resposta.text
+    lote = resposta.json()
+
+    # a tela mostra de onde veio
+    assert lote["vencimento_da_fatura"] == "2026-01-09"
+    assert any("09/01/2026" in aviso for aviso in lote["warnings"])
+
+    # toda compra conta em janeiro - inclusive a parcela 6 de 6, comprada em
+    # julho, que antes ia parar em agosto
+    compras = [linha for linha in lote["preview"] if linha["direction"] == "SAIDA"]
+    assert {linha["paid_on"] for linha in compras} == {"2026-01-09"}
+    antiga = next(linha for linha in compras if "Assinatura" in linha["description"])
+    assert antiga["booked_on"] == "2025-07-04"
+    assert antiga["installment_no"] == 6
+
+    client.post(
+        f"/api/v1/imports/{lote['id']}/confirm", json={}, headers=casa["headers"]
+    ).raise_for_status()
+
+    assert consumo(client, casa, "2026-01-01") == Decimal("1050.00")
+    assert consumo(client, casa, "2025-08-01") == Decimal("0.00")
+    assert consumo(client, casa, "2025-12-01") == Decimal("0.00")
+
+
+def test_o_pagamento_da_fatura_anterior_fica_no_dia_dele(client, casa):
+    """A linha "Pagamento Efetuado" dentro da fatura e o pagamento da fatura
+    ANTERIOR, e aconteceu no dia dela. Carimba-la com este vencimento moveria
+    para ca um dinheiro que saiu no mes passado."""
+    from tests.test_importador_xlsx import FATURA_ITAU, _planilha
+
+    lote = client.post(
+        "/api/v1/imports",
+        data={"account_id": casa["cartao"]},
+        files={"file": ("fatura.xlsx", _planilha(FATURA_ITAU), "application/octet-stream")},
+        headers=casa["headers"],
+    ).json()
+    pagamento = next(
+        linha for linha in lote["preview"] if "Pagamento" in linha["description"]
+    )
+    assert pagamento["direction"] == "ENTRADA"
+    assert pagamento["paid_on"] == pagamento["booked_on"] == "2025-12-09"
+
+
+def test_as_parcelas_que_faltam_saem_do_vencimento_da_fatura(client, casa):
+    """A parcela 2 de 4 cai uma fatura depois desta - e nao um mes depois da
+    compra, que e outra data."""
+    from tests.test_importador_xlsx import FATURA_ITAU, _planilha
+
+    lote = client.post(
+        "/api/v1/imports",
+        data={"account_id": casa["cartao"]},
+        files={"file": ("fatura.xlsx", _planilha(FATURA_ITAU), "application/octet-stream")},
+        headers=casa["headers"],
+    ).json()
+    client.post(
+        f"/api/v1/imports/{lote['id']}/confirm", json={}, headers=casa["headers"]
+    ).raise_for_status()
+
+    futuras = [p for p in previstas(casa) if p["installment_total"] == 4]
+    assert [p["installment_no"] for p in futuras] == [2, 3, 4]
+    assert [p["paid_on"].isoformat() for p in futuras] == [
+        "2026-02-09",
+        "2026-03-09",
+        "2026-04-09",
+    ]
+
+
+def test_da_para_corrigir_o_vencimento_na_conferencia(client, casa):
+    """O arquivo nem sempre diz, e as vezes diz errado.
+
+    Quem confere e quem sabe - e a correcao tem de caber na mesma tela, antes de
+    gravar. Depois de gravado, o mes de um lancamento era justamente o que nao
+    dava para arrumar.
+    """
+    from tests.test_importador_xlsx import FATURA_ITAU, _planilha
+
+    lote = client.post(
+        "/api/v1/imports",
+        data={"account_id": casa["cartao"]},
+        files={"file": ("fatura.xlsx", _planilha(FATURA_ITAU), "application/octet-stream")},
+        headers=casa["headers"],
+    ).json()
+    assert lote["vencimento_da_fatura"] == "2026-01-09"
+
+    client.post(
+        f"/api/v1/imports/{lote['id']}/confirm",
+        json={"vencimento_da_fatura": "2026-02-09"},
+        headers=casa["headers"],
+    ).raise_for_status()
+
+    assert consumo(client, casa, "2026-01-01") == Decimal("0.00")
+    assert consumo(client, casa, "2026-02-01") == Decimal("1050.00")

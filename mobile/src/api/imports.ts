@@ -113,6 +113,7 @@ export async function confirmImport(
   selectedIndexes: number[],
   categoriasEscolhidas?: Record<number, string>,
   direcoesEscolhidas?: Record<number, 'ENTRADA' | 'SAIDA'>,
+  vencimentoDaFatura?: string,
 ): Promise<StatementImport> {
   const base = await getServerUrl();
   const token = await getToken();
@@ -131,6 +132,7 @@ export async function confirmImport(
       ...(direcoesEscolhidas && Object.keys(direcoesEscolhidas).length > 0
         ? { direction_overrides: direcoesEscolhidas }
         : {}),
+      ...(vencimentoDaFatura ? { vencimento_da_fatura: vencimentoDaFatura } : {}),
     }),
   });
 

@@ -299,6 +299,13 @@ export interface StatementImport {
   rows_duplicated: number;
   rows_imported: number;
   warnings: string[];
+  /**
+   * quando a fatura vence — e, portanto, em que mês tudo dela conta.
+   *
+   * Vem do próprio arquivo quando ele diz ("Vencimento 09/01/2026"). É a
+   * informação que transforma a data de caixa de palpite em leitura.
+   */
+  vencimento_da_fatura: string | null;
   preview: ImportPreviewRow[];
   created_at: string;
 }
@@ -343,9 +350,15 @@ export interface AccountCreate {
   type?: AccountType;
   owner_member_id?: string;
   current_balance?: number;
-  credit_limit?: number;
-  statement_close_day?: number;
-  statement_due_day?: number;
+  /**
+   * `null` apaga o valor; ausente deixa como está.
+   *
+   * A diferença importa na edição: mandar o dia do vencimento não pode apagar o
+   * limite do cartão, e limpar o campo na tela tem de apagar de verdade.
+   */
+  credit_limit?: number | null;
+  statement_close_day?: number | null;
+  statement_due_day?: number | null;
   is_shared?: boolean;
   is_business?: boolean;
 }

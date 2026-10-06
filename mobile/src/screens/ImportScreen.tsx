@@ -77,6 +77,22 @@ const ACCEPTED = [
   '*/*',
 ];
 
+/** "2026-01-09" -> "09/01/2026", para o campo que ele digita. */
+function paraBR(iso: string): string {
+  if (!iso) return '';
+  const [a, m, d] = iso.slice(0, 10).split('-');
+  return `${d}/${m}/${a}`;
+}
+
+/** "09/01/2026" -> "2026-01-09". Devolve null quando não dá para entender. */
+function deBR(texto: string): string | null {
+  const partes = texto.trim().split(/[/.\-\s]+/).filter(Boolean);
+  if (partes.length < 3) return null;
+  const [dia, mes, ano] = partes.map(Number);
+  if (!dia || !mes || mes > 12 || dia > 31 || ano < 2000 || ano > 2100) return null;
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
 type Lado = 'ENTRADA' | 'SAIDA';
 type LinhaDoExtrato = { index: number; direction: Lado };
 
@@ -136,6 +152,10 @@ export function ImportScreen(): React.ReactElement {
   // e as compras viraram renda. Sem desfazer, a saída era apagar dezenas de
   // linhas uma por uma - e reimportar o arquivo corrigido deixaria as duas
   // versões somadas, porque a direção entra na impressão digital.
+  // Quando a fatura vence - e, portanto, em que mes TUDO dela conta. Vem do
+  // arquivo quando ele diz; isto guarda a correcao, quando ele precisa fazer uma.
+  const [vencimento, setVencimento] = useState('');
+  const [trocandoVencimento, setTrocandoVencimento] = useState(false);
   const [lotes, setLotes] = useState<StatementImportResumo[]>([]);
   const [confirmandoDesfazer, setConfirmandoDesfazer] = useState<string | null>(null);
   const [desfazendo, setDesfazendo] = useState<string | null>(null);
@@ -273,7 +293,13 @@ export function ImportScreen(): React.ReactElement {
     if (!batch) return;
     setPhase('gravando');
     try {
-      const resultado = await confirmImport(batch.id, [...selected], escolhidas, direcoes);
+      const resultado = await confirmImport(
+        batch.id,
+        [...selected],
+        escolhidas,
+        direcoes,
+        deBR(vencimento) ?? undefined,
+      );
       setBatch(resultado);
       recalcular();
       setPhase('pronto');
@@ -322,6 +348,8 @@ export function ImportScreen(): React.ReactElement {
             setSelected(new Set());
             setEscolhidas({});
             setDirecoes({});
+            setVencimento('');
+            setTrocandoVencimento(false);
             setEscolhendo(null);
             setPhase('escolha');
           }}
@@ -525,6 +553,42 @@ export function ImportScreen(): React.ReactElement {
             <Text style={styles.warningText}>{aviso}</Text>
           </View>
         ))}
+
+        {batch.vencimento_da_fatura || contaEscolhida?.type === 'CARTAO_CREDITO' ? (
+          <View style={styles.vencimento}>
+            <Text style={styles.vencimentoTitulo}>
+              {`Esta fatura vence em ${dayLabel(deBR(vencimento) ?? batch.vencimento_da_fatura ?? '')}`}
+            </Text>
+            <Text style={styles.hint}>
+              {batch.vencimento_da_fatura
+                ? 'Veio escrito no arquivo. Todas as compras daqui contam nesse mês — é quando o dinheiro sai da conta.'
+                : 'O arquivo não disse quando vence, então calculei pelos dias do cartão. Corrija se não for isso.'}
+            </Text>
+            {trocandoVencimento ? (
+              <Field
+                label=""
+                value={vencimento}
+                onChangeText={setVencimento}
+                placeholder="dd/mm/aaaa"
+                ajuda={
+                  deBR(vencimento)
+                    ? `Tudo deste arquivo vai contar em ${mesLabel(deBR(vencimento) as string)}.`
+                    : 'Digite a data que está na fatura.'
+                }
+              />
+            ) : (
+              <Pressable
+                onPress={() => {
+                  setTrocandoVencimento(true);
+                  setVencimento(paraBR(batch.vencimento_da_fatura ?? ''));
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.vencimentoTrocar}>trocar a data</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : null}
 
         <Pressable
           onPress={virarTudo}
@@ -795,6 +859,15 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   explain: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  vencimento: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  vencimentoTitulo: { ...typography.body, color: colors.text, fontWeight: '700' },
+  vencimentoTrocar: { ...typography.caption, color: colors.red, fontWeight: '700', marginTop: 6 },
   virarTudo: {
     borderWidth: 1,
     borderColor: colors.border,

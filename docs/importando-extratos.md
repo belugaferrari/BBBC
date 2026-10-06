@@ -160,6 +160,33 @@ Virar **esquece as categorias sugeridas**: elas eram do outro lado, e "Salário"
 num gasto não quer dizer nada. O que você não escolher vai para "A definir", que
 aparece no Resumo cobrando até você dizer o que foi.
 
+### A fatura diz quando vence, e é isso que manda
+
+A fatura do Itaú traz, no cabeçalho, **"Vencimento 09/01/2026"**. Essa é a
+informação mais valiosa do arquivo: **toda compra de uma fatura sai da conta no
+dia em que a fatura é paga** — a de ontem e a sexta parcela de algo comprado ano
+passado. Com ela não há nada a deduzir.
+
+A conferência mostra a data lida (“Esta fatura vence em 09/01/2026 — todas as
+compras daqui contam nesse mês”) e deixa **trocar**, para quando o arquivo não
+disser ou disser errado.
+
+Quando o arquivo não traz vencimento (OFX, CSV simples), aí sim a data é
+calculada pelos dias do cartão — e a tela avisa que calculou.
+
+Duas exceções dentro da fatura:
+
+- a linha **"Pagamento Efetuado"** é o pagamento da fatura **anterior**, e
+  aconteceu no dia dela — não é carimbada com este vencimento;
+- **estornos** entram como crédito do cartão, no dia deles.
+
+### O parcelamento vem em coluna própria
+
+O Itaú escreve **"Parcela 2 de 4"** numa coluna ao lado, e não dentro da
+descrição. O sistema lê as duas formas. Isso importa muito mais do que parece:
+sem ler a coluna, a parcela de uma compra feita em julho entrava como se fosse
+compra de julho — e ia parar num mês em que nada saiu da conta por causa dela.
+
 ### Em que mês a compra do cartão conta
 
 No dia em que foi feita ela **aparece**; no mês em que a fatura é paga ela

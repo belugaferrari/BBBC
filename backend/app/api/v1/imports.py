@@ -5,6 +5,7 @@ pre-visualizacao sem gravar nada; `POST /imports/{id}/confirm` grava o que voce
 conferiu.
 """
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -37,6 +38,22 @@ def _rotulo(row: StatementImport) -> str:
     return f"Extrato {row.file_format}"
 
 
+def _vencimento_da_fatura(row: StatementImport) -> str | None:
+    """A data em que todas as compras deste lote saem da conta, quando ha uma.
+
+    Nao e coluna no banco: e o que as linhas de SAIDA tem em comum. Numa fatura
+    de cartao elas compartilham o vencimento, e e isso que a tela precisa
+    mostrar ("tudo aqui conta em janeiro"). Em extrato de conta corrente cada
+    linha tem a sua data, nao ha nada em comum, e a tela nao mostra nada.
+    """
+    datas = {
+        linha.get("paid_on")
+        for linha in (row.preview or [])
+        if linha.get("direction") == "SAIDA" and linha.get("paid_on")
+    }
+    return datas.pop() if len(datas) == 1 else None
+
+
 def _serialize(row: StatementImport) -> dict:
     return {
         "id": row.id,
@@ -50,6 +67,7 @@ def _serialize(row: StatementImport) -> dict:
         "rows_duplicated": row.rows_duplicated,
         "rows_imported": row.rows_imported,
         "warnings": row.warnings,
+        "vencimento_da_fatura": _vencimento_da_fatura(row),
         "preview": row.preview,
         "created_at": row.created_at,
     }
@@ -107,6 +125,10 @@ class ConfirmIn(BaseModel):
     # ultima vez que uma linha entrou do lado errado, nao havia como consertar
     # pela tela, so no banco de dados.
     direction_overrides: dict[int, str] | None = None
+    # Quando a fatura vence - e, portanto, em que mes TODAS as compras dela
+    # contam. O arquivo quase sempre diz, e a tela mostra o que leu; isto aqui e
+    # para quando ele precisa corrigir, ou quando o arquivo nao disse nada.
+    vencimento_da_fatura: date | None = None
     # Por linha: PRO_LABORE, LUCROS ou ADIANTAMENTO. Decide o IR da entrada que
     # cobre a despesa; so vale em conta da empresa. Omitido, vai o padrao, que e
     # o unico que nao afirma nada sobre imposto.
@@ -138,6 +160,7 @@ def confirm(
             selected_indexes=payload.selected_indexes,
             category_overrides=payload.category_overrides,
             direction_overrides=payload.direction_overrides,
+            vencimento_da_fatura=payload.vencimento_da_fatura,
             contrapartidas=payload.contrapartidas,
         )
     # ContrapartidaDesconhecida e ValueError: cai aqui junto com os demais

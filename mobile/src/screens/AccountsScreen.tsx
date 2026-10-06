@@ -11,8 +11,8 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useAccounts, useCreateAccount, useMe, useMembers } from '@/api/queries';
-import type { AccountType } from '@/api/types';
+import { useAccounts, useCreateAccount, useMe, useMembers, useUpdateAccount } from '@/api/queries';
+import type { Account, AccountType } from '@/api/types';
 import {
   Botao,
   Card,
@@ -62,6 +62,7 @@ export function AccountsScreen(): React.ReactElement {
   const { data: members } = useMembers();
   const { data: eu } = useMe();
   const criar = useCreateAccount();
+  const atualizar = useUpdateAccount();
 
   const [nome, setNome] = useState('');
   const [titular, setTitular] = useState<string | null>(null);
@@ -75,9 +76,14 @@ export function AccountsScreen(): React.ReactElement {
   const [daEmpresa, setDaEmpresa] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [gravada, setGravada] = useState<string | null>(null);
+  // qual conta está sendo corrigida. null = o formulário está cadastrando uma
+  // nova. É o mesmo formulário nos dois casos, de propósito: os campos são os
+  // mesmos, e duas telas quase iguais envelhecem mal.
+  const [editando, setEditando] = useState<string | null>(null);
 
   const donoEscolhido = titular ?? eu?.id ?? null;
-  const podeGravar = nome.trim().length > 0 && Boolean(donoEscolhido) && !criar.isPending;
+  const ocupado = criar.isPending || atualizar.isPending;
+  const podeGravar = nome.trim().length > 0 && Boolean(donoEscolhido) && !ocupado;
 
   const cartao = tipo === 'CARTAO_CREDITO';
 
@@ -99,12 +105,51 @@ export function AccountsScreen(): React.ReactElement {
     setDaEmpresa(false);
     setDetalhes(false);
     setTipo('CONTA_CORRENTE');
+    setEditando(null);
+  }
+
+  function abrirParaEditar(conta: Account): void {
+    setErro(null);
+    setGravada(null);
+    setEditando(conta.id);
+    setNome(conta.name);
+    setTipo(conta.type);
+    setTitular(conta.owner_member_id);
+    setLimite(conta.credit_limit ?? '');
+    setFechamento(conta.statement_close_day ? String(conta.statement_close_day) : '');
+    setVencimento(conta.statement_due_day ? String(conta.statement_due_day) : '');
+    setCompartilhada(conta.is_shared);
+    setDaEmpresa(conta.is_business);
+    // os detalhes abrem junto: quem toca para corrigir quase sempre vem por
+    // causa de um deles
+    setDetalhes(true);
   }
 
   async function gravar(): Promise<void> {
     if (!podeGravar || !donoEscolhido) return;
     setErro(null);
     setGravada(null);
+    if (editando) {
+      try {
+        const conta = await atualizar.mutateAsync({
+          id: editando,
+          name: nome.trim(),
+          type: tipo,
+          owner_member_id: donoEscolhido,
+          // No saldo não se mexe: ele é apurado pelos lançamentos, não digitado.
+          ...(cartao ? { credit_limit: paraNumero(limite) ?? null } : {}),
+          statement_close_day: paraDia(fechamento) ?? null,
+          statement_due_day: paraDia(vencimento) ?? null,
+          is_shared: compartilhada,
+          is_business: daEmpresa || tipo === 'PJ',
+        });
+        setGravada(conta.name);
+        limpar();
+      } catch (err) {
+        setErro(err instanceof Error ? err.message : 'Nao consegui salvar a conta.');
+      }
+      return;
+    }
     try {
       const conta = await criar.mutateAsync({
         name: nome.trim(),
@@ -143,17 +188,32 @@ export function AccountsScreen(): React.ReactElement {
         ) : (
           <>
             {(accounts ?? []).map((conta) => (
-              <View key={conta.id} style={styles.linha}>
+              <Pressable
+                key={conta.id}
+                onPress={() => abrirParaEditar(conta)}
+                accessibilityRole="button"
+                accessibilityLabel={`Corrigir ${conta.name}`}
+                style={[styles.linha, editando === conta.id && styles.linhaEditando]}
+              >
                 <View style={styles.linhaMain}>
                   <Text style={styles.linhaNome}>{conta.name}</Text>
                   <Text style={styles.linhaTipo}>
                     {ROTULO_TIPO[conta.type] ?? conta.type}
                     {conta.is_business ? ' · da empresa' : ''}
                     {conta.is_shared ? ' · conjunta' : ''}
+                    {conta.type === 'CARTAO_CREDITO' && conta.statement_due_day
+                      ? ` · vence dia ${conta.statement_due_day}`
+                      : ''}
+                    {conta.type === 'CARTAO_CREDITO' && !conta.statement_due_day
+                      ? ' · sem os dias da fatura'
+                      : ''}
                   </Text>
                 </View>
-                <Text style={styles.linhaSaldo}>{money(conta.current_balance)}</Text>
-              </View>
+                <View style={styles.linhaFim}>
+                  <Text style={styles.linhaSaldo}>{money(conta.current_balance)}</Text>
+                  <Text style={styles.linhaCorrigir}>corrigir</Text>
+                </View>
+              </Pressable>
             ))}
             <View style={styles.totalLinha}>
               <Text style={styles.totalRotulo}>Somando as suas</Text>
@@ -163,10 +223,24 @@ export function AccountsScreen(): React.ReactElement {
         )}
       </Card>
 
-      <SectionTitle>Cadastrar conta</SectionTitle>
+      <SectionTitle>{editando ? 'Corrigir conta' : 'Cadastrar conta'}</SectionTitle>
       <Card>
-        {gravada ? <Mensagem tom="ok">{`Pronto: "${gravada}" foi cadastrada.`}</Mensagem> : null}
+        {gravada ? (
+          <Mensagem tom="ok">{`Pronto: "${gravada}" foi salva.`}</Mensagem>
+        ) : null}
         {erro ? <Mensagem tom="erro">{erro}</Mensagem> : null}
+        {editando ? (
+          <>
+            <Text style={styles.explica}>
+              Os lançamentos que já entraram mantêm o mês que tinham. Trocar os dias da fatura
+              vale para o que vier daqui em diante — para refazer um extrato já importado, use
+              “desfazer” em Importar e mande o arquivo de novo.
+            </Text>
+            <Botao tom="secundario" onPress={limpar}>
+              Cancelar e cadastrar uma nova
+            </Botao>
+          </>
+        ) : null}
 
         <Field
           label="Nome do banco"
@@ -211,15 +285,17 @@ export function AccountsScreen(): React.ReactElement {
 
         {detalhes ? (
           <View style={styles.detalhes}>
-            <Field
-              label="Saldo de hoje"
-              value={saldo}
-              onChangeText={setSaldo}
-              placeholder="0,00"
-              keyboardType="decimal-pad"
-              opcional
-              ajuda="Em branco, começa em zero. O saldo se ajusta sozinho conforme os lançamentos entram."
-            />
+            {editando ? null : (
+              <Field
+                label="Saldo de hoje"
+                value={saldo}
+                onChangeText={setSaldo}
+                placeholder="0,00"
+                keyboardType="decimal-pad"
+                opcional
+                ajuda="Em branco, começa em zero. O saldo se ajusta sozinho conforme os lançamentos entram."
+              />
+            )}
             {cartao ? (
               <Field
                 label="Limite do cartão"
@@ -237,7 +313,7 @@ export function AccountsScreen(): React.ReactElement {
               placeholder="1 a 31"
               keyboardType="number-pad"
               opcional
-              ajuda="Serve para o sistema avisar quando um extrato do mês não chegou."
+              ajuda="Serve para avisar quando um extrato não chegou e, no cartão, para saber em que fatura cada compra cai."
             />
             <Field
               label="Dia do vencimento"
@@ -246,6 +322,11 @@ export function AccountsScreen(): React.ReactElement {
               placeholder="1 a 31"
               keyboardType="number-pad"
               opcional
+              ajuda={
+                cartao
+                  ? 'No cartão é o dia em que o dinheiro sai da conta — e é o mês dele que o Resumo conta.'
+                  : undefined
+              }
             />
             <SwitchRow
               label="Conta conjunta"
@@ -263,7 +344,11 @@ export function AccountsScreen(): React.ReactElement {
         ) : null}
 
         <Botao onPress={gravar} disabled={!podeGravar}>
-          {criar.isPending ? 'Cadastrando…' : 'Cadastrar conta'}
+          {ocupado
+            ? 'Salvando…'
+            : editando
+              ? 'Salvar as correções'
+              : 'Cadastrar conta'}
         </Botao>
       </Card>
     </Screen>
@@ -272,6 +357,10 @@ export function AccountsScreen(): React.ReactElement {
 
 const styles = StyleSheet.create({
   vazio: { ...typography.caption, color: colors.textMuted },
+  explica: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  linhaEditando: { backgroundColor: colors.surfaceAlt },
+  linhaFim: { alignItems: 'flex-end' },
+  linhaCorrigir: { ...typography.caption, color: colors.red, fontWeight: '700' },
   linha: {
     flexDirection: 'row',
     alignItems: 'center',

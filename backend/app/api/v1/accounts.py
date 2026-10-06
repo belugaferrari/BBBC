@@ -108,6 +108,66 @@ def create_account(payload: AccountIn, current: CurrentMember, db: DbSession) ->
     return account
 
 
+class AccountUpdate(BaseModel):
+    """O que da para corrigir numa conta ja cadastrada.
+
+    "Eu preciso poder EDITAR as informacoes das Contas que mando pro sistema."
+    Cadastro de conta se faz uma vez e se convive com ele por anos: o cartao
+    muda de dia de vencimento, o apelido ficou ruim, a conta que era so dele
+    virou conjunta. Sem edicao, a saida era arquivar e criar outra - e o
+    historico ficava na conta velha, partido em duas.
+
+    `current_balance` fica de fora: saldo nao se digita, se apura. Ele e
+    recalculado pela conciliacao a partir dos lancamentos, e deixar alguem
+    escrever por cima faria o saldo divergir do razao sem deixar rastro.
+    """
+
+    name: str | None = Field(default=None, min_length=1)
+    type: AccountType | None = None
+    credit_limit: Decimal | None = None
+    statement_close_day: int | None = Field(default=None, ge=1, le=31)
+    statement_due_day: int | None = Field(default=None, ge=1, le=31)
+    is_shared: bool | None = None
+    is_business: bool | None = None
+    owner_member_id: UUID | None = None
+
+    @field_validator("name", mode="after")
+    @classmethod
+    def _sem_agencia_nem_conta(cls, valor: str | None) -> str | None:
+        if valor is None:
+            return None
+        limpo = sem_digitos_sensiveis(valor).strip()
+        if not limpo:
+            raise ValueError("Diga o nome do banco.")
+        return limpo
+
+
+@router.patch("/{account_id}", response_model=AccountOut)
+def update_account(
+    account_id: UUID, payload: AccountUpdate, current: CurrentMember, db: DbSession
+) -> Account:
+    """Corrige uma conta. So o que foi enviado muda.
+
+    Os lancamentos que ja existem NAO sao recalculados quando os dias da fatura
+    mudam - e isso e escolha, nao esquecimento. Boa parte deles tem o mes de
+    caixa lido do proprio arquivo ("Vencimento 09/01/2026"), que e informacao
+    melhor do que qualquer conta a partir do dia de fechamento; recalcular por
+    cima trocaria um dado por um palpite. Para refazer um lote com os dias
+    certos, o caminho e desfazer a importacao e importar de novo.
+    """
+    account = db.get(Account, account_id)
+    if not account or account.family_id != current.family_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conta nao encontrada")
+
+    if payload.owner_member_id:
+        owned_member(db, payload.owner_member_id, current)
+
+    for campo, valor in payload.model_dump(exclude_unset=True).items():
+        setattr(account, campo, valor)
+    db.flush()
+    return account
+
+
 @router.post("/{account_id}/archive", response_model=AccountOut)
 def archive_account(account_id: UUID, current: CurrentMember, db: DbSession) -> Account:
     account = db.get(Account, account_id)

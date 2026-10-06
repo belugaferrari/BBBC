@@ -147,6 +147,30 @@ export function useAccounts() {
  * Cadastrar conta. Invalida o que depende da lista: a tela de importar escolhe
  * a conta de destino daqui, e o painel soma saldos.
  */
+/**
+ * Corrige uma conta já cadastrada.
+ *
+ * "Eu preciso poder EDITAR as informações das Contas que mando pro sistema."
+ * Cadastro de conta se faz uma vez e se convive com ele por anos: o cartão muda
+ * de vencimento, o apelido ficou ruim, a conta que era só dele virou conjunta.
+ * Sem isto, a saída era arquivar e criar outra — e o histórico ficava partido
+ * em duas contas.
+ */
+export function useUpdateAccount() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...input }: Partial<AccountCreate> & { id: string }) =>
+      api.patch<Account>(`/accounts/${id}`, input),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: queryKeys.accounts });
+      client.invalidateQueries({ queryKey: ['dashboard'] });
+      client.invalidateQueries({ queryKey: queryKeys.netWorth });
+      client.invalidateQueries({ queryKey: ['card-summary'] });
+      client.invalidateQueries({ queryKey: ['statement-checklist'] });
+    },
+  });
+}
+
 export function useCreateAccount() {
   const client = useQueryClient();
   return useMutation({

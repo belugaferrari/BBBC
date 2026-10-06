@@ -251,3 +251,81 @@ def test_a_planilha_de_fatura_com_compra_positiva_vira_gasto():
     assert [t.direction for t in ajustado.transactions] == [TxDirection.SAIDA] * 3
     assert sum(t.amount for t in ajustado.transactions) == Decimal("1035.80")
     assert all("TOTAL" not in t.description for t in ajustado.transactions)
+
+
+# ---------------------------------------------------------------------------
+# A fatura do Itau como ela e de verdade
+# ---------------------------------------------------------------------------
+# O formato foi copiado de uma fatura real (os dados, nao: nome, agencia e conta
+# aqui sao inventados). O que importa e o FORMATO, e ele tem tres coisas que
+# nenhuma outra planilha tinha:
+#
+#   * um cabecalho com varias linhas antes da tabela, incluindo uma tabela
+#     propria com "Vencimento" e a data em que a fatura foi paga;
+#   * uma COLUNA de parcelamento ("Parcela 2 de 4"), separada da descricao;
+#   * compras positivas, pagamento e estornos negativos.
+FATURA_ITAU = [
+    ["", "Nome", "Fulana De Tal"],
+    ["", "Agência", "0000"],
+    ["", "Conta", "00000-0"],
+    ["", "Fatura Paga - Janeiro/2026"],
+    ["", "Cartão", "", "", "", "", "Valor", "", "Vencimento", ""],
+    ["", "Banco Cartao - final 0000", "", "Você pagou R$ 1.000,00 de", "", "",
+     1000.00, "", date(2026, 1, 9), ""],
+    ["", "Lançamentos"],
+    ["", "Data", "Lançamento", "Parcelamento", "Valor", "", "Titularidade"],
+    ["", date(2025, 12, 9), "Pagamento Efetuado", "", -900.00, "", "Titular"],
+    ["", date(2025, 12, 20), "Mercado Do Bairro", "", 300.00, "", "Titular"],
+    ["", date(2025, 12, 15), "Loja De Moveis", "Parcela 1 de 4", 250.00, "", "Titular"],
+    # a parcela velha: comprada em julho, cobrada AGORA
+    ["", date(2025, 7, 4), "Assinatura Anual", "Parcela 6 de 6", 500.00, "", "Titular"],
+    ["", date(2025, 12, 12), "Estorno De Anuidade", "", -50.00, "", "Titular"],
+]
+
+
+def test_le_o_vencimento_que_a_fatura_declara():
+    """E a informacao mais valiosa do arquivo, e estava sendo ignorada.
+
+    Com ela, nao e preciso deduzir em que mes cada compra sai da conta a partir
+    do dia de fechamento: toda compra de uma fatura e cobrada no dia em que a
+    fatura e paga.
+    """
+    extrato = parse(_planilha(FATURA_ITAU))
+    assert extrato.vencimento == date(2026, 1, 9)
+
+
+def test_le_o_parcelamento_da_coluna_propria():
+    """O Itau escreve "Parcela 2 de 4" numa COLUNA, e nao na descricao.
+
+    Lendo so a descricao, essas linhas entravam como compra avulsa - e a parcela
+    de uma compra de julho ia parar em agosto, num mes em que nada saiu da
+    conta por causa dela.
+    """
+    extrato = parse(_planilha(FATURA_ITAU))
+    por_descricao = {t.description: t for t in extrato.transactions}
+
+    moveis = por_descricao["Loja De Moveis"]
+    assert (moveis.installment_no, moveis.installment_total) == (1, 4)
+
+    antiga = por_descricao["Assinatura Anual"]
+    assert (antiga.installment_no, antiga.installment_total) == (6, 6)
+
+    # e a linha sem parcelamento continua sem parcela nenhuma
+    assert por_descricao["Mercado Do Bairro"].installment_no is None
+
+
+def test_a_soma_das_compras_bate_com_a_fatura():
+    """As compras somam o bruto; o liquido que a fatura cobra desconta os
+    estornos. Os dois numeros existem, e nenhum dos dois e o outro."""
+    from app.services.importers import fatura as ajuste
+
+    extrato = ajuste.ajustar(parse(_planilha(FATURA_ITAU)), e_cartao=True)
+    compras = [t for t in extrato.transactions if t.direction == TxDirection.SAIDA]
+    creditos = [t for t in extrato.transactions if t.direction == TxDirection.ENTRADA]
+
+    assert sum(t.amount for t in compras) == Decimal("1050.00")
+    # o pagamento da fatura anterior e o estorno, cada um com o seu sinal
+    assert {t.description for t in creditos} == {
+        "Pagamento Efetuado",
+        "Estorno De Anuidade",
+    }
