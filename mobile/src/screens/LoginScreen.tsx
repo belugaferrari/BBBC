@@ -12,12 +12,13 @@ import {
 } from 'react-native';
 
 import { getServerUrl, login, setServerUrl } from '@/api/client';
-import { isLocalHostUrl } from '@/api/serverUrl';
+import { comAPortaDoServidor, isLocalHostUrl, problemaNoEndereco } from '@/api/serverUrl';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.ReactElement {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [senhaVisivel, setSenhaVisivel] = useState(false);
   const [server, setServer] = useState('');
   const [showServer, setShowServer] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,10 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
   }, [noCelular]);
 
   const faltaOEndereco = noCelular && (!server.trim() || isLocalHostUrl(server));
+  // O aviso aparece enquanto ele digita, e nao depois de falhar: errar a porta
+  // e descobrir pelo erro da requisicao custa um minuto e uma duvida ("sera que
+  // e a senha?") que nao precisava existir.
+  const avisoDoEndereco = noCelular ? problemaNoEndereco(server) : null;
 
   async function submit(): Promise<void> {
     if (faltaOEndereco) {
@@ -82,14 +87,31 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
         keyboardType="email-address"
         style={styles.input}
       />
-      <TextInput
-        value={password}
-        onChangeText={setPassword}
-        placeholder="Senha"
-        placeholderTextColor={colors.textFaint}
-        secureTextEntry
-        style={styles.input}
-      />
+      {/* O olho existe por um caso concreto: ele nao conseguiu entrar e
+          passou a suspeitar da senha, sem ter como conferir o que digitou.
+          Senha escondida num teclado de celular, com acento e maiuscula, e
+          chute - e o chute errado manda procurar o problema no lugar errado. */}
+      <View style={styles.senhaLinha}>
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Senha"
+          placeholderTextColor={colors.textFaint}
+          secureTextEntry={!senhaVisivel}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[styles.input, styles.senhaInput]}
+        />
+        <Pressable
+          onPress={() => setSenhaVisivel((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={senhaVisivel ? 'Esconder a senha' : 'Mostrar a senha'}
+          hitSlop={10}
+          style={styles.olho}
+        >
+          <Text style={styles.olhoTexto}>{senhaVisivel ? 'esconder' : 'mostrar'}</Text>
+        </Pressable>
+      </View>
 
       {showServer || faltaOEndereco ? (
         <>
@@ -103,6 +125,17 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
             keyboardType="url"
             style={styles.input}
           />
+          {avisoDoEndereco ? (
+            <Pressable
+              onPress={() => setServer(comAPortaDoServidor(server))}
+              accessibilityRole="button"
+              hitSlop={6}
+            >
+              <Text style={styles.aviso}>
+                {avisoDoEndereco} <Text style={styles.avisoAcao}>Tocar para corrigir.</Text>
+              </Text>
+            </Pressable>
+          ) : null}
           <Text style={styles.serverHint}>
             {faltaOEndereco
               ? 'Endereço do computador onde o sistema está rodando. A janela do ABRIR mostra esse número no passo 3 (“Este computador e o …”). Digite o endereço e a porta 8000 — o app completa o resto. Fica guardado; você não digita de novo.'
@@ -125,6 +158,12 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
 }
 
 const styles = StyleSheet.create({
+  senhaLinha: { justifyContent: 'center' },
+  senhaInput: { paddingRight: 96 },
+  olho: { position: 'absolute', right: 16, paddingVertical: 8, paddingHorizontal: 4 },
+  olhoTexto: { color: colors.textMuted, fontSize: 14, fontWeight: '600' },
+  aviso: { color: colors.red, fontSize: 14, marginTop: 8, lineHeight: 20 },
+  avisoAcao: { color: colors.red, fontWeight: '700', textDecorationLine: 'underline' },
   screen: {
     flex: 1,
     backgroundColor: colors.background,

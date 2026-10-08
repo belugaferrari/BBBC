@@ -134,6 +134,81 @@ def migrate() -> None:
             )
 
 
+def listar_logins() -> list[dict]:
+    """Quem tem senha para entrar no sistema, com e-mail.
+
+    Serve a uma pergunta que vem antes de trocar a senha: "qual era o meu
+    e-mail mesmo?". Errar o e-mail e o engano mais provavel de quem ja esta
+    nervoso por nao conseguir entrar, e a lista responde antes de ele chutar.
+
+    So o apelido, nunca o nome completo - a regra vale para o terminal como
+    vale para o aplicativo.
+    """
+    with SessionLocal() as db:
+        linhas = db.execute(
+            text(
+                """
+                SELECT COALESCE(nickname, split_part(full_name, ' ', 1)) AS nome,
+                       email
+                  FROM members
+                 WHERE email IS NOT NULL AND password_hash IS NOT NULL
+                 ORDER BY email
+                """
+            )
+        ).mappings().all()
+    return [{"nome": r["nome"], "email": r["email"]} for r in linhas]
+
+
+def trocar_senha(email: str, senha: str) -> str:
+    """Troca a senha de um login. Devolve o nome de quem teve a senha trocada.
+
+    Existe por uma noite concreta: ele nao conseguiu entrar no celular, passou a
+    suspeitar da senha, e nao havia como conferir nem como trocar - o jeito
+    seria mexer no banco de dados a mao. Esquecer a senha do proprio sistema nao
+    pode ser um beco sem saida.
+
+    So roda em quem esta na frente do computador onde o banco mora, que e o
+    unico lugar de onde isso pode ser pedido. Nao ha "esqueci minha senha" pela
+    rede, e nao vai haver: um e-mail de recuperacao seria uma porta a mais para
+    um sistema que, de proposito, nao tem porta nenhuma para fora.
+    """
+    if len(senha) < 8:
+        raise RuntimeError("a senha precisa de pelo menos 8 caracteres")
+
+    with SessionLocal.begin() as db:
+        linha = db.execute(
+            text(
+                """
+                SELECT id, COALESCE(nickname, full_name) AS nome
+                  FROM members
+                 WHERE lower(email) = lower(:email)
+                """
+            ),
+            {"email": email.strip()},
+        ).mappings().one_or_none()
+        if linha is None:
+            conhecidos = [
+                r[0]
+                for r in db.execute(
+                    text(
+                        "SELECT email FROM members "
+                        "WHERE email IS NOT NULL AND password_hash IS NOT NULL "
+                        "ORDER BY email"
+                    )
+                )
+            ]
+            raise RuntimeError(
+                f"nenhum login com o e-mail '{email}'. "
+                f"Os que existem: {', '.join(conhecidos) or 'nenhum'}"
+            )
+
+        db.execute(
+            text("UPDATE members SET password_hash = :hash WHERE id = :id"),
+            {"hash": hash_password(senha), "id": linha["id"]},
+        )
+    return str(linha["nome"])
+
+
 def count_families() -> int:
     """Quantas familias ja existem. Usado pelo script de instalacao para nao
     recriar tudo a cada vez que o usuario abre o programa."""
@@ -518,6 +593,26 @@ def main(argv: list[str] | None = None) -> int:
         help="recalcula os avisos e envia as notificacoes pendentes",
     )
 
+    trocar = sub.add_parser(
+        "trocar-senha",
+        help="troca a senha de um login (so no computador onde o banco mora)",
+    )
+    trocar.add_argument("--email", required=True)
+    trocar.add_argument(
+        "--senha",
+        help="se omitida, e pedida sem aparecer na tela (e sem ficar no historico)",
+    )
+    # A senha na linha de comando fica visivel na lista de processos do Windows e
+    # no historico do terminal. Pela entrada padrao ela nao passa por nenhum dos
+    # dois - e esse e o caminho que o TROCAR-SENHA usa.
+    trocar.add_argument(
+        "--senha-de-stdin",
+        action="store_true",
+        help="le a senha da entrada padrao (primeira linha), sem mostrar na tela",
+    )
+
+    sub.add_parser("logins", help="quem tem senha para entrar (apelido e e-mail)")
+
     sub.add_parser(
         "needs-setup",
         help="codigo de saida: 0 precisa cadastrar, 1 ja existe, 2 sem banco",
@@ -559,6 +654,31 @@ def main(argv: list[str] | None = None) -> int:
             f"{resultado['familias']} familia(s): {resultado['apagadas']} regras "
             f"antigas fora, {resultado['criadas']} do catalogo atual"
         )
+        return 0
+
+    if args.command == "logins":
+        for login in listar_logins():
+            print(f"{login['nome']}\t{login['email']}")
+        return 0
+
+    if args.command == "trocar-senha":
+        import getpass
+
+        if args.senha_de_stdin:
+            senha = sys.stdin.readline().rstrip("\r\n")
+        else:
+            senha = args.senha or getpass.getpass("Senha nova (nao aparece): ")
+        if not args.senha and not args.senha_de_stdin:
+            repetida = getpass.getpass("De novo, para conferir: ")
+            if senha != repetida:
+                print("as duas senhas nao sao iguais; nada foi alterado")
+                return 1
+        try:
+            nome = trocar_senha(args.email, senha)
+        except RuntimeError as exc:
+            print(f"nada foi alterado: {exc}")
+            return 1
+        print(f"senha trocada: {nome} ({args.email})")
         return 0
 
     if args.command == "needs-setup":

@@ -168,6 +168,16 @@ if (Test-Path $arquivoDoIp) {
 
 if ($ip) {
     Ok "Este computador e o $ip"
+    # O endereco que vai no APLICATIVO INSTALADO, escrito inteiro e pronto para
+    # copiar. Sem isto, a unica coisa grande na tela e o `exp://$ip:8081` do
+    # Expo - e foi dali que ele tirou a porta errada, caindo num "JSON Parse
+    # error" que mandava procurar erro na senha.
+    Write-Host ""
+    Write-Host "      No aplicativo INSTALADO (o APK), o campo do servidor e:" -ForegroundColor White
+    Write-Host "          ${ip}:8000" -ForegroundColor Green
+    Write-Host "      A porta e 8000 (o servidor). O 8081 que aparece aqui" -ForegroundColor White
+    Write-Host "      embaixo e do Expo, que serve a TELA - nao serve no campo." -ForegroundColor White
+    Write-Host ""
     if ($ipDeAntes -and $ipDeAntes -ne $ip) {
         Write-Host ""
         Aviso "O endereco deste computador MUDOU (era $ipDeAntes)."

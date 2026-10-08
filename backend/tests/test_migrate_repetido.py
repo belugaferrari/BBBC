@@ -17,6 +17,7 @@ import uuid
 
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("BBBC_TEST_DATABASE_URL"),
@@ -34,16 +35,19 @@ def banco_proprio(monkeypatch):
     """
     from app import cli
 
-    url = os.environ["BBBC_TEST_DATABASE_URL"]
+    url = make_url(os.environ["BBBC_TEST_DATABASE_URL"])
     nome = f"bbbc_mig_{uuid.uuid4().hex[:12]}"
-    base = url.rsplit("/", 1)[0]
+    # Trocar o nome do banco pela URL analisada, e nao cortando no ultimo "/":
+    # quando a conexao e por socket (`...?host=/var/run/postgresql`), o ultimo
+    # "/" esta DENTRO do caminho do socket, e o corte produzia um endereco que
+    # nao existe. O teste quebrava sem ter nada a ver com o que ele testa.
 
     # CREATE/DROP DATABASE nao roda dentro de transacao
     admin = create_engine(url, isolation_level="AUTOCOMMIT")
     with admin.connect() as conn:
         conn.execute(text(f'CREATE DATABASE "{nome}"'))
 
-    temporario = create_engine(f"{base}/{nome}")
+    temporario = create_engine(url.set(database=nome))
     # `migrate` usa o engine global do modulo; sem trocar aqui ele escreveria no
     # banco compartilhado e o teste nao testaria nada.
     monkeypatch.setattr(cli, "engine", temporario)

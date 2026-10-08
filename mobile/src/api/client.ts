@@ -19,7 +19,14 @@ import Constants from 'expo-constants';
 
 import { cofre } from './cofre';
 import { marcarOffline, marcarOnline } from './conexao';
-import { isLocalHostUrl, normalizeServerUrl, withLanHost } from './serverUrl';
+import {
+  PORTA_DO_APP,
+  PORTA_DO_SERVIDOR,
+  isLocalHostUrl,
+  normalizeServerUrl,
+  portaDe,
+  withLanHost,
+} from './serverUrl';
 import type { AuthToken } from './types';
 
 const TOKEN_KEY = 'bbbc.access_token';
@@ -113,10 +120,53 @@ async function request<T>(
     throw new ApiError(401, 'Sessao expirada. Entre novamente.');
   }
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, body.detail ?? 'Falha na requisicao');
+    const texto = await response.text().catch(() => '');
+    const corpo = comoJson(texto);
+    if (corpo === null && pareceHtml(texto)) throw naoEhOServidor(base, response.status);
+    throw new ApiError(response.status, corpo?.detail ?? 'Falha na requisicao');
   }
-  return (await response.json()) as T;
+
+  // O corpo e lido como TEXTO antes de virar JSON de proposito. Quando o
+  // endereco aponta para outra coisa - o servidor do Expo, o roteador, um
+  // captive portal -, a resposta e uma pagina HTML, e `response.json()` morria
+  // num "JSON Parse error: Unexpected character: <". Esse texto nao diz nada
+  // para quem so quer entrar, e manda a pessoa procurar erro na senha.
+  const texto = await response.text();
+  const corpo = comoJson(texto);
+  if (corpo === null) throw naoEhOServidor(base, response.status);
+  return corpo as T;
+}
+
+function comoJson(texto: string): any | null {  // eslint-disable-line @typescript-eslint/no-explicit-any
+  try {
+    return JSON.parse(texto);
+  } catch {
+    return null;
+  }
+}
+
+function pareceHtml(texto: string): boolean {
+  return texto.trimStart().startsWith('<');
+}
+
+/**
+ * Respondeu, mas nao e o BBBC.
+ *
+ * O caso real: a porta 8081, que e a do Expo (a tela), no lugar da 8000, que e
+ * a do servidor. A janela do INICIAR-APP mostra o 8081 em letras grandes, entao
+ * o engano e natural - e o erro que aparecia ("JSON Parse error") mandava
+ * procurar no lugar errado.
+ */
+function naoEhOServidor(base: string, status: number): ApiError {
+  const porta = portaDe(base);
+  const dica =
+    porta === PORTA_DO_APP
+      ? ` A porta ${PORTA_DO_APP} e a do aplicativo; o servidor atende na ${PORTA_DO_SERVIDOR} - troque o final para :${PORTA_DO_SERVIDOR}.`
+      : ` Confira o endereco: ele termina em :${PORTA_DO_SERVIDOR}.`;
+  return new ApiError(
+    status === 200 ? 502 : status,
+    `Esse endereco respondeu, mas nao e o servidor do BBBC.${dica}`,
+  );
 }
 
 export const api = {
