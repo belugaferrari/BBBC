@@ -21,7 +21,12 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentMember, DbSession, scope_member_id
 from app.services.money import ZERO, brl
-from app.services.queries import consolidated_balances, monthly_cashflow, year_calendar
+from app.services.queries import (
+    consolidated_balances,
+    gasto_medio_mensal,
+    monthly_cashflow,
+    year_calendar,
+)
 
 router = APIRouter(prefix="/calendario", tags=["calendario"])
 
@@ -50,6 +55,12 @@ def calendario(
     saldos = consolidated_balances(db, current.family_id, owner)
     anterior = _mes_anterior(hoje)
     fechado = monthly_cashflow(db, current.family_id, anterior, owner)
+    # "Retire aquele 'fatura em aberto', sempre que mando a fatura aqui ela ja
+    # esta paga. Pode substituir por um 'Gasto medio mensal'."
+    #
+    # A media termina no ultimo mes FECHADO, pelo mesmo motivo que o "gastos do
+    # mes anterior" ao lado dela: o mes corrente ainda esta acontecendo.
+    media = gasto_medio_mensal(db, current.family_id, owner, ate=anterior)
 
     return {
         "year": ano,
@@ -69,7 +80,15 @@ def calendario(
             # o que da para usar hoje, sem mexer em investimento
             "reservas": saldos["liquid"],
             "investido": saldos["invested"],
+            # O saldo do cartao continua saindo daqui porque o PATRIMONIO o
+            # desconta - a tela e que deixou de mostra-lo como "fatura em
+            # aberto": as faturas que ele importa ja vem pagas, e o numero
+            # acumulado ali dizia uma divida que nao existe.
             "divida_no_cartao": saldos["credit_card_debt"],
+            "gasto_medio_mensal": media["media"],
+            # quantos meses entraram na conta: a tela promete "nos ultimos 7
+            # meses" em vez de doze que ainda nao aconteceram
+            "meses_na_media": media["meses"],
             # fora do patrimonio, e dito em voz alta: o dinheiro da empresa nao
             # e da familia, mas tambem nao pode sumir da tela
             "na_empresa": saldos["na_empresa"],

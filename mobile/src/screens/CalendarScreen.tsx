@@ -170,10 +170,20 @@ export function CalendarScreen(): React.ReactElement {
             {Number(data.hoje.na_empresa) !== 0 ? (
               <Linha rotulo="Na empresa (fora do patrimônio)" valor={data.hoje.na_empresa} />
             ) : null}
-            {Number(data.hoje.divida_no_cartao) > 0 ? (
+            {/* No lugar da "fatura em aberto": as faturas que ele importa já
+                vêm pagas, e o saldo acumulado do cartão mostrado ali dizia uma
+                dívida que não existe. O gasto médio responde a pergunta que ele
+                de fato faz ao abrir esta tela — quanto custa um mês meu. */}
+            {data.hoje.meses_na_media > 0 ? (
               <Linha
-                rotulo="Fatura em aberto"
-                valor={data.hoje.divida_no_cartao}
+                rotulo={
+                  data.hoje.meses_na_media >= 12
+                    ? 'Gasto médio mensal'
+                    : `Gasto médio mensal (${data.hoje.meses_na_media} ${
+                        data.hoje.meses_na_media === 1 ? 'mês' : 'meses'
+                      })`
+                }
+                valor={data.hoje.gasto_medio_mensal}
                 tom="saida"
               />
             ) : null}
@@ -187,7 +197,9 @@ export function CalendarScreen(): React.ReactElement {
               imposto para sair de lá, então somá-lo ao patrimônio inflaria justamente o número
               que serve para decidir se dá para comprar alguma coisa.{'\n\n'}
               O mês anterior é o último fechado — o mês corrente ainda está acontecendo, e
-              comparar com ele no dia 3 não diz nada.
+              comparar com ele no dia 3 não diz nada. O gasto médio segue a mesma regra: são os
+              últimos doze meses fechados, e só contam no divisor os que tiveram movimento —
+              dividir por doze quem tem três meses de sistema mostraria um quarto do gasto real.
             </Text>
           </Card>
         </>

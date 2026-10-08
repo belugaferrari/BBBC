@@ -82,6 +82,7 @@ def casa(client):
         }
     return {
         "headers": headers,
+        "family_id": family_id,
         "corrente": corrente["id"],
         "cartao": cartao["id"],
         "cat": cats,
@@ -198,3 +199,107 @@ def test_a_compra_no_cartao_aparece_no_mes_da_fatura(client, casa):
     # comprou dia 26 com fechamento no 25: so e cobrada na fatura de agosto
     assert Decimal(meses[6]["saiu"]) == Decimal("0.00")
     assert Decimal(meses[7]["saiu"]) == Decimal("400.00")
+
+
+# ---------------------------------------------------------------- gasto medio
+
+def media(casa, ate: str = "2026-09-01") -> dict:
+    """A media chamada direto, com o fim da janela escolhido a mao: amarrar o
+    teste ao mes de hoje faria ele passar em outubro e falhar em novembro."""
+    from datetime import date
+
+    from app.db.session import SessionLocal
+    from app.services.queries import gasto_medio_mensal
+
+    ano, mes, dia = (int(p) for p in ate.split("-"))
+    with SessionLocal() as db:
+        return gasto_medio_mensal(db, casa["family_id"], None, ate=date(ano, mes, dia))
+
+
+def gastar(client, casa, quando: str, quanto: str):
+    return lancar(
+        client, casa, casa["corrente"], booked_on=quando, amount=quanto,
+        direction="SAIDA", category_id=casa["cat"]["despesas.mercado"],
+    )
+
+
+def test_a_media_divide_pelos_meses_que_tiveram_gasto(client, casa):
+    gastar(client, casa, "2026-06-10", "300.00")
+    gastar(client, casa, "2026-07-10", "600.00")
+    gastar(client, casa, "2026-08-10", "900.00")
+
+    resultado = media(casa)
+    assert resultado["meses"] == 3
+    assert resultado["media"] == Decimal("600.00")
+
+
+def test_mes_sem_movimento_nao_entra_no_divisor(client, casa):
+    """Dividir por doze quem tem tres meses de sistema daria um quarto do gasto
+    real - e o numero perigoso aqui e o que aparece baixo demais, porque e por
+    ele que se decide que da para gastar."""
+    gastar(client, casa, "2026-01-10", "1000.00")
+    gastar(client, casa, "2026-02-10", "2000.00")
+    # marco ate agosto: nada
+
+    resultado = media(casa)
+    assert resultado["meses"] == 2
+    assert resultado["media"] == Decimal("1500.00")
+
+
+def test_o_mes_corrente_fica_de_fora(client, casa):
+    """No dia 3 ele tem tres dias de gasto; entraria na media puxando-a para
+    baixo todo comeco de mes, sem ninguem ter gastado menos."""
+    gastar(client, casa, "2026-08-10", "1000.00")
+    gastar(client, casa, "2026-09-02", "40.00")
+
+    # a janela termina em agosto: setembro ainda esta acontecendo
+    resultado = media(casa, ate="2026-08-01")
+    assert resultado["meses"] == 1
+    assert resultado["media"] == Decimal("1000.00")
+
+
+def test_a_media_conta_o_mesmo_que_a_linha_de_gastos_do_mes(client, casa):
+    """As duas linhas ficam coladas na tela e as duas se chamam gasto. Se cada
+    uma contasse uma coisa, a comparacao mentiria sem parecer errada. Pagamento
+    de fatura nao e gasto em nenhuma das duas."""
+    lancar(
+        client, casa, casa["cartao"], booked_on="2026-06-10", amount="500.00",
+        direction="SAIDA", category_id=casa["cat"]["despesas.mercado"],
+    )
+    lancar(
+        client, casa, casa["corrente"], booked_on="2026-07-05", amount="500.00",
+        direction="SAIDA",
+        category_id=casa["cat"]["transferencias.pagamento_cartao"],
+    )
+
+    resultado = media(casa)
+    # a compra entrou uma vez, no mes em que a fatura venceu; o pagamento dela
+    # nao entrou nenhuma
+    assert resultado["total"] == Decimal("500.00")
+    assert resultado["meses"] == 1
+
+
+def test_a_janela_tem_doze_meses(client, casa):
+    gastar(client, casa, "2025-08-10", "9000.00")  # treze meses antes: fora
+    gastar(client, casa, "2025-10-10", "100.00")  # dentro
+    gastar(client, casa, "2026-09-10", "300.00")  # dentro
+
+    resultado = media(casa)
+    assert resultado["meses"] == 2
+    assert resultado["media"] == Decimal("200.00")
+
+
+def test_sem_gasto_nenhum_a_media_e_zero_e_nao_estoura(client, casa):
+    resultado = media(casa)
+    assert resultado["meses"] == 0
+    assert resultado["media"] == Decimal("0")
+
+
+def test_a_tela_recebe_a_media_no_lugar_da_fatura(client, casa):
+    """Ele pediu a troca: "retire aquele 'fatura em aberto', sempre que mando a
+    fatura aqui ela ja esta paga; pode substituir por um 'Gasto medio
+    mensal'"."""
+    gastar(client, casa, "2026-07-10", "800.00")
+    hoje = calendario(client, casa)["hoje"]
+    assert "gasto_medio_mensal" in hoje
+    assert "meses_na_media" in hoje

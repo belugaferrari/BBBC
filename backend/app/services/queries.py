@@ -21,6 +21,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services.caixa import meses_depois
 from app.services.mascara import nome_curto
 from app.services.money import ZERO, brl
 from app.services.sankey import FlowRow
@@ -412,6 +413,60 @@ def year_calendar(
             }
         )
     return calendario
+
+
+def gasto_medio_mensal(
+    db: Session,
+    family_id: UUID,
+    member_id: UUID | None,
+    *,
+    ate: date,
+    janela: int = 12,
+) -> dict:
+    """Quanto custa um mes tipico.
+
+    "Retire aquele 'fatura em aberto', sempre que mando a fatura aqui ela ja
+    esta paga. Pode substituir por um 'Gasto medio mensal'."
+
+    O numero medido e EXATAMENTE o mesmo da linha "Gastos de <mes>", que fica
+    coladinha nela na tela: as duas se chamam gasto, aparecem uma embaixo da
+    outra, e vao ser comparadas uma com a outra - se cada uma contasse uma
+    coisa (uma com aporte de investimento dentro, a outra sem), a comparacao
+    mentiria sem nunca parecer errada. Por isso aqui se roda o mesmo calculo do
+    mes, mes a mes, em vez de uma soma propria parecida.
+
+    Duas regras sobre quais meses entram:
+
+      * o mes corrente fica DE FORA (a janela termina no ultimo mes fechado).
+        No dia 3 ele tem tres dias de gasto, e entraria puxando a media para
+        baixo todo comeco de mes - o numero cairia sozinho sem ninguem ter
+        gastado menos;
+
+      * mes sem gasto nenhum nao conta no divisor. Dividir por doze quem tem
+        tres meses de sistema daria um quarto do gasto real, e o numero mais
+        perigoso aqui e o que aparece baixo demais: e por ele que se decide que
+        da para gastar.
+    """
+    primeiro = ate.replace(day=1)
+    meses_olhados = [meses_depois(primeiro, -passo) for passo in range(janela)]
+
+    gastos = []
+    for mes in meses_olhados:
+        gasto = monthly_cashflow(db, family_id, mes, member_id)["consumo_proprio"]
+        if gasto > ZERO:
+            gastos.append((mes, gasto))
+
+    total = sum((gasto for _, gasto in gastos), ZERO)
+    meses = len(gastos)
+    return {
+        "media": brl(total / meses) if meses else ZERO,
+        "meses": meses,
+        "total": brl(total),
+        # o mes mais antigo que entrou na conta, para a tela poder dizer
+        # "nos ultimos 7 meses" em vez de prometer doze que nao existem
+        "desde": min((mes for mes, _ in gastos), default=None),
+        "ate": primeiro,
+    }
 
 
 def sankey_rows(db: Session, family_id: UUID, month: date, member_id: UUID | None) -> list[FlowRow]:

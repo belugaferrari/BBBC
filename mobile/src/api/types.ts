@@ -28,7 +28,12 @@ export interface Calendario {
     patrimonio: string;
     reservas: string;
     investido: string;
+    /** continua vindo porque o patrimônio o desconta; a tela não o mostra mais */
     divida_no_cartao: string;
+    /** gasto de um mês típico: média dos meses fechados que tiveram movimento */
+    gasto_medio_mensal: string;
+    /** quantos meses entraram na média — a tela promete o que existe */
+    meses_na_media: number;
     na_empresa: string;
     /** o último mês FECHADO: o corrente não serve de comparação */
     mes_anterior: string;
