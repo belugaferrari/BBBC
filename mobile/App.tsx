@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { comecarAGuardar, hidratar } from '@/api/cache';
 import { ApiError, getToken } from '@/api/client';
 import { assinarConexao } from '@/api/conexao';
+import { assinarSessao } from '@/api/sessao';
 import { subirFila } from '@/api/fila';
 import { registrarAparelho } from '@/api/push';
 import { Tranca } from '@/components/Tranca';
@@ -62,6 +63,13 @@ export default function App(): React.ReactElement | null {
     // como entrar de novo.
     getToken().then((token) => setAuthenticated(Boolean(token)));
   }, []);
+
+  // Quando o servidor recusa o token (401), quem fica sabendo é o cliente HTTP.
+  // Sem este fio, o App continuava achando que havia sessão: as telas de dentro
+  // ficavam na frente, todas falhando com "Sessão expirada", e a tela de login
+  // - a única que resolveria - nunca aparecia. O aplicativo não abria e não
+  // havia como sair dele.
+  useEffect(() => assinarSessao(() => setAuthenticated(false)), []);
 
   useEffect(() => {
     // registra o aparelho para receber avisos. Falha aqui não impede o uso do

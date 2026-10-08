@@ -19,6 +19,7 @@ import Constants from 'expo-constants';
 
 import { cofre } from './cofre';
 import { marcarOffline, marcarOnline } from './conexao';
+import { sessaoCaiu } from './sessao';
 import {
   PORTA_DO_APP,
   PORTA_DO_SERVIDOR,
@@ -80,10 +81,23 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * `ehLogin` separa os dois 401 que existem aqui, e que nao sao a mesma coisa:
+ *
+ *   * o de QUALQUER tela - o servidor recusou o token guardado. A sessao
+ *     acabou, e o aplicativo tem de voltar para o login;
+ *   * o do PROPRIO login - e-mail ou senha que nao conferem. Nao ha sessao
+ *     nenhuma para expirar.
+ *
+ * Sem essa distincao, digitar a senha errada respondia "Sessao expirada. Entre
+ * novamente" na cara de quem estava, justamente, tentando entrar pela primeira
+ * vez. A frase nao tem sentido nenhum ali, e o aplicativo parecia travado.
+ */
 async function request<T>(
   path: string,
   init: RequestInit = {},
   query?: Record<string, string | number | boolean | undefined>,
+  ehLogin = false,
 ): Promise<T> {
   const base = await getServerUrl();
   const url = new URL(`${base}${path}`);
@@ -116,7 +130,19 @@ async function request<T>(
   marcarOnline();
 
   if (response.status === 401) {
+    if (ehLogin) {
+      throw new ApiError(
+        401,
+        'E-mail ou senha nao conferem. Toque em "mostrar" para conferir o que ' +
+          'digitou. Se esqueceu a senha, o TROCAR-SENHA no computador troca.',
+      );
+    }
+    // Apagar o token nao bastava. O App decide a tela pelo token que leu UMA
+    // vez, na abertura; sem este aviso ele continuava mostrando as telas de
+    // dentro, todas falhando com "Sessao expirada", e a tela de login nunca
+    // aparecia - um aplicativo que nao abre e do qual nao da para sair.
     await setToken(null);
+    sessaoCaiu('recusado');
     throw new ApiError(401, 'Sessao expirada. Entre novamente.');
   }
   if (!response.ok) {
@@ -183,11 +209,17 @@ export const api = {
 };
 
 export async function login(email: string, password: string): Promise<AuthToken> {
-  const auth = await api.post<AuthToken>('/auth/login', { email, password });
+  const auth = await request<AuthToken>(
+    '/auth/login',
+    { method: 'POST', body: JSON.stringify({ email, password }) },
+    undefined,
+    true,
+  );
   await setToken(auth.access_token);
   return auth;
 }
 
 export async function logout(): Promise<void> {
   await setToken(null);
+  sessaoCaiu('pedido');
 }

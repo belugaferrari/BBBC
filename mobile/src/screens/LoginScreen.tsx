@@ -13,6 +13,7 @@ import {
 
 import { getServerUrl, login, setServerUrl } from '@/api/client';
 import { comAPortaDoServidor, isLocalHostUrl, problemaNoEndereco } from '@/api/serverUrl';
+import { limparMotivo, motivoDaSaida, recadoDaSaida } from '@/api/sessao';
 import { colors, radius, spacing, typography } from '@/theme';
 
 export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.ReactElement {
@@ -23,6 +24,10 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
   const [showServer, setShowServer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Por que esta tela apareceu. Uma tela de login que surge sozinha, sem dizer
+  // nada, faz quem esta do outro lado suspeitar da senha - foi exatamente o que
+  // aconteceu da ultima vez, e a senha estava certa.
+  const [recado] = useState(() => recadoDaSaida(motivoDaSaida()));
 
   // No aplicativo INSTALADO (o APK), nao existe servidor do Expo de onde deduzir
   // o endereco - o padrao vira `localhost`, que no celular e o proprio aparelho.
@@ -57,6 +62,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
       // para o servidor que o usuario acabou de informar
       await setServerUrl(server);
       await login(email.trim().toLowerCase(), password);
+      limparMotivo();
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nao foi possivel entrar');
@@ -76,6 +82,8 @@ export function LoginScreen({ onSuccess }: { onSuccess: () => void }): React.Rea
         <Text style={styles.title}>BBBC</Text>
         <Text style={styles.subtitle}>As financas da familia em um lugar so.</Text>
       </View>
+
+      {recado ? <Text style={styles.recado}>{recado}</Text> : null}
 
       <TextInput
         value={email}
@@ -163,6 +171,12 @@ const styles = StyleSheet.create({
   olho: { position: 'absolute', right: 16, paddingVertical: 8, paddingHorizontal: 4 },
   olhoTexto: { color: colors.textMuted, fontSize: 14, fontWeight: '600' },
   aviso: { color: colors.red, fontSize: 14, marginTop: 8, lineHeight: 20 },
+  recado: {
+    ...typography.caption,
+    color: colors.textMuted,
+    lineHeight: 19,
+    marginBottom: spacing.md,
+  },
   avisoAcao: { color: colors.red, fontWeight: '700', textDecorationLine: 'underline' },
   screen: {
     flex: 1,

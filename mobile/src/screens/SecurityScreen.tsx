@@ -7,14 +7,16 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Alert, StyleSheet, Text } from 'react-native';
 
+import { logout } from '@/api/client';
+import { estaOffline } from '@/api/conexao';
 import {
   ligarTranca,
   temComoProvar,
   trancaLigada,
 } from '@/seguranca/tranca';
-import { Card, Mensagem, Screen, SectionTitle, SwitchRow } from '@/components/ui';
+import { Botao, Card, Mensagem, Screen, SectionTitle, SwitchRow } from '@/components/ui';
 import { colors, spacing, typography } from '@/theme';
 
 export function SecurityScreen(): React.ReactElement {
@@ -37,6 +39,24 @@ export function SecurityScreen(): React.ReactElement {
   async function alternar(valor: boolean): Promise<void> {
     setLigada(valor);
     await ligarTranca(valor);
+  }
+
+  // Sair e a saida de emergencia de qualquer sessao emperrada. Ela existe por
+  // um caso concreto: o aplicativo abriu com uma sessao que o servidor nao
+  // aceitava mais e ficou preso ali, sem tela de login e sem botao nenhum -
+  // nem desinstalar resolvia, porque o cofre do aparelho sobrevive a isso.
+  function sair(): void {
+    const semServidor = estaOffline();
+    Alert.alert(
+      'Sair deste aparelho?',
+      semServidor
+        ? 'Atencao: o servidor nao esta respondendo agora. Se voce sair, so vai conseguir entrar de novo quando o computador de casa estiver ligado.'
+        : 'Voce vai precisar digitar o e-mail e a senha na proxima vez. Os numeros guardados neste aparelho continuam aqui.',
+      [
+        { text: 'Ficar', style: 'cancel' },
+        { text: 'Sair', style: 'destructive', onPress: () => void logout() },
+      ],
+    );
   }
 
   return (
@@ -82,6 +102,17 @@ export function SecurityScreen(): React.ReactElement {
           Dentro do aplicativo, nenhuma tela mostra nome completo, nome do banco, agência ou
           número de conta. O extrato é identificado pelo período, não pelo arquivo.
         </Text>
+      </Card>
+
+      <SectionTitle>Esta sessão</SectionTitle>
+      <Card>
+        <Text style={styles.item}>
+          Quem entra uma vez fica entrando por 30 dias sem digitar nada — é a tranca acima que
+          protege o aparelho no dia a dia, não o login.
+        </Text>
+        <Botao tom="secundario" onPress={sair}>
+          Sair deste aparelho
+        </Botao>
       </Card>
     </Screen>
   );
