@@ -15,7 +15,7 @@
  * "hoje" no próprio rótulo. Os alertas, que também são do agora, saem da tela.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -27,7 +27,8 @@ import {
   View,
 } from 'react-native';
 
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import {
@@ -72,6 +73,22 @@ export function DashboardScreen(): React.ReactElement {
   >();
   const [scope, setScope] = useState<Scope>('familia');
   const [month, setMonth] = useState(mesAtualISO);
+
+  // O Calendário manda para cá com um mês debaixo do braço: ele responde "em
+  // que mês doeu", e a pergunta seguinte - "doeu com o quê" - se responde
+  // aqui, onde já estão o gasto por categoria e a lista inteira do mês.
+  //
+  // O mês continua sendo estado desta tela, e não do parâmetro: depois de
+  // chegar, a setinha do seletor tem de funcionar normalmente. O carimbo é o
+  // que faz o segundo toque no MESMO mês valer - sem ele os parâmetros seriam
+  // iguais aos de antes e este efeito não rodaria de novo.
+  const rota = useRoute<RouteProp<{ Dashboard?: { mes?: string; carimbo?: number } }, 'Dashboard'>>();
+  const mesPedido = rota.params?.mes;
+  const carimbo = rota.params?.carimbo;
+  useEffect(() => {
+    if (mesPedido) setMonth(mesPedido);
+  }, [mesPedido, carimbo]);
+
   const mesAtual = month === mesAtualISO();
   const { width: larguraDaTela } = useWindowDimensions();
   // o grafico nao pode ser mais largo que a coluna de conteudo

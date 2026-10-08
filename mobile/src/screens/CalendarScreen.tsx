@@ -20,6 +20,9 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
+import { useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
+
 import { useCalendario } from '@/api/queries';
 import type { Scope } from '@/api/types';
 import { Card, Screen, ScopeToggle, SectionTitle } from '@/components/ui';
@@ -42,7 +45,31 @@ function curto(valor: string): string {
   return n.toFixed(0);
 }
 
+/**
+ * Para onde o toque num mês leva, e com o quê.
+ *
+ * Separado da tela para poder ser conferido sem um celular: o que importa aqui
+ * é que o mês vai inteiro ("2026-01-01", como o servidor mandou, e não um
+ * número de mês remontado à mão) e que dois toques no mesmo mês saem com
+ * carimbos diferentes — é o carimbo que faz o segundo toque valer.
+ */
+export function paraOResumo(mesISO: string, agora: number): ['Dashboard', { mes: string; carimbo: number }] {
+  return ['Dashboard', { mes: mesISO, carimbo: agora }];
+}
+
 export function CalendarScreen(): React.ReactElement {
+  // Daqui se vai para o Resumo do mes tocado. O calendario responde "em que mes
+  // doeu"; a pergunta seguinte e sempre "doeu com o que" - e ela se responde no
+  // Resumo, que ja tem o gasto por categoria e a lista inteira do mes. Sem o
+  // toque, o caminho era voltar na aba Resumo e andar com a setinha ate la,
+  // onze toques para ver janeiro em dezembro.
+  //
+  // O carimbo vai junto de proposito: sem ele, tocar DUAS vezes no mesmo mes
+  // manda os mesmos parametros, a identidade nao muda, e o Resumo - que guarda
+  // o mes escolhido - ignora o segundo toque. Quem voltou para o calendario,
+  // mudou de mes no Resumo e tocou de novo no mesmo retangulo ficaria olhando
+  // para o mes errado sem entender por que.
+  const navigation = useNavigation<NavigationProp<{ Dashboard: { mes: string; carimbo: number } }>>();
   const [ano, setAno] = useState(() => new Date().getFullYear());
   const [scope, setScope] = useState<Scope>('familia');
   const { data, isLoading, refetch, isRefetching } = useCalendario(ano, scope);
@@ -90,12 +117,18 @@ export function CalendarScreen(): React.ReactElement {
               const vazio = entrou === 0 && saiu === 0;
               const futuro = anoCorrente && indice > mesAtual;
               return (
-                <View
+                <Pressable
                   key={mes.month}
-                  style={[
+                  onPress={() => navigation.navigate(...paraOResumo(mes.month, Date.now()))}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ver o resumo de ${monthLabel(mes.month)}`}
+                  // O mes vazio tambem abre: "nao tem nada aqui" e uma resposta,
+                  // e um retangulo que nao responde ao toque parece defeito.
+                  style={({ pressed }) => [
                     styles.mes,
                     anoCorrente && indice === mesAtual && styles.mesDeHoje,
                     (vazio || futuro) && styles.mesVazio,
+                    pressed && styles.mesTocado,
                   ]}
                 >
                   <Text style={styles.mesNome}>{ABREVIACOES[indice]}</Text>
@@ -105,7 +138,7 @@ export function CalendarScreen(): React.ReactElement {
                   <Text style={styles.mesSaiu} numberOfLines={1}>
                     {curto(mes.saiu)}
                   </Text>
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -113,7 +146,8 @@ export function CalendarScreen(): React.ReactElement {
             Em cada mês: o que <Text style={styles.legendaEntrou}>entrou</Text> em cima e o que{' '}
             <Text style={styles.legendaSaiu}>saiu</Text> embaixo, em milhares. Pagamento de fatura
             e transferência entre contas próprias ficam de fora dos dois — senão o cartão
-            contaria duas vezes.
+            contaria duas vezes.{'\n'}
+            <Text style={styles.legendaToque}>Toque num mês para abrir o resumo dele.</Text>
           </Text>
 
           <SectionTitle>{`No ano de ${ano}`}</SectionTitle>
@@ -218,6 +252,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   mesDeHoje: { borderColor: colors.red },
+  mesTocado: { opacity: 0.6 },
   mesVazio: { opacity: 0.45 },
   mesNome: { ...typography.caption, color: colors.textFaint, fontWeight: '700' },
   mesEntrou: { ...typography.caption, color: colors.white, marginTop: 4 },
@@ -225,6 +260,7 @@ const styles = StyleSheet.create({
   legenda: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.md },
   legendaEntrou: { color: colors.white },
   legendaSaiu: { color: colors.red },
+  legendaToque: { color: colors.textFaint },
   linha: {
     flexDirection: 'row',
     alignItems: 'center',
